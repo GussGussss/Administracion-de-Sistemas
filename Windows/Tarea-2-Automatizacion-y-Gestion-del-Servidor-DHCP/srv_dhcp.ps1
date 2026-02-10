@@ -63,7 +63,7 @@ function configurar-dhcp{
 	default {"255.255.255.0"}
 	}
 
-	$scopeExiste=get-dhcpserverv4scope -erroraction silentlyscontinue | where-object {$_.subnetaddres -eq $segmento}	
+	$scopeExiste=get-dhcpserverv4scope -erroraction SilentlyContinue | where-object {$_.subnetaddres -eq $segmento}	
 	
 	if($scopeExiste) {
 		write-host "El scope (ambito) ya existe, no se volver a crear"
