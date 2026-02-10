@@ -10,19 +10,36 @@ validar_ip(){
 	[[ $ip =~ $expresionRegular ]]
 }
 
+validar_ip_rango(){
+	local ip=$1
+	IFS='.' read -r o1 o2 o3 o4 <<< "$ip"
+	for octeto in $o1 $o2 $o3 $o4; do
+		if ((octeto < 0 || octeto > 255)); then
+			return 1
+		fi
+	done
+	return 0
+}
+
 pedir_ip(){
 	local mensaje=$1
 	local ip
-	
+
 	while true; do
 		read -p "$mensaje: " ip
-		if validar_ip "$ip"; then
+		if validar_ip "$ip" && validar_ip_rango "$ip"; then
 			echo "$ip"
 			return
 		else
 			echo "Esta mal: La ip es invalida"
 		fi
 	done
+}
+
+ip_entero(){
+	local ip=$1
+	IFS='.' read -r a b c d <<< "$ip"
+	echo $((a<<24 | b<<16 | c<<8 | d))
 }
 
 configurar_parametros(){
@@ -34,8 +51,21 @@ configurar_parametros(){
 	read -p "Prefijo (ej: 24): " prefijo
 	rangoInicial=$(pedir_ip "Ingrese el rango inicial de la IP (ej: 192.168.0.100): ")
 	rangoFinal=$(pedir_ip "Ingrese el rango final de la IP (ej: 192.168.0.150): ")
+	base_segmento="${segmento%.*}"
+	if [[ "${rangoInicial%.*}" != "$base_segmento" || "${rangoFinal%.*}" != "$base_segmento" ]]; then
+		echo "Esta mal: el rango de la IP no cuadra con el segmento que se ingreso"
+		exit 1
+	fi
 	gateway=$(pedir_ip "Ingrese la puerta de enlace 'gateway' (ej: 192.168.0.1): ")
 	dns=$(pedir_ip "Ingrese el DNS (ej: 192.168.0.70): ")
+	ip_srv_int=$(ip_entero "$dns")
+	rangoIni=$(ip_entero "$rangoInicial")
+	rangoFin=$(ip_entero "$rangoFinal"}
+
+	if (( ip_srv_int >= rangoIni && ip_srv_int <= rangoFin )); then
+		echo "Esta mal: El rango que se ingreso incluye la IP del servidor ($DNS)"
+		exit 1
+	fi
 	echo ""
 
 	echo "**** datos ingresado ****"
@@ -43,7 +73,11 @@ configurar_parametros(){
 	echo "Rango de IPs: $rangoInicial - $rangoFinal"
 	echo "Gateway: $gateway"
 	echo "DNS: $dns"
-	
+
+	if(( $(ip_entero "$rangoInicial") >= $(ip_entero "$rangoFinal") )); then
+		echo "Esta mal: El rango incial debe ser menor al rango final"
+		exit 1
+	fi
 
 	ip_servidor=$(ip -4 addr show enp0s8 | awk '/inet/ {print $2}' | cut -d/ -f1)
 
