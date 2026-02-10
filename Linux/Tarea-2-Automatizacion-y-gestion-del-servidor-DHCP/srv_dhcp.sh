@@ -64,9 +64,9 @@ ip_entero(){
 	echo $((a<<24 | b<<16 | c<< 8 | d))
 }
 
-ip_entero(){
-	local ip=$1
-	echo "$(( (ip>>24)&255 )).$(( (ip>>16)&255 )).$(( (ip>>8)&255 )).$(( ip&255 ))"
+entero_ip(){
+	local entero=$1
+	echo "$(( (entero>>24)&255 )).$(( (entero>>16)&255 )).$(( (entero>>8)&255 )).$(( entero&255 ))"
 }
 
 instalar_kea(){
@@ -147,7 +147,7 @@ done
 
 	if [[ -z "$gateway" ]]; then
 		final_entero=$(ip_entero "$rangoFinal")
-		gateway_enter=$((final_entero + 1))
+		gateway_entero=$((final_entero + 1))
 		gateway=$(entero_ip $gateway_entero)
 	fi
 
