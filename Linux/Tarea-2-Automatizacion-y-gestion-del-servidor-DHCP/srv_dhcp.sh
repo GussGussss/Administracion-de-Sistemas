@@ -30,11 +30,11 @@ configurar_parametros(){
 	echo "**** CONFIGURACION DEL DHCP ******"
 	read -p "Nombre del ambito: " ambito
 	
-	segmento=$(pedir_ip "Ingrese el segmento de Red (ej: 192.168.100.0): ")
-	read -p "Prefijo (ej: 24)" prefijo
-	rangoInicial=$(pedir_ip "Ingrese el rango inicial de la IP (ej: 192.168.100.50): ")
-	rangoFinal=$(pedir_ip "Ingrese el rango final de la IP (ej: 192.168.100.150): ")
-	gateway=$(pedir_ip "Ingrese la puerta de enlace 'gateway' (ej: 192.168.100.1): ")
+	segmento=$(pedir_ip "Ingrese el segmento de Red (ej: 192.168.0.0): ")
+	read -p "Prefijo (ej: 24): " prefijo
+	rangoInicial=$(pedir_ip "Ingrese el rango inicial de la IP (ej: 192.168.0.100): ")
+	rangoFinal=$(pedir_ip "Ingrese el rango final de la IP (ej: 192.168.0.150): ")
+	gateway=$(pedir_ip "Ingrese la puerta de enlace 'gateway' (ej: 192.168.0.1): ")
 	dns=$(pedir_ip "Ingrese el DNS (ej: 192.168.0.70): ")
 	echo ""
 
@@ -64,7 +64,7 @@ configurar_parametros(){
 estado_dhcp_kea(){
 	echo ""
 	echo "****** Estado del servicio DHCP (KEA aqui en oracle XD) **** "
-	if system is-active --quiet kea-dhcp4; then
+	if systemctl is-active --quiet kea-dhcp4; then
 		echo "Servicio DHCP (KEA) activo"
 	else
 		echo "Servicio DHCP (KEA) no activo"
@@ -77,7 +77,7 @@ mostrar_leases(){
 		echo "Leases activos: "
 		cat /var/lib/kea/kea-leases4.csv
 	else
-		echo "No hay concesiones registradas."
+		echo "No hay concesiones registradas todavia."
 	fi
 }
 
