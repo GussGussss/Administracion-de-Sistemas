@@ -72,7 +72,7 @@ instalar_kea(){
 			echo "El servicio DHCP (KEA) se instalo correctamente :D"
 		else
 			echo "Esta mal: el servicio DHCP (KEA) no se pudo instalar :c"
-		if
+		fi
 	fi
 }
 
