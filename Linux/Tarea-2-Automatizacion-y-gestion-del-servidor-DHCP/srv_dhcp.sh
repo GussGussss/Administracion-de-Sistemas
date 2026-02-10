@@ -64,6 +64,11 @@ ip_entero(){
 	echo $((a<<24 | b<<16 | c<< 8 | d))
 }
 
+ip_entero(){
+	local ip=$1
+	echo "$(( (ip>>24)&255 )).$(( (ip>>16)&255 )).$(( (ip>>8)&255 )).$(( ip&255 ))"
+}
+
 instalar_kea(){
 	echo ""
 	echo "Viendo si el servicio DHCP ya esta instalado......"
@@ -84,8 +89,8 @@ instalar_kea(){
 }
 
 misma_red(){
-	local ip=1
-	local red=2
+	local ip=$1
+	local red=$2
 	[[ "${ip%.*}.0" == "$red" ]]
 }
 
@@ -110,7 +115,7 @@ while true; do
 		continue
 	fi
 
-	if ! misma_red "$rangoFinla" "$segmento"; then
+	if ! misma_red "$rangoFinal" "$segmento"; then
 		echo "Esta mal: El rango final no pertenence al segmento"
 		continue
 	fi
@@ -126,7 +131,7 @@ done
 	gateway=$(pedir_ip "Ingrese la puerta de enlace (opcional) (ej: 192.168.0.1) " si)
 	dns=$(pedir_ip "Ingrese el DNS (opcional) (ej: 192.168.0.70) " si)
 
-	if [[ -n "$gatway" ]] && ! misma_red "$gateway" "$segmento"; then
+	if [[ -n "$gateway" ]] && ! misma_red "$gateway" "$segmento"; then
 		echo "Esta mal: La puerta de enlace no pertenece al segmento"
 		return
 	fi
@@ -136,8 +141,14 @@ done
 		return
 	fi
 
+	if [[ -z "$dns" ]]; then
+		dns="$rangoInicial"
+	fi
+
 	if [[ -z "$gateway" ]]; then
-		gateway="$rangoInicial"
+		final_entero=$(ip_entero "$rangoFinal")
+		gateway_enter=$((final_entero + 1))
+		gateway=$(entero_ip $gateway_entero)
 	fi
 
 	echo ""
