@@ -106,6 +106,7 @@ generar_config_kea(){
 	"subnet4": [
 		{
 			"subnet": "$segmento/$prefijo",
+			"id": 1,
 			"pools": [
 				{
 					"pool": "$rangoInicial - $rangoFinal"
