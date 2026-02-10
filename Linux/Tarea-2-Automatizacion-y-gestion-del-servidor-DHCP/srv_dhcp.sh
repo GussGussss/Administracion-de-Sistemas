@@ -83,6 +83,12 @@ instalar_kea(){
 	read -p "Presiona ENTER para volver al continuar"
 }
 
+misma_red(){
+	local $ip=1
+	local $red=2
+	[[ "${ip%.*}.0" == "$red" ]]
+}
+
 configurar_parametros(){
 	instalar_kea
 	echo "**** CONFIGURACION DEL DHCP ******"
@@ -90,11 +96,6 @@ configurar_parametros(){
 
 while true; do
 	segmento=$(pedir_ip "Ingrese el segmento de Red (ej: 192.168.0.0) ")
-
-	if [[ $segmento != ${ipActual%.*}.0 ]]; then
-		echo "Esta mal: el segmento debe coincidir con la del servidor (${ipActual%.*}0)"
-		continue
-	fi
 
 	break
 done
@@ -104,11 +105,11 @@ while true; do
 	rangoInicial=$(pedir_ip "Ingrese el rango inicial de la IP (ej: 192.168.0.100) ")
 	rangoFinal=$(pedir_ip "Ingrese el rango final de la IP (ej: 192.168.0.150) ")
 
-	if (( $(ip_entero "$segmento") >= $(ip_entero "$rangoFinal") )); then
+	if ! misma_red "$rangoFinal" "$segmento"; then
 		echo "Esta mal: El rango de inicial debe ser menor que el rango final."
 		echo "Intente otra ves"
 	fi
-	break
+
 done
 
 	gateway=$(pedir_ip "Ingrese la puerta de enlace (opcional) (ej: 192.168.0.1) " si)
@@ -142,10 +143,6 @@ fi
 		return
 	fi
 
-	if [[ $segmento != ${ipActual%.*}.0 ]]; then
-		echo "Esta mal: el segmento debe coincidir con el del servidor"
-		return
-	fi
 
 	ip_srv_entero=$(ip_entero "$ipActual")
 	inicial_entero=$(ip_entero "$rangoInicial")
