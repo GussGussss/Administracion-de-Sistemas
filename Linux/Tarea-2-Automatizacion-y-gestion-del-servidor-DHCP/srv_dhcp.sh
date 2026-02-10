@@ -74,10 +74,16 @@ estado_dhcp_kea(){
 mostrar_leases(){
 	echo "Leases activos: "
 	if [ -f /var/lib/kea/kea-leases4.csv ]; then
-		echo "Leases activos: "
-		cat /var/lib/kea/kea-leases4.csv
+		lineas=$(wc -l < /var/lib/kea/kea-leases4.csv)
+		
+		if [ "$lineas" -gt 1 ]; then
+			echo "Leases activos: "
+			cat /var/lib/kea/kea-leases4.csv
+		else
+			echo "El archivo de leases si existe, pero no hay concesiones activas"
+		fi
 	else
-		echo "No hay concesiones registradas todavia."
+		echo "El archivo de leases todavia no ha sido generado por KEA."
 	fi
 }
 
