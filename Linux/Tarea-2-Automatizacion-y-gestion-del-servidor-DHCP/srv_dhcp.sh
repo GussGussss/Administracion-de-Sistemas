@@ -14,7 +14,7 @@ pedir_ip(){
 	local mensaje=$1
 	local ip
 	
-	while true;do
+	while true; do
 		read -p "$mensaje: " ip
 		if validar_ip "$ip"; then
 			echo "$ip"
@@ -29,11 +29,11 @@ configurar_parametros(){
 	echo "**** CONFIGURACION DEL DHCP ******"
 	read -p "Nombre del ambito: " ambito
 	
-	segmento=$(pedir_ip "Ingrese el segmento de Red (ej: 192.168.100.0): "
-	rangoInicial=$(pedir_ip "Ingrese el rango inicial de la IP (ej: 192.168.100.50): "
-	rangoFinal=$(pedir_ip "Ingrese el rango final de la IP (ej: 192.168.100.150): "
-	gateway=$(pedir_ip "Ingrese la puerta de enlace 'gateway' (ej: 192.168.100.1): "
-	dns=$(pedir_ip "Ingrese el DNS (ej: 192.168.0.70): "
+	segmento=$(pedir_ip "Ingrese el segmento de Red (ej: 192.168.100.0): ")
+	rangoInicial=$(pedir_ip "Ingrese el rango inicial de la IP (ej: 192.168.100.50): ")
+	rangoFinal=$(pedir_ip "Ingrese el rango final de la IP (ej: 192.168.100.150): ")
+	gateway=$(pedir_ip "Ingrese la puerta de enlace 'gateway' (ej: 192.168.100.1): ")
+	dns=$(pedir_ip "Ingrese el DNS (ej: 192.168.0.70): ")
 	echo ""
 
 	echo "**** datos ingresado ****"
@@ -41,4 +41,43 @@ configurar_parametros(){
 	echo "Rango de IPs: $rangoInicial - $rangoFinal"
 	echo "Gateway: $gateway"
 	echo "DNS: $dns"
+}
+
+estado_dhcp(){
+	echo ""
+	echo "Estado del servicio DHCP (KEA aqui en oracle XD) "
+	systemclt status kea-dhcp --no-pager 2>/dev/null | \
+	echo "Servicio DHCP (KEA) no instalado"
+}
+
+mostrar_leases(){
+	echo "Leases activos: "
+	if [ -f /var/lib/kea/kea-leases4.csv ]; then
+		cat /var/lib/kea/kea-leases4.csv
+	else
+		echo "archivo de leases no encontrado"
+	fi
+}
+ejecucion=true
+
+menu(){
+	echo ""
+	echo "1) Configurar DHCP"
+	echo "2) Ver estado del servicio DCHP"
+	echo "3) ver concesiones"
+	echo "4) salir "
+|	read -p "Selecciones una opcion: " opcion
+	
+	case $opcion in
+		1)configurar_parametros ;;
+		2)estado_dhcp ;;
+		3)mostrar_leases ;;
+		4)ejecutando=false ;;
+		5)echo "opcion invalida" ;;
+	esac
+}
+
+while true; do
+	menu
+done
 }
