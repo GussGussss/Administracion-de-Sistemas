@@ -266,6 +266,11 @@ reiniciar_kea(){
 	sudo systemctl restart kea-dhcp4
 }
 
+mexicanada(){
+	echo "****** Leases activos ******"
+	sudo cat /var/lib/kea/kea-leases4.csv
+}
+
 menu(){
 	echo ""
 	echo "1) Instalar servicio DHCP"
@@ -279,7 +284,7 @@ menu(){
 		1)instalar_kea ;;
 		2)configurar_parametros ;;
 		3)estado_dhcp_kea ;;
-		4)mostrar_leases ;;
+		4)mexicanada ;;
 		5)exit 0 ;;
 		*)echo "opcion invalida" ;;
 	esac
