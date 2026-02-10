@@ -104,12 +104,12 @@ while true; do
 	rangoInicial=$(pedir_ip "Ingrese el rango inicial de la IP (ej: 192.168.0.100) ")
 	rangoFinal=$(pedir_ip "Ingrese el rango final de la IP (ej: 192.168.0.150) ")
 
-	if (( $(ip_entero "$segmentoInicial") >= $(ip_entero "$rangoFinal) )); then
-		echo "Esta mal: El rango de inicial debe ser mayor que el rango final."
+	if (( $(ip_entero "$segmento") >= $(ip_entero "$rangoFinal") )); then
+		echo "Esta mal: El rango de inicial debe ser menor que el rango final."
 		echo "Intente otra ves"
 	fi
 	break
-do
+done
 
 	gateway=$(pedir_ip "Ingrese la puerta de enlace (opcional) (ej: 192.168.0.1) " si)
 	dns=$(pedir_ip "Ingrese el DNS (opcional) (ej: 192.168.0.70) " si)
