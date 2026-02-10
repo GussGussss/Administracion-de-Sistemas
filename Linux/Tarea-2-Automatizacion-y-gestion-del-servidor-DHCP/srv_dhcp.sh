@@ -31,6 +31,7 @@ configurar_parametros(){
 	read -p "Nombre del ambito: " ambito
 	
 	segmento=$(pedir_ip "Ingrese el segmento de Red (ej: 192.168.100.0): ")
+	read -p "Prefijo (ej: 24)" prefijo
 	rangoInicial=$(pedir_ip "Ingrese el rango inicial de la IP (ej: 192.168.100.50): ")
 	rangoFinal=$(pedir_ip "Ingrese el rango final de la IP (ej: 192.168.100.150): ")
 	gateway=$(pedir_ip "Ingrese la puerta de enlace 'gateway' (ej: 192.168.100.1): ")
@@ -53,7 +54,7 @@ configurar_parametros(){
 estado_dhcp_kea(){
 	echo ""
 	echo "Estado del servicio DHCP (KEA aqui en oracle XD) "
-	systemclt status kea-dhcp --no-pager 2>/dev/null | \
+	systemctl status kea-dhcp --no-pager 2>/dev/null | \
 	echo "Servicio DHCP (KEA) no instalado"
 }
 
@@ -69,7 +70,7 @@ mostrar_leases(){
 instalar_kea(){
 	echo "Verificando si se encuentra el servicio DHPC (KEA aqui xd)"
 	
-	if rmp -q kea &>/dev/null; then
+	if rpm -q kea &>/dev/null; then
 		echo "El servicio DHCP (KEA) ya esta instalado :D"
 	else
 		echo "El servicio DHCP (KEA) no esta instalado, asi que lo vamos a instalar :D"
@@ -91,7 +92,7 @@ generar_config_kea(){
 	sudo tee $CONFIG_FILE > /dev/null <<EOF
 {
 	"Dhcp4":{
-		"interface-config":{
+		"interfaces-config":{
 			"interfaces": [ "enp0s8" ]
 	},
 	"lease-database": {
@@ -104,7 +105,7 @@ generar_config_kea(){
 
 	"subnet4": [
 		{
-			"subnet": "$segmento"
+			"subnet": "$segmento/$prefijo",
 			"pools": [
 				{
 					"pool": "$rangoInicial - $rangoFinal"
@@ -113,7 +114,7 @@ generar_config_kea(){
 			"option-data": [
 				{
 					"name": "routers",
-					"data": "$gatway"
+					"data": "$gateway"
 				},
 				{
 					"name": "domain-name-servers",
@@ -127,10 +128,10 @@ generar_config_kea(){
 
 }
 EOF
-}
+
 
 validar_config_kea(){
-	sudo kea-dhcp -t /etc/kea/kea-dhcp4.conf
+	sudo kea-dhcp4 -t /etc/kea/kea-dhcp4.conf
 }
 
 reiniciar_kea(){
