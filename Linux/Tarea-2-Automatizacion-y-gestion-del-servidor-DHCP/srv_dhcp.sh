@@ -42,6 +42,12 @@ configurar_parametros(){
 	echo "Rango de IPs: $rangoInicial - $rangoFinal"
 	echo "Gateway: $gateway"
 	echo "DNS: $dns"
+	
+	generar_config_kea
+	validar_config_kea
+	reiniciar_kea
+
+	echo "Servidor DHCP (KEA) configurado chilo (creo XD)"
 }
 
 estado_dhcp_kea(){
@@ -59,6 +65,7 @@ mostrar_leases(){
 		echo "archivo de leases no encontrado"
 	fi
 }
+
 instalar_kea(){
 	echo "Verificando si se encuentra el servicio DHPC (KEA aqui xd)"
 	
@@ -75,6 +82,7 @@ instalar_kea(){
 		fi
 	fi
 }
+
 generar_config_kea(){
 	CONFIG_FILE="/etc/kea/kea-dhcp4.conf"
 
@@ -119,6 +127,15 @@ generar_config_kea(){
 
 }
 EOF
+}
+
+validar_config_kea(){
+	sudo kea-dhcp -t /etc/kea/kea-dhcp4.conf
+}
+
+reiniciar_kea(){
+	sudo systemctl enable kea-dhcp4
+	sudo systemctl restart kea-dhcp4
 }
 
 menu(){
