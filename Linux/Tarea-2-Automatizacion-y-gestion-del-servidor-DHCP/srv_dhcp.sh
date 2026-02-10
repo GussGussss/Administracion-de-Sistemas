@@ -87,10 +87,30 @@ configurar_parametros(){
 	instalar_kea
 	echo "**** CONFIGURACION DEL DHCP ******"
 	read -p "Nombre del ambito: " ambito
+
+while true; do
 	segmento=$(pedir_ip "Ingrese el segmento de Red (ej: 192.168.0.0) ")
+
+	if [[ $segmento != ${ipActual%.*}.0 ]]; then
+		echo "Esta mal: el segmento debe coincidir con la del servidor (${ipActual%.*}0)"
+		continue
+	fi
+
+	break
+done
 	read -p "Prefijo (ej: 24) " prefijo
+
+while true; do
 	rangoInicial=$(pedir_ip "Ingrese el rango inicial de la IP (ej: 192.168.0.100) ")
 	rangoFinal=$(pedir_ip "Ingrese el rango final de la IP (ej: 192.168.0.150) ")
+
+	if (( $(ip_entero "$segmentoInicial") >= $(ip_entero "$rangoFinal) )); then
+		echo "Esta mal: El rango de inicial debe ser mayor que el rango final."
+		echo "Intente otra ves"
+	fi
+	break
+do
+
 	gateway=$(pedir_ip "Ingrese la puerta de enlace (opcional) (ej: 192.168.0.1) " si)
 	dns=$(pedir_ip "Ingrese el DNS (opcional) (ej: 192.168.0.70) " si)
 
