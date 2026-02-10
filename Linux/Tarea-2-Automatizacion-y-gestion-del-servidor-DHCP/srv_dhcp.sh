@@ -44,6 +44,16 @@ configurar_parametros(){
 	echo "Gateway: $gateway"
 	echo "DNS: $dns"
 	
+
+	ip_servidor=$(ip -4 addr show enp0s8 | awk '/inet/ {print $2}' | cut -d/ -f1)
+
+	if [[ $segmento != ${ip_servidor%.*}.0 ]]; then
+		echo "Esta mal: el segmento que ingreso debe coincidir con la del servidor"
+		echo "IP del servido: $ip_servidor"
+		echo "Segmento ingresado: $segmento"
+		exit 1
+	fi
+
 	generar_config_kea
 	validar_config_kea
 	reiniciar_kea
