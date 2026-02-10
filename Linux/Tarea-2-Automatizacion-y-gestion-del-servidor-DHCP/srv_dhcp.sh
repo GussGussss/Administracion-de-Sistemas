@@ -73,7 +73,7 @@ instalar_kea(){
 		echo "El servicio DHCP (KEA) ya esta instalado :D"
 	else
 		echo "El servicio DHCP (KEA) no esta instalado, asi que lo vamos a instalar :D"
-		sudo dnf install -y kea > /dev/null 2>&1
+		sudo dnf install -y kea
 		
 		if rpm -q kea &>/dev/null; then
 			echo "El servicio DHCP (KEA) se instalo correctamente :D"
