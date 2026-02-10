@@ -65,9 +65,12 @@ function configurar-dhcp{
 
 	add-dhcpserverv4scope -Name $ambito -StartRange $rangoInicial -EndRange $rangoFinal -SubNetmask $mask -State Active
 	
-	set-dhcpserverv4optionvalue -Router $gateway -DnsServer $dns
-
-	write-host "Servidor DHCP configurado aca chilo :p"
+	set-dhcpserverv4optionvalue -Router $gateway
+	try{
+		set-dhcpserverv4optionvalue -DnsServer $dns
+	}catch{
+		write-host "Esta mal: El DNS no es el correcto :c"
+	}
 }
 
 function estado-dhcp{
