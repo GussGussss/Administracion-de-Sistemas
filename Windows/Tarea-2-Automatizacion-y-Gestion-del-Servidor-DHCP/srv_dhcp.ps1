@@ -63,8 +63,14 @@ function configurar-dhcp{
 	default {"255.255.255.0"}
 	}
 
-	add-dhcpserverv4scope -Name $ambito -StartRange $rangoInicial -EndRange $rangoFinal -SubNetmask $mask -State Active
+	$scopeExiste=get-dhcpserverv4scope -erroraction silentlyscontinue | where-object {$_.subnetaddres -eq $segmento}	
 	
+	if($scopeExiste) {
+		write-host "El scope (ambito) ya existe, no se volver a crear"
+	}else{
+		add-dhcpserverv4scope -Name $ambito -StartRange $rangoInicial -EndRange $rangoFinal -SubNetmask $mask -State Active
+	}
+
 	set-dhcpserverv4optionvalue -Router $gateway
 	try{
 		set-dhcpserverv4optionvalue -DnsServer $dns
@@ -83,7 +89,13 @@ function estado-dhcp{
 } 
 
 function mostrar-leases{
-	$leases = get-dhcpserverv4lease
+	$scope=get-dhcpserverv4scope | select-object -first 1
+	if (-not $scope){
+		write-host "no hay scopes configurados"
+		return
+	}
+	
+	$leases = get-dhcpserverv4lease -scopeid $scope.scopeid
 	if ($leases) {
 		$leases | format-table ipaddress, clientid, hostname -autosize
 	}else{
