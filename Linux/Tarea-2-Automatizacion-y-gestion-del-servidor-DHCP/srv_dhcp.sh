@@ -202,10 +202,10 @@ mostrar_leases(){
 			echo "Leases activos: "
 			cat /var/lib/kea/kea-leases4.csv
 		else
-			echo "El archivo de leases si existe, pero no hay concesiones activas"
+			echo "El archivo leases, si existe, pero no hay concesiones activas"
 		fi
 	else
-		echo "El archivo de leases todavia no ha sido generado por KEA."
+		echo "El archivo leases todavia noha sido generado por KEA"
 	fi
 }
 
