@@ -63,17 +63,21 @@ configurar_parametros(){
 
 estado_dhcp_kea(){
 	echo ""
-	echo "Estado del servicio DHCP (KEA aqui en oracle XD) "
-	systemctl status kea-dhcp --no-pager 2>/dev/null || \
-	echo "Servicio DHCP (KEA) no instalado"
+	echo "****** Estado del servicio DHCP (KEA aqui en oracle XD) **** "
+	if system is-active --quiet kea-dhcp4; then
+		echo "Servicio DHCP (KEA) activo"
+	else
+		echo "Servicio DHCP (KEA) no activo"
+	fi
 }
 
 mostrar_leases(){
 	echo "Leases activos: "
 	if [ -f /var/lib/kea/kea-leases4.csv ]; then
+		echo "Leases activos: "
 		cat /var/lib/kea/kea-leases4.csv
 	else
-		echo "archivo de leases no encontrado"
+		echo "No hay concesiones registradas."
 	fi
 }
 
