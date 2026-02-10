@@ -95,5 +95,19 @@ function mostrar-leases{
 	}
 }
 
+do {
+	write-host ""
+	write-host "1) Configurar DHCP"
+	write-host "2) Ver el estado del DHPC"
+	write-host "3) Ver concesiones"
+	write-host "4) Salir"
+	$opcion = read-host "Elije una opcion: "
 
-
+	switch ($opcion){
+		"1" {configurar-dhcp}
+		"2" {estado-dhcp}
+		"3" {mostrar-leases}
+		"4" {break}
+		default {write-host "Opcion no valida :p"}
+	}
+}while($true)
