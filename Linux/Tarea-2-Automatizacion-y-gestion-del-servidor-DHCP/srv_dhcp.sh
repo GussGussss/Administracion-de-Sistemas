@@ -54,7 +54,7 @@ configurar_parametros(){
 estado_dhcp_kea(){
 	echo ""
 	echo "Estado del servicio DHCP (KEA aqui en oracle XD) "
-	systemctl status kea-dhcp --no-pager 2>/dev/null | \
+	systemctl status kea-dhcp --no-pager 2>/dev/null || \
 	echo "Servicio DHCP (KEA) no instalado"
 }
 
@@ -128,7 +128,7 @@ generar_config_kea(){
 
 }
 EOF
-
+}
 
 validar_config_kea(){
 	sudo kea-dhcp4 -t /etc/kea/kea-dhcp4.conf
@@ -160,4 +160,4 @@ menu(){
 while true; do
 	menu
 done
-}
+
