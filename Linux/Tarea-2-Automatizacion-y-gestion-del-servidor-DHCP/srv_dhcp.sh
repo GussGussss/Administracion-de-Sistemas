@@ -84,8 +84,8 @@ instalar_kea(){
 }
 
 misma_red(){
-	local $ip=1
-	local $red=2
+	local ip=1
+	local red=2
 	[[ "${ip%.*}.0" == "$red" ]]
 }
 
@@ -105,23 +105,40 @@ while true; do
 	rangoInicial=$(pedir_ip "Ingrese el rango inicial de la IP (ej: 192.168.0.100) ")
 	rangoFinal=$(pedir_ip "Ingrese el rango final de la IP (ej: 192.168.0.150) ")
 
-	if ! misma_red "$rangoFinal" "$segmento"; then
-		echo "Esta mal: El rango de inicial debe ser menor que el rango final."
-		echo "Intente otra ves"
+	if ! misma_red "$rangoInicial" "$segmento"; then
+		echo "Esta mal: El rango de inicial no pertenece al segmento."
+		continue
 	fi
 
+	if ! misma_red "$rangoFinla" "$segmento"; then
+		echo "Esta mal: El rango final no pertenence al segmento"
+		continue
+	fi
+
+	if (( $(ip_entero "$rangoInicial") >= $(ip_entero "$rangoFinal") )); then
+		echo "Esta mal: El rango inicial debe ser menor al rango final"
+		continue
+	fi
+
+	break
 done
 
 	gateway=$(pedir_ip "Ingrese la puerta de enlace (opcional) (ej: 192.168.0.1) " si)
 	dns=$(pedir_ip "Ingrese el DNS (opcional) (ej: 192.168.0.70) " si)
 
-if [[ -z "$dns" ]]; then
-	dns="$rangoInicial"
-fi
+	if [[ -n "$gatway" ]] && ! misma_red "$gateway" "$segmento"; then
+		echo "Esta mal: La puerta de enlace no pertenece al segmento"
+		return
+	fi
 
-if [[ -z "$gateway" ]]; then
-	gateway="$rangoInicial"
-fi
+	if [[ -n "$dns" ]] && ! misma_red "$dns" "$segmento"; then
+		echo "El dns no pertenece al segmenteo"
+		return
+	fi
+
+	if [[ -z "$gateway" ]]; then
+		gateway="$rangoInicial"
+	fi
 
 	echo ""
 	echo "**** datos ingresado ****"
@@ -136,13 +153,6 @@ fi
 		echo "Esta mal: El rango inicial debe de ser menor al rango final"
 		return
 	fi
-
-	base_segmento="${segmento%.*}"
-	if [[ "${rangoInicial%.*}" != "$base_segmento" || "${rangoFinal%.*}" != "$base_segmento" ]]; then
-		echo "Estam mal: El rango no cuadra con el segmento que se ingreso"
-		return
-	fi
-
 
 	ip_srv_entero=$(ip_entero "$ipActual")
 	inicial_entero=$(ip_entero "$rangoInicial")
