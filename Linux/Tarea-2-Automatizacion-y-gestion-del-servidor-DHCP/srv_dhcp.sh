@@ -114,7 +114,13 @@ done
 	gateway=$(pedir_ip "Ingrese la puerta de enlace (opcional) (ej: 192.168.0.1) " si)
 	dns=$(pedir_ip "Ingrese el DNS (opcional) (ej: 192.168.0.70) " si)
 
+if [[ -z "$dns" ]]; then
+	dns="$rangoInicial"
+fi
 
+if [[ -z "$gateway" ]]; then
+	gateway="$rangoInicial"
+fi
 
 	echo ""
 	echo "**** datos ingresado ****"
