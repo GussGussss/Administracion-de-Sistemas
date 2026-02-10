@@ -7,7 +7,22 @@ echo "IP: $ipActual"
 validar_ip(){
 	local ip=$1
 	local expresionRegular="^([0-9]{1,3}\.){3}[0-9]{1,3}$"
-	[[ $ip =~ $expresionRegular ]]
+	if ! [[ $ip =~ $expresionRegular ]]; then
+		return 1
+	fi
+
+	IFS='.' -r o1 o2 o3 o4 <<< "$ip"
+	for octeto in $o1 $o2 $o3 $o4; do
+		if ((octeto < 0 || octeto > 255)); then
+			return 1
+		fi
+	done
+
+	if[[ "$ip" == "0.0.0.0" || "$ip" == "255.255.255.255" || "$ip" == "127.0.0.1" || "$ip" == "127.0.0.0" ]]; then
+		return 1
+	fi
+
+	return 0
 }
 
 validar_ip_rango(){
@@ -19,19 +34,26 @@ validar_ip_rango(){
 		fi
 	done
 	return 0
+
 }
 
 pedir_ip(){
 	local mensaje=$1
+	local vacio=$2
 	local ip
 
 	while true; do
 		read -p "$mensaje: " ip
-		if validar_ip "$ip" && validar_ip_rango "$ip"; then
+		if [[ -z "$ip" && "$vacio" == "si" ]]; then
+			echo ""
+			return
+		fi
+
+		if valida_ip "$ip"; then
 			echo "$ip"
 			return
 		else
-			echo "Esta mal: La ip es invalida"
+			echo "Esta mal: IP invalida"
 		fi
 	done
 }
@@ -39,60 +61,82 @@ pedir_ip(){
 ip_entero(){
 	local ip=$1
 	IFS='.' read -r a b c d <<< "$ip"
-	echo $((a<<24 | b<<16 | c<<8 | d))
+	echo $((a<<24 | b<<16 | c<< 8 | d))
+}
+
+instalar_kea(){
+	echo "Viendo si el servicio DHCP ya esta instalado......"
+	if rpm -q kea &>/dev/null; then
+		echo "El servicio DHCP ya esta instalado :D"
+	else
+		echo "El servicio DHCP no esta instalado, lo instalaremos enseguida...."
+		sudo dnf install -y kea
+
+		if rpm -q kea &>/dev/null; then
+			echo "Instalacion completada"
+		else
+			echo "Hubo un error en la instalacion"
+		fi
+	fi
+
+	red -p "Presiona ENTER para volver al menu"
 }
 
 configurar_parametros(){
 	instalar_kea
 	echo "**** CONFIGURACION DEL DHCP ******"
 	read -p "Nombre del ambito: " ambito
-	
-	segmento=$(pedir_ip "Ingrese el segmento de Red (ej: 192.168.0.0): ")
-	read -p "Prefijo (ej: 24): " prefijo
-	rangoInicial=$(pedir_ip "Ingrese el rango inicial de la IP (ej: 192.168.0.100): ")
-	rangoFinal=$(pedir_ip "Ingrese el rango final de la IP (ej: 192.168.0.150): ")
-	base_segmento="${segmento%.*}"
-	if [[ "${rangoInicial%.*}" != "$base_segmento" || "${rangoFinal%.*}" != "$base_segmento" ]]; then
-		echo "Esta mal: el rango de la IP no cuadra con el segmento que se ingreso"
-		exit 1
-	fi
-	gateway=$(pedir_ip "Ingrese la puerta de enlace 'gateway' (ej: 192.168.0.1): ")
-	dns=$(pedir_ip "Ingrese el DNS (ej: 192.168.0.70): ")
-	ip_srv_int=$(ip_entero "$dns")
-	rangoIni=$(ip_entero "$rangoInicial")
-	rangoFin=$(ip_entero "$rangoFinal"}
 
-	if (( ip_srv_int >= rangoIni && ip_srv_int <= rangoFin )); then
-		echo "Esta mal: El rango que se ingreso incluye la IP del servidor ($DNS)"
-		exit 1
-	fi
+	segmento=$(pedir_ip "Ingrese el segmento de Red (ej: 192.168.0.0) ")
+	read -p "Prefijo (ej: 24) " prefijo
+	rangoInicial=$(pedir_ip "Ingrese el rango inicial de la IP (ej: 192.168.0.100) ")
+	rangoFinal=$(pedir_ip "Ingrese el rango final de la IP (ej: 192.168.0.150) ")
+	gateway=$(pedir_ip "Ingrese la puerta de enlace (opcional) (ej: 192.168.0.1) "si)
+	dns=$(pedir_ip "Ingrese el DNS (opcional) (ej: 192.168.0.70) "si)
+
+
+
 	echo ""
-
 	echo "**** datos ingresado ****"
 	echo "segmento de red: $segmento"
 	echo "Rango de IPs: $rangoInicial - $rangoFinal"
 	echo "Gateway: $gateway"
 	echo "DNS: $dns"
+	echo ""
 
-	if(( $(ip_entero "$rangoInicial") >= $(ip_entero "$rangoFinal") )); then
-		echo "Esta mal: El rango incial debe ser menor al rango final"
-		exit 1
+
+	if (( $(ip_entero "$rangoInicial") >= $(ip_entero "$rangoFinal") )); then
+		echo "Esta mal: El rango inicial debe de ser menor al rango final"
+		return
 	fi
 
-	ip_servidor=$(ip -4 addr show enp0s8 | awk '/inet/ {print $2}' | cut -d/ -f1)
+	base_segmento="${segmento%.*]"
+		if [["${rangoInicial%.*}" != "$base_segmento" || "{rangoFinal%.*}" != "$base_segmento" ]]; then
+		echo "Estam mal: El rango no cuadra con el segmento que se ingreso"
+		return
+	fi
 
-	if [[ $segmento != ${ip_servidor%.*}.0 ]]; then
-		echo "Esta mal: el segmento que ingreso debe coincidir con la del servidor"
-		echo "IP del servido: $ip_servidor"
-		echo "Segmento ingresado: $segmento"
-		exit 1
+	if [[ $segmento != ${ipActual%.*}.0 ]]; then
+		echo "Esta mal: el segmento debe coincidir con el del servidor"
+		return
+	fi
+
+	ip_srv_entero=$(ip_entero "$ipActual")
+	inicial_enteor=$(ip_entero "$rangoInicial)"
+	final_entero=$(ip_entero "$rangoFinal)"
+
+	if (( ip_srv_entero > inicial_entero && ip_srv_entero <= final_iniclal )); then
+		echo "El rango incluye la IP del servidor ($ipActual)"
+		return
 	fi
 
 	generar_config_kea
 	validar_config_kea
 	reiniciar_kea
 
-	echo "Servidor DHCP (KEA) configurado chilo (creo XD)"
+	echo "Servidor DHCP configurado"
+	read -p "presion ENTER para volver al menu"
+
 }
 
 estado_dhcp_kea(){
@@ -196,18 +240,20 @@ reiniciar_kea(){
 
 menu(){
 	echo ""
-	echo "1) Configurar DHCP"
-	echo "2) Ver estado del servicio DCHP (KEA)"
-	echo "3) ver concesiones"
-	echo "4) salir "
+	echo "1) Instalar servicio DHCP"
+	echo "2) Configurar DCHP (KEA)"
+	echo "3) Ver el estado del servicio DHCP"
+	echo "4) Ver concesiones"
+	echo "5) Salir"
 	read -p "Selecciones una opcion: " opcion
 	
 	case $opcion in
-		1)configurar_parametros ;;
-		2)estado_dhcp_kea ;;
-		3)mostrar_leases ;;
-		4)exit 0 ;;
-		5)echo "opcion invalida" ;;
+		1)instalar_kea ;;
+		2)configurar_parametros ;;
+		3)estado_dhcp_kea ;;
+		4)mostrar_leases ;;
+		5)exit 0 ;;
+		*)echo "opcion invalida" ;;
 	esac
 
 }
