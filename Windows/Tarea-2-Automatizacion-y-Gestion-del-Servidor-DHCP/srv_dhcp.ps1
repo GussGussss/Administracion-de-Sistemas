@@ -24,7 +24,7 @@ function instalar-dhcp{
 	$dhcp = get-windowsfeature DHCP
 	if (-not $dhcp.installed){
 		write-host "Instalando servicio DHCP"
-		install-windowsfeature DHCP-include-managementools
+		install-windowsfeature DHCP -includemanagementools
 	}else{
 		write-host "El servicio DHCP ya esta instalado :p"
 	}
@@ -48,7 +48,7 @@ function configurar-dhcp{
 	write-host "Gateway: $gateway"
 	write-host "DNS: $dns"
 
-	$segmentoServidor = (($ipActual -split '\.') [0..2] -join '.') + ".0"
+	$segmentoServidor = (($ipActual -split '\.')[0..2] -join '.') + ".0"
 	
 	if ($segmento -ne $segmentoServidor) {
 		write-host "Esta mal: el segmento debe coincidir con el segmentod el servidor"
@@ -63,14 +63,14 @@ function configurar-dhcp{
 	default {"255.255.255.0"}
 	}
 
-	add-dhcpserverv4scope '
-		-Name $ambito '
-		-StartRange $rangoInicial '
-		-EndRange $rangoFinal '
-		-SubNetmask $mask '
+	add-dhcpserverv4scope ´
+		-Name $ambito ´
+		-StartRange $rangoInicial ´
+		-EndRange $rangoFinal ´
+		-SubNetmask $mask ´
 		-State Active
 	
-	set-dhcpserverv4optionvalue '
+	set-dhcpserverv4optionvalue ´
 		-Router $gateway
 		-DnsServer $dns
 
@@ -89,7 +89,7 @@ function estado-dhcp{
 function mostrar-leases{
 	$leases = get-dhcpserverv4lease
 	if ($leases) {
-		$leases | fomat-table ipaddress, clienteid, hostname -autosize
+		$leases | format-table ipaddress, clientid, hostname -autosize
 	}else{
 		write-host "No hay concesiones registradas"
 	}
