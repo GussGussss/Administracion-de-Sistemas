@@ -65,6 +65,7 @@ ip_entero(){
 }
 
 instalar_kea(){
+	echo ""
 	echo "Viendo si el servicio DHCP ya esta instalado......"
 	if rpm -q kea &>/dev/null; then
 		echo "El servicio DHCP ya esta instalado :D"
@@ -79,14 +80,13 @@ instalar_kea(){
 		fi
 	fi
 
-	read -p "Presiona ENTER para volver al menu"
+	read -p "Presiona ENTER para volver al continuar"
 }
 
 configurar_parametros(){
 	instalar_kea
 	echo "**** CONFIGURACION DEL DHCP ******"
 	read -p "Nombre del ambito: " ambito
-
 	segmento=$(pedir_ip "Ingrese el segmento de Red (ej: 192.168.0.0) ")
 	read -p "Prefijo (ej: 24) " prefijo
 	rangoInicial=$(pedir_ip "Ingrese el rango inicial de la IP (ej: 192.168.0.100) ")
@@ -123,9 +123,9 @@ configurar_parametros(){
 
 	ip_srv_entero=$(ip_entero "$ipActual")
 	inicial_entero=$(ip_entero "$rangoInicial")
-	final_entero=$(ip_entero "$rangoFinal)"
+	final_entero=$(ip_entero "$rangoFinal")
 
-	if (( ip_srv_entero > inicial_entero && ip_srv_entero <= final_entero )); then
+	if (( ip_srv_entero >= inicial_entero && ip_srv_entero <= final_entero )); then
 		echo "El rango incluye la IP del servidor ($ipActual)"
 		return
 	fi
