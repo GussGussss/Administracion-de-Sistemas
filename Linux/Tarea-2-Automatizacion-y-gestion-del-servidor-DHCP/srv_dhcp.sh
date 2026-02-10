@@ -58,7 +58,6 @@ mostrar_leases(){
 		echo "archivo de leases no encontrado"
 	fi
 }
-ejecucion=true
 
 menu(){
 	echo ""
@@ -66,13 +65,13 @@ menu(){
 	echo "2) Ver estado del servicio DCHP"
 	echo "3) ver concesiones"
 	echo "4) salir "
-|	read -p "Selecciones una opcion: " opcion
+	read -p "Selecciones una opcion: " opcion
 	
 	case $opcion in
 		1)configurar_parametros ;;
 		2)estado_dhcp ;;
 		3)mostrar_leases ;;
-		4)ejecutando=false ;;
+		4)exit 0 ;;
 		5)echo "opcion invalida" ;;
 	esac
 }
