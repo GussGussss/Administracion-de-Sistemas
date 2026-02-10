@@ -20,7 +20,7 @@ function pedir-ip{
 	return $ip
 }
 
-function intalar-dhcp{
+function instalar-dhcp{
 	$dhcp = get-windowsfeature DHCP
 	if (-not $dhcp.installed){
 		write-host "Instalando servicio DHCP"
