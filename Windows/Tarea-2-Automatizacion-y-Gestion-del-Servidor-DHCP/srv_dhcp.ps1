@@ -63,16 +63,9 @@ function configurar-dhcp{
 	default {"255.255.255.0"}
 	}
 
-	add-dhcpserverv4scope ´
-		-Name $ambito ´
-		-StartRange $rangoInicial ´
-		-EndRange $rangoFinal ´
-		-SubNetmask $mask ´
-		-State Active
+	add-dhcpserverv4scope -Name $ambito -StartRange $rangoInicial -EndRange $rangoFinal -SubNetmask $mask -State Active
 	
-	set-dhcpserverv4optionvalue ´
-		-Router $gateway
-		-DnsServer $dns
+	set-dhcpserverv4optionvalue -Router $gateway -DnsServer $dns
 
 	write-host "Servidor DHCP configurado aca chilo :p"
 }
