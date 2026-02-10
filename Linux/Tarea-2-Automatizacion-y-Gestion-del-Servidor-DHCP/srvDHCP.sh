@@ -7,10 +7,10 @@ echo "IP actua; $ipActual"
 
 echo "Verificando si se encuentra el servicio dhcp...."
 
-if ! rpm -q dhpc &> /dev/null; then
-	echo "El servicio DHCP no se encuentra... Se intalara automaticamente..."
-	sudo dnf install -y dhcp
+if ! rpm -q kea &> /dev/null; then
+	echo "El servicio DHCP(KEA) no se encuentra... Se intalara automaticamente..."
+	sudo dnf install -y kea /dev/null 2>&1
 	echo "La instalacion se ha completado"
 else
-	echo "El servicio DHCP ya esta instalado en el sistema"
+	echo "El servicio DHCP(KEA) ya esta instalado en el sistema"
 fi
