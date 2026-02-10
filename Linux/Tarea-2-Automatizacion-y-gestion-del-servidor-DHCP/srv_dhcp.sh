@@ -26,6 +26,7 @@ pedir_ip(){
 }
 
 configurar_parametros(){
+	instalar_kea
 	echo "**** CONFIGURACION DEL DHCP ******"
 	read -p "Nombre del ambito: " ambito
 	
@@ -43,7 +44,7 @@ configurar_parametros(){
 	echo "DNS: $dns"
 }
 
-estado_dhcp(){
+estado_dhcp_kea(){
 	echo ""
 	echo "Estado del servicio DHCP (KEA aqui en oracle XD) "
 	systemclt status kea-dhcp --no-pager 2>/dev/null | \
@@ -58,18 +59,34 @@ mostrar_leases(){
 		echo "archivo de leases no encontrado"
 	fi
 }
+instalar_kea(){
+	echo "Verificando si se encuentra el servicio DHPC (KEA aqui xd)"
+	
+	if rmp -q kea &>/dev/null; then
+		echo "El servicio DHCP (KEA) ya esta instalado :D"
+	else
+		echo "El servicio DHCP (KEA) no esta instalado, asi que lo vamos a instalar :D"
+		sudo dnf install -y kea > /dev/null 2>&1
+		
+		if rpm -q kea &>/dev/null; then
+			echo "El servicio DHCP (KEA) se instalo correctamente :D"
+		else
+			echo "Esta mal: el servicio DHCP (KEA) no se pudo instalar :c"
+		if
+	fi
+}
 
 menu(){
 	echo ""
 	echo "1) Configurar DHCP"
-	echo "2) Ver estado del servicio DCHP"
+	echo "2) Ver estado del servicio DCHP (KEA)"
 	echo "3) ver concesiones"
 	echo "4) salir "
 	read -p "Selecciones una opcion: " opcion
 	
 	case $opcion in
 		1)configurar_parametros ;;
-		2)estado_dhcp ;;
+		2)estado_dhcp_kea ;;
 		3)mostrar_leases ;;
 		4)exit 0 ;;
 		5)echo "opcion invalida" ;;
