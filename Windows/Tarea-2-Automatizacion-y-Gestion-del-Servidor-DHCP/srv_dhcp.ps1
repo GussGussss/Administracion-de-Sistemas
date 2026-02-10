@@ -24,7 +24,7 @@ function instalar-dhcp{
 	$dhcp = get-windowsfeature DHCP
 	if (-not $dhcp.installed){
 		write-host "Instalando servicio DHCP"
-		install-windowsfeature DHCP -includemanagementools
+		install-windowsfeature DHCP -includemanagementtools
 	}else{
 		write-host "El servicio DHCP ya esta instalado :p"
 	}
