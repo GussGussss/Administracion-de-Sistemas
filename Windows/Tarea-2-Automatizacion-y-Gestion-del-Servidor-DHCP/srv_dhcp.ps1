@@ -77,7 +77,12 @@ function configurar-dhcp{
 	write-host "Servidor DHCP configurado aca chilo :p"
 }
 
-
-
-
+function estado-dhcp{
+	$servicio = get-service dhcpserver
+	if ($servicio.status -eq "Running"){
+		write-host "Servicio DHCP activo"
+	}else{
+		write-host "Servicio DHCP no activo"
+	}	
+}
 
