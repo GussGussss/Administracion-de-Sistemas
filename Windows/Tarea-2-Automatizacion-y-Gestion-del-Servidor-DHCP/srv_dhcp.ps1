@@ -84,5 +84,16 @@ function estado-dhcp{
 	}else{
 		write-host "Servicio DHCP no activo"
 	}	
+} 
+
+function mostrar-leases{
+	$leases = get-dhcpserverv4lease
+	if ($leases) {
+		$leases | fomat-table ipaddress, clienteid, hostname -autosize
+	}else{
+		write-host "No hay concesiones registradas"
+	}
 }
+
+
 
