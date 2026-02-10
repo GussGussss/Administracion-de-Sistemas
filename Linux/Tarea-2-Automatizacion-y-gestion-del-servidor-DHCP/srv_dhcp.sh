@@ -11,7 +11,7 @@ validar_ip(){
 		return 1
 	fi
 
-	IFS='.' -r o1 o2 o3 o4 <<< "$ip"
+	IFS='.' read -r o1 o2 o3 o4 <<< "$ip"
 	for octeto in $o1 $o2 $o3 $o4; do
 		if ((octeto < 0 || octeto > 255)); then
 			return 1
@@ -49,7 +49,7 @@ pedir_ip(){
 			return
 		fi
 
-		if valida_ip "$ip"; then
+		if validar_ip "$ip"; then
 			echo "$ip"
 			return
 		else
@@ -79,7 +79,7 @@ instalar_kea(){
 		fi
 	fi
 
-	red -p "Presiona ENTER para volver al menu"
+	read -p "Presiona ENTER para volver al menu"
 }
 
 configurar_parametros(){
@@ -91,8 +91,8 @@ configurar_parametros(){
 	read -p "Prefijo (ej: 24) " prefijo
 	rangoInicial=$(pedir_ip "Ingrese el rango inicial de la IP (ej: 192.168.0.100) ")
 	rangoFinal=$(pedir_ip "Ingrese el rango final de la IP (ej: 192.168.0.150) ")
-	gateway=$(pedir_ip "Ingrese la puerta de enlace (opcional) (ej: 192.168.0.1) "si)
-	dns=$(pedir_ip "Ingrese el DNS (opcional) (ej: 192.168.0.70) "si)
+	gateway=$(pedir_ip "Ingrese la puerta de enlace (opcional) (ej: 192.168.0.1) " si)
+	dns=$(pedir_ip "Ingrese el DNS (opcional) (ej: 192.168.0.70) " si)
 
 
 
@@ -110,8 +110,8 @@ configurar_parametros(){
 		return
 	fi
 
-	base_segmento="${segmento%.*]"
-		if [["${rangoInicial%.*}" != "$base_segmento" || "{rangoFinal%.*}" != "$base_segmento" ]]; then
+	base_segmento="${segmento%.*}"
+	if [[ "${rangoInicial%.*}" != "$base_segmento" || "${rangoFinal%.*}" != "$base_segmento" ]]; then
 		echo "Estam mal: El rango no cuadra con el segmento que se ingreso"
 		return
 	fi
@@ -122,7 +122,7 @@ configurar_parametros(){
 	fi
 
 	ip_srv_entero=$(ip_entero "$ipActual")
-	inicial_enteor=$(ip_entero "$rangoInicial)"
+	inicial_entero=$(ip_entero "$rangoInicial")
 	final_entero=$(ip_entero "$rangoFinal)"
 
 	if (( ip_srv_entero > inicial_entero && ip_srv_entero <= final_iniclal )); then
