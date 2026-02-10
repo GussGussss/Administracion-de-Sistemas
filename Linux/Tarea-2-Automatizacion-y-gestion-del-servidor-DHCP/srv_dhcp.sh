@@ -195,6 +195,7 @@ estado_dhcp_kea(){
 
 mostrar_leases(){
 	echo "Leases activos: "
+
 	if [ -f /var/lib/kea/kea-leases4.csv ]; then
 		lineas=$(wc -l < /var/lib/kea/kea-leases4.csv)
 
