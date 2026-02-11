@@ -187,9 +187,9 @@ do {
 	write-host ""
 	write-host "1) Instalar servicio DHPC"
 	write-host "2) Configurar DHCP"
-	write-host "2) Ver el estado del DHPC"
-	write-host "3) Ver concesiones"
-	write-host "4) Salir"
+	write-host "3) Ver el estado del DHPC"
+	write-host "4) Ver concesiones"
+	write-host "5) Salir"
 	$opcion = read-host "Elije una opcion: "
 
 	switch ($opcion){
@@ -197,7 +197,7 @@ do {
 		"2" {configurar-dhcp}
 		"3" {estado-dhcp}
 		"4" {mostrar-leases}
-		"4" {break}
+		"5" {break}
 		default {write-host "Opcion no valida :p"}
 	}
 }while($true)
