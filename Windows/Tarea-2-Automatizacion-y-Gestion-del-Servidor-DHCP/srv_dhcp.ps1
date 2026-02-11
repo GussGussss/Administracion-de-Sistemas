@@ -75,7 +75,7 @@ function instalar-dhcp{
         Write-Host "El servicio DHCP ya esta instalado."
     }
 
-    Read-Host "Presiona ENTER para volver al menu"
+    Read-Host "Presiona ENTER para continuar"
 }
 
 function configurar-dhcp{
@@ -186,7 +186,7 @@ function mostrar-leases{
 do {
 	write-host ""
 	write-host "1) Instalar servicio DHPC"
-	write-host "1) Configurar DHCP"
+	write-host "2) Configurar DHCP"
 	write-host "2) Ver el estado del DHPC"
 	write-host "3) Ver concesiones"
 	write-host "4) Salir"
