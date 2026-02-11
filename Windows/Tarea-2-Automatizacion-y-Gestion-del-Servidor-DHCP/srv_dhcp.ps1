@@ -118,17 +118,12 @@ function configurar-dhcp{
 	
 	}while(-not $valido)
 
-	$segmentoBase = ($segmento -split '\.')[0..2] -join '.'
-
-	if (($rangoInicial -split '\.')[0..2] -join '.' -ne $segmentoBase -or
-	    ($rangoFinal -split '\.')[0..2] -join '.' -ne $segmentoBase){
-	    Write-Host "El rango no pertenece al segmento"
+	$ipServidorNumero = ip-a-entero $ipActual
+	
+	if ($ipServidorNumero -ge $ini -and $ipServidorNumero -le $fin){
+	    Write-Host "El rango incluye la IP del servidor"
 	    return
 	}
-
-	$gateway = pedir-ip "Ingrese el gateway (ej: 192.168.0.1): "
-	$dns = pedir-ip "Ingrese el DNS (ej: 192.168.0.71): "
-
     $gateway = pedir-ip "Ingrese el gateway (opcional)" $true
     $dns     = pedir-ip "Ingrese el DNS (opcional)" $true
 
@@ -149,20 +144,13 @@ function configurar-dhcp{
 
 	$segmentoServidor = (($ipActual -split '\.')[0..2] -join '.') + ".0"
 	
-	if ($segmento -ne $segmentoServidor) {
-		write-host "Esta mal: el segmento debe coincidir con el segmentod el servidor"
-		write-host "IP del servidor: $ipActual"
-		write-host "Segmento ingresado: $segmento"
-		exit 1
-	}
-	
 	$mask = switch ($prefijo){
 	24 {"255.255.255.0"}
 	16 {"255.255.0.0"}
 	default {"255.255.255.0"}
 	}
 
-	$scopeExiste=get-dhcpserverv4scope -erroraction SilentlyContinue | where-object {$_.subnetaddres -eq $segmento}	
+	$scopeExiste=get-dhcpserverv4scope -erroraction SilentlyContinue | where-object {$_.subnetaddress -eq $segmento}	
 	
 	if($scopeExiste) {
 		write-host "El scope (ambito) ya existe, no se volver a crear"
