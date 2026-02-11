@@ -82,18 +82,41 @@ function configurar-dhcp{
 	instalar-dhcp
 	write-host "***** CONFIGURACION DEL DHCP ******"
 	$ambito = read-host "Nombre del ambito: "
-	$segmento = pedir-ip "Ingrese el segmento de red (ej: 192.168.0.0): "
-	$prefijo = read-host "Prefijo (ej: 24): "
-	$rangoInicial = pedir-ip "Ingrese el rango inicial de la IP (ej: 192.168.0.100): "
-	$rangoFinal = pedir-ip "Ingrese el rango final de la IP (ej: 192.168.0.150): "
+	do{
+	    $segmento = pedir-ip "Ingrese el segmento de red (ej: 192.168.0.0)"
+	    $segmentoServidor = (($ipActual -split '\.')[0..2] -join '.') + ".0"
 	
-	$ini = ip-a-entero $rangoInicial
-	$fin = ip-a-entero $rangoFinal
-
-	if ($ini -ge $fin){
-    	Write-Host "El rango inicial debe ser menor al rango final"
-    	return
-	}
+	    if ($segmento -ne $segmentoServidor){
+	        Write-Host "El segmento debe coincidir con el del servidor ($segmentoServidor)"
+	    }
+	}while($segmento -ne $segmentoServidor)
+	
+	$prefijo = read-host "Prefijo (ej: 24): "
+	do{
+	    $rangoInicial = pedir-ip "Ingrese el rango inicial"
+	    $rangoFinal   = pedir-ip "Ingrese el rango final"
+	
+	    $ini = ip-a-entero $rangoInicial
+	    $fin = ip-a-entero $rangoFinal
+	
+	    if ($ini -ge $fin){
+	        Write-Host "El rango inicial debe ser menor al rango final"
+	        $valido = $false
+	        continue
+	    }
+	
+	    $segmentoBase = ($segmento -split '\.')[0..2] -join '.'
+	
+	    if (($rangoInicial -split '\.')[0..2] -join '.' -ne $segmentoBase -or
+	        ($rangoFinal -split '\.')[0..2] -join '.' -ne $segmentoBase){
+	        Write-Host "El rango no pertenece al segmento"
+	        $valido = $false
+	        continue
+	    }
+	
+	    $valido = $true
+	
+	}while(-not $valido)
 
 	$segmentoBase = ($segmento -split '\.')[0..2] -join '.'
 
@@ -106,24 +129,23 @@ function configurar-dhcp{
 	$gateway = pedir-ip "Ingrese el gateway (ej: 192.168.0.1): "
 	$dns = pedir-ip "Ingrese el DNS (ej: 192.168.0.71): "
 
-	$gateway = pedir-ip "Ingrese el gateway (opcional)" $true
-	$dns     = pedir-ip "Ingrese el DNS (opcional)" $true
-	
-	if ([string]::IsNullOrWhiteSpace($dns)){
-	    $dns = $rangoInicial
-	}
-	
-	if ([string]::IsNullOrWhiteSpace($gateway)){
-	    $gatewayNumero = (ip-a-entero $rangoFinal) + 1
-	    $gateway = entero-a-ip $gatewayNumero
-	}
+    $gateway = pedir-ip "Ingrese el gateway (opcional)" $true
+    $dns     = pedir-ip "Ingrese el DNS (opcional)" $true
 
-	write-host ""
-	write-host "**** Datos ingresados ****"
-	write-host "Segmento de red: $segmento"
-	write-host "Rango: $rangoInicial - $rangoFinal"
-	write-host "Gateway: $gateway"
-	write-host "DNS: $dns"
+    if ([string]::IsNullOrWhiteSpace($dns)){
+        $dns = $rangoInicial
+    }
+
+    if ([string]::IsNullOrWhiteSpace($gateway)){
+        $gatewayNumero = (ip-a-entero $rangoFinal) + 1
+        $gateway = entero-a-ip $gatewayNumero
+    }
+
+    Write-Host ""
+    Write-Host "Segmento: $segmento"
+    Write-Host "Rango: $rangoInicial - $rangoFinal"
+    Write-Host "Gateway: $gateway"
+    Write-Host "DNS: $dns"
 
 	$segmentoServidor = (($ipActual -split '\.')[0..2] -join '.') + ".0"
 	
