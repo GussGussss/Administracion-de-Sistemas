@@ -139,7 +139,7 @@ function configurar-dhcp{
 	do{
 		$lease = read-host "Ingresa el tiempo (en minutos) "
 		if( -not ($lease -match '^[0-9]+$') -or [int] $lease -le 0 ){
-			write-host "Error: no debe de ser 0"
+			write-host "No debe de de ser 0 :D"
 			$valido = $false
 		}else{
 			$valido = $true
