@@ -6,7 +6,25 @@ write-host "IP: $ipActual"
 
 function validar-ip{
 	param ([string]$IP)
-	return $IP -match '^([0-9]{1,3}\.){3}[0-9]{1,3}$'
+
+    if ($IP -notmatch '^([0-9]{1,3}\.){3}[0-9]{1,3}$'){
+        return $false
+    }
+
+    $octetos = $IP.Split('.')
+    foreach ($o in $octetos){
+        if ([int]$o -lt 0 -or [int]$o -gt 255){
+            return $false
+        }
+    }
+
+    if ($IP -eq "0.0.0.0" -or
+        $IP -eq "255.255.255.255" -or
+        $IP -eq "127.0.0.1"){
+        return $false
+    }
+
+    return $true
 }
 
 function pedir-ip{
