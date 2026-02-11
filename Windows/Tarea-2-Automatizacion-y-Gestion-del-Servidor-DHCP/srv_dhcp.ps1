@@ -68,14 +68,14 @@ function instalar-dhcp{
     $dhcp = Get-WindowsFeature DHCP
 
     if (-not $dhcp.Installed){
-        Write-Host "Instalando servicio DHCP..."
+        write-host "Instalando servicio DHCP..."
         Install-WindowsFeature DHCP -IncludeManagementTools
-        Write-Host "Instalacion completada."
+        write-host "Instalacion completada."
     }else{
-        Write-Host "El servicio DHCP ya esta instalado."
+        write-host "El servicio DHCP ya esta instalado."
     }
 
-    Read-Host "Presiona ENTER para continuar"
+    read-host "Presiona ENTER para continuar"
 }
 
 function configurar-dhcp{
@@ -87,7 +87,7 @@ function configurar-dhcp{
 	    $segmentoServidor = (($ipActual -split '\.')[0..2] -join '.') + ".0"
 	
 	    if ($segmento -ne $segmentoServidor){
-	        Write-Host "El segmento debe coincidir con el del servidor ($segmentoServidor)"
+	        write-host "El segmento debe coincidir con el del servidor ($segmentoServidor)"
 	    }
 	}while($segmento -ne $segmentoServidor)
 	
@@ -100,7 +100,7 @@ function configurar-dhcp{
 	    $fin = ip-a-entero $rangoFinal
 	
 	    if ($ini -ge $fin){
-	        Write-Host "El rango inicial debe ser menor al rango final"
+	        write-host "El rango inicial debe ser menor al rango final"
 	        $valido = $false
 	        continue
 	    }
@@ -109,7 +109,7 @@ function configurar-dhcp{
 	
 	    if (($rangoInicial -split '\.')[0..2] -join '.' -ne $segmentoBase -or
 	        ($rangoFinal -split '\.')[0..2] -join '.' -ne $segmentoBase){
-	        Write-Host "El rango no pertenece al segmento"
+	        write-host "El rango no pertenece al segmento"
 	        $valido = $false
 	        continue
 	    }
@@ -121,26 +121,36 @@ function configurar-dhcp{
 	$ipServidorNumero = ip-a-entero $ipActual
 	
 	if ($ipServidorNumero -ge $ini -and $ipServidorNumero -le $fin){
-	    Write-Host "El rango incluye la IP del servidor"
+	    write-host "El rango incluye la IP del servidor"
 	    return
 	}
-    $gateway = pedir-ip "Ingrese el gateway (opcional)" $true
-    $dns     = pedir-ip "Ingrese el DNS (opcional)" $true
+    	$gateway = pedir-ip "Ingrese el gateway (opcional)" $true
+    	$dns     = pedir-ip "Ingrese el DNS (opcional)" $true
 
-    if ([string]::IsNullOrWhiteSpace($dns)){
-        $dns = $rangoInicial
-    }
+    	if ([string]::IsNullOrWhiteSpace($dns)){
+        	$dns = $rangoInicial
+    	}
 
-    if ([string]::IsNullOrWhiteSpace($gateway)){
-        $gatewayNumero = (ip-a-entero $rangoFinal) + 1
-        $gateway = entero-a-ip $gatewayNumero
-    }
-
-    Write-Host ""
-    Write-Host "Segmento: $segmento"
-    Write-Host "Rango: $rangoInicial - $rangoFinal"
-    Write-Host "Gateway: $gateway"
-    Write-Host "DNS: $dns"
+    	if ([string]::IsNullOrWhiteSpace($gateway)){
+        	$gatewayNumero = (ip-a-entero $rangoFinal) + 1
+        	$gateway = entero-a-ip $gatewayNumero
+    	}
+	
+	do{
+		$lease = read-host "Ingresa el tiempo (en minutos) "
+		if( -not ($lease -match '^[0-9]+$') -or [int] $lease -le 0){
+			write-host "Error: no debe de ser 0"
+			$valido = $false
+		}else{
+			$valido = $true
+		}
+	}while(-not $valido)
+	
+    	write-host ""
+    	write-host "Segmento: $segmento"
+    	write-host "Rango: $rangoInicial - $rangoFinal"
+    	write-host "Gateway: $gateway"
+    	write-host "DNS: $dns"
 
 	$segmentoServidor = (($ipActual -split '\.')[0..2] -join '.') + ".0"
 	
@@ -155,7 +165,7 @@ function configurar-dhcp{
 	if($scopeExiste) {
 		write-host "El scope (ambito) ya existe, no se volver a crear"
 	}else{
-		add-dhcpserverv4scope -Name $ambito -StartRange $rangoInicial -EndRange $rangoFinal -SubNetmask $mask -State Active
+		add-dhcpserverv4scope -Name $ambito -StartRange $rangoInicial -EndRange $rangoFinal -SubNetmask $mask leaseduration (new-timespan -minutes $lease)-State Active
 	}
 
 	set-dhcpserverv4optionvalue -Router $gateway
