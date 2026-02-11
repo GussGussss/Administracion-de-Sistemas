@@ -57,14 +57,25 @@ function ip-a-entero($ip){
            ([int]$octetos[3])
 }
 
+function entero-a-ip($numero){
+    return "$(($numero -shr 24) -band 255)." +
+           "$(($numero -shr 16) -band 255)." +
+           "$(($numero -shr 8) -band 255)." +
+           "$($numero -band 255)"
+}
+
 function instalar-dhcp{
-	$dhcp = get-windowsfeature DHCP
-	if (-not $dhcp.installed){
-		write-host "Instalando servicio DHCP"
-		install-windowsfeature DHCP -includemanagementtools
-	}else{
-		write-host "El servicio DHCP ya esta instalado :p"
-	}
+    $dhcp = Get-WindowsFeature DHCP
+
+    if (-not $dhcp.Installed){
+        Write-Host "Instalando servicio DHCP..."
+        Install-WindowsFeature DHCP -IncludeManagementTools
+        Write-Host "Instalacion completada."
+    }else{
+        Write-Host "El servicio DHCP ya esta instalado."
+    }
+
+    Read-Host "Presiona ENTER para volver al menu"
 }
 
 function configurar-dhcp{
@@ -75,8 +86,37 @@ function configurar-dhcp{
 	$prefijo = read-host "Prefijo (ej: 24): "
 	$rangoInicial = pedir-ip "Ingrese el rango inicial de la IP (ej: 192.168.0.100): "
 	$rangoFinal = pedir-ip "Ingrese el rango final de la IP (ej: 192.168.0.150): "
+	
+	$ini = ip-a-entero $rangoInicial
+	$fin = ip-a-entero $rangoFinal
+
+	if ($ini -ge $fin){
+    	Write-Host "El rango inicial debe ser menor al rango final"
+    	return
+	}
+
+	$segmentoBase = ($segmento -split '\.')[0..2] -join '.'
+
+	if (($rangoInicial -split '\.')[0..2] -join '.' -ne $segmentoBase -or
+	    ($rangoFinal -split '\.')[0..2] -join '.' -ne $segmentoBase){
+	    Write-Host "El rango no pertenece al segmento"
+	    return
+	}
+
 	$gateway = pedir-ip "Ingrese el gateway (ej: 192.168.0.1): "
 	$dns = pedir-ip "Ingrese el DNS (ej: 192.168.0.71): "
+
+	$gateway = pedir-ip "Ingrese el gateway (opcional)" $true
+	$dns     = pedir-ip "Ingrese el DNS (opcional)" $true
+	
+	if ([string]::IsNullOrWhiteSpace($dns)){
+	    $dns = $rangoInicial
+	}
+	
+	if ([string]::IsNullOrWhiteSpace($gateway)){
+	    $gatewayNumero = (ip-a-entero $rangoFinal) + 1
+	    $gateway = entero-a-ip $gatewayNumero
+	}
 
 	write-host ""
 	write-host "**** Datos ingresados ****"
@@ -126,11 +166,14 @@ function estado-dhcp{
 } 
 
 function mostrar-leases{
-	$scope=get-dhcpserverv4scope | select-object -first 1
-	if (-not $scope){
-		write-host "no hay scopes configurados"
-		return
-	}
+
+    $scope = Get-DhcpServerv4Scope | Select-Object -First 1
+
+    if (-not $scope){
+        Write-Host "No hay scopes configurados"
+        return
+    }
+
 	
 	$leases = get-dhcpserverv4lease -scopeid $scope.scopeid
 	if ($leases) {
@@ -142,6 +185,7 @@ function mostrar-leases{
 
 do {
 	write-host ""
+	write-host "1) Instalar servicio DHPC"
 	write-host "1) Configurar DHCP"
 	write-host "2) Ver el estado del DHPC"
 	write-host "3) Ver concesiones"
@@ -149,9 +193,10 @@ do {
 	$opcion = read-host "Elije una opcion: "
 
 	switch ($opcion){
-		"1" {configurar-dhcp}
-		"2" {estado-dhcp}
-		"3" {mostrar-leases}
+		"1" {instalar-dhcp}
+		"2" {configurar-dhcp}
+		"3" {estado-dhcp}
+		"4" {mostrar-leases}
 		"4" {break}
 		default {write-host "Opcion no valida :p"}
 	}
