@@ -28,14 +28,33 @@ function validar-ip{
 }
 
 function pedir-ip{
-	param([string]$mensaje)
-	do {
-		$ip = read-host $mensaje
-		if (-not (validar-ip $ip)) {
-			write-host "Esta mal: la IP es invalida"
-		}
-	}while (-not (validar-ip $ip))
-	return $ip
+    param(
+        [string]$mensaje,
+        [bool]$opcional = $false
+    )
+
+    do{
+        $ip = Read-Host $mensaje
+
+        if ($opcional -and [string]::IsNullOrWhiteSpace($ip)){
+            return ""
+        }
+
+        if (-not (validar-ip $ip)){
+            Write-Host "Esta mal: IP invalida"
+        }
+
+    }while (-not (validar-ip $ip))
+
+    return $ip
+}
+
+function ip-a-entero($ip){
+    $octetos = $ip.Split('.')
+    return ([int]$octetos[0] -shl 24) -bor
+           ([int]$octetos[1] -shl 16) -bor
+           ([int]$octetos[2] -shl 8)  -bor
+           ([int]$octetos[3])
 }
 
 function instalar-dhcp{
