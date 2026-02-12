@@ -87,7 +87,7 @@ function cambiar-ip-servidor{
     write-host ""
     write-host "Cambiando IP del servidor a $NuevaIP..."
 
-    $adaptador = Get-NetAdapter | Where-Object {$_.Status -eq "Up"} | Select-Object -First 1
+    $adaptador = Get-NetAdapter -Name "Ethernet 2"
 
     Get-NetIPAddress -InterfaceIndex $adaptador.ifIndex -AddressFamily IPv4 |
         Remove-NetIPAddress -Confirm:$false
