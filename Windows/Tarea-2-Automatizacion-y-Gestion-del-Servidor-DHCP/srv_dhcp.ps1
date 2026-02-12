@@ -108,11 +108,12 @@ function configurar-dhcp{
 				$valido = $false
 		        	continue
 		    	}
-		}else{
+		}
+		else{
 			$segmento = (($rangoInicial -split '\.')[0..2] -join '.') + ".0"
 			write-host ""
 		}
-	}
+
 	    $valido = $true
 	
 	}while(-not $valido)
