@@ -76,7 +76,7 @@ instalar_kea(){
 		echo "El servicio DHCP ya esta instalado :D"
 	else
 		echo "El servicio DHCP no esta instalado, lo instalaremos enseguida...."
-		sudo dnf install -y kea
+		sudo dnf install -y kea > /dev/null 2>&1
 
 		if rpm -q kea &>/dev/null; then
 			echo "Instalacion completada"
@@ -127,7 +127,15 @@ while true; do
 
 	break
 done
-
+	while true; do
+	    read -p "Ingrese el tiempo (ej: 600) " leaseTime
+	    
+	    if [[ "$leaseTime" =~ ^[0-9]+$ ]] && (( leaseTime > 0 )); then
+	        break
+	    else
+	        echo "No debe de ser 0 o menor"
+	    fi
+	done
 	gateway=$(pedir_ip "Ingrese la puerta de enlace (opcional) (ej: 192.168.0.1) " si)
 	dns=$(pedir_ip "Ingrese el DNS (opcional) (ej: 192.168.0.70) " si)
 
