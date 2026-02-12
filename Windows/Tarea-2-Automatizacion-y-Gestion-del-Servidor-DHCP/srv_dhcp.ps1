@@ -170,11 +170,9 @@ function configurar-dhcp{
 
 	$scopeIP = [System.Net.IPAddress]::Parse($segmento)
 
-	set-dhcpserverv4optionvalue -scopeid $scopeIP -Router ([System.Net.IPAddress]$gateway)
+	set-dhcpserverv4optionvalue -scopeid $scopeIP -Router $gateway -Force
 	
-	$dnsIP = [System.Net.IPAddress]::Parse($dns)
-	set-dhcpserverv4optionvalue -scopeid $scopeIP -OptionId 6 -Value ([System.Net.IPAddress]$dns)
-}
+	set-dhcpserverv4optionvalue -scopeid $scopeIP -DnsServer $dns -Force
 
 function estado-dhcp{
 	$servicio = get-service dhcpserver
