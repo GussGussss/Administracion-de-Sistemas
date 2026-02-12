@@ -168,9 +168,9 @@ function configurar-dhcp{
 		add-dhcpserverv4scope -Name $ambito -StartRange $rangoInicial -EndRange $rangoFinal -SubNetmask $mask -leaseduration (new-timespan -minutes $lease) -State Active
 	}
 
-	set-dhcpserverv4optionvalue -Router $gateway
+	set-dhcpserverv4optionvalue -scopedid $segmento -Router $gateway
 	try{
-		set-dhcpserverv4optionvalue -DnsServer $dns
+		set-dhcpserverv4optionvalue -scopeid $segmento -DnsServer $dns -erroraction stop
 	}catch{
 		write-host "Esta mal: El DNS no es el correcto :c"
 	}
