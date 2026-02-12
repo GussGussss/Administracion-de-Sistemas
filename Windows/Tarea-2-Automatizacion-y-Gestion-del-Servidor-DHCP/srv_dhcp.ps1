@@ -208,7 +208,9 @@ function estado-dhcp{
 
 function mostrar-leases{
 
-    $scope = Get-DhcpServerv4Scope | Select-Object -First 1
+    $scope = Get-DhcpServerv4Scope
+
+	write-host "******* Concesiones ******
 
     if (-not $scope){
         Write-Host "No hay scopes configurados"
@@ -216,12 +218,12 @@ function mostrar-leases{
     }
 
 	
-	$leases = get-dhcpserverv4lease -scopeid $scope.scopeid
-	if ($leases) {
-		$leases | format-table ipaddress, clientid, hostname -autosize
-	}else{
-		write-host "No hay concesiones registradas"
+	foreach ($scope in $scopes){
+		write-host ""
+		write-host "Scope: $($scope.ScopeId)"
+		get-dhcpserverv4lease -scopeid $scope.scopeid
 	}
+	read-host "presione ENTER para continuar"
 }
 
 function eliminar-scope{
