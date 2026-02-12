@@ -213,7 +213,7 @@ function eliminar-scope{
 
 	write-host ""
 	write-host "Scopes que hay: "
-	$scopes | format-table scopeid, name, startrange, endrange -autozise
+	$scopes | Format-Table ScopeId, Name, StartRange, EndRange -AutoSize
 	write-host ""
 			
 	$scopeid = read-host "ingrese el scopeid que desea eliminar (ej: 192.168.0.0)"
