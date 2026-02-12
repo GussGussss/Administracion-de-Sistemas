@@ -110,8 +110,8 @@ function configurar-dhcp{
 		    	}
 		}else{
 			$segmento = (($rangoInicial -split '\.')[0..2] -join '.') + ".0"
-			write-host = ""
-		
+			write-host ""
+		}
 	}
 	    $valido = $true
 	
@@ -139,8 +139,6 @@ function configurar-dhcp{
 		$lease = read-host "Ingresa el tiempo (en minutos) "
 		if( -not ($lease -match '^[0-9]+$') -or [int] $lease -le 0 ){
 			write-host "No debe de de ser 0 :D"
-		if( -not ($lease -match '^[0-9]+$') -or [int] $lease -le 0){
-			write-host "No debe deser 0 o menor"
 			$valido = $false
 		}else{
 			$valido = $true
