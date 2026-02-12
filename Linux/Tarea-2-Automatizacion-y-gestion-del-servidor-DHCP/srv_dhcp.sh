@@ -136,8 +136,8 @@ while true; do
 	    fi
 	fi
 
-	if (( $(ip_entero "$rangoInicial") >= $(ip_entero "$rangoFinal") )); then
-		echo "Esta mal: El rango inicial debe ser menor al rango final"
+	if (( $(ip_entero "$rangoInicial") >= $(ip_entero "$rangoFinal" ) | $(ip_entero "$rangoInicial") == $(ip_entero "$rangoFinal") )); then
+		echo "Esta mal: El rango inicial debe ser menor al rango final o no deben de ser iguales"
 		continue
 	fi
 
@@ -172,6 +172,12 @@ done
 	if [[ -z "$dns" ]]; then
 		dns="$rangoInicial"
 	fi
+
+	echo "cambiando ip del servidor a $dns..."
+	sudo ip addr flush dev enp0s8
+	sudo ip addr add $dns/$prefijo dev enp0s8
+	sudo ip link set enp0s8 up
+	sleep 2
 
 	if [[ -z "$gateway" ]]; then
 		final_entero=$(ip_entero "$rangoFinal")
