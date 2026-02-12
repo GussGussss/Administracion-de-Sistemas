@@ -226,7 +226,7 @@ function eliminar-scope{
 		write-host "scope no encontrado"
 	}
 
-	read-host "presione ENTER para continuar
+	read-host "presione ENTER para continuar"
 }
 do {
 	write-host ""
