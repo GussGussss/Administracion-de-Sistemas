@@ -173,6 +173,7 @@ function configurar-dhcp{
 	set-dhcpserverv4optionvalue -scopeid $scopeIP -Router $gateway -Force
 	
 	set-dhcpserverv4optionvalue -scopeid $scopeIP -DnsServer $dns -Force
+}
 
 function estado-dhcp{
 	$servicio = get-service dhcpserver
