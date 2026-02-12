@@ -100,21 +100,22 @@ function configurar-dhcp{
 	    }
 
 
-		if (-not [string]::isnullorwhitespace($segmento)){
-	    	$segmentoBase = ($segmento -split '\.')[0..2] -join '.'
+	if (-not [string]::isnullorwhitespace($segmento)){
+		$segmentoBase = ($segmento -split '\.')[0..2] -join '.'
 			
-		    if (($rangoInicial -split '\.')[0..2] -join '.' -ne $segmentoBase -or
-		        ($rangoFinal -split '\.')[0..2] -join '.' -ne $segmentoBase){
-		        write-host "El rango no pertenece al segmento"
-		        $valido = $false
-		        continue
-		    }
+			if (($rangoInicial -split '\.')[0..2] -join '.' -ne $segmentoBase -or
+				($rangoFinal -split '\.')[0..2] -join '.' -ne $segmentoBase){
+				write-host "El rango no pertenece al segmento"
+				$valido = $false
+		        	continue
+		    	}
 		
-		if ([string]::isnullorwhitespace($segmento)){
-			$segmento = (($rangoInicial -split '\.')[0..2] -join '.') + ".0"
-			write-host = ""
-		}
+			if ([string]::isnullorwhitespace($segmento)){
+				$segmento = (($rangoInicial -split '\.')[0..2] -join '.') + ".0"
+				write-host = ""
+			}
 		
+	}
 	    $valido = $true
 	
 	}while(-not $valido)
@@ -139,13 +140,10 @@ function configurar-dhcp{
 	
 	do{
 		$lease = read-host "Ingresa el tiempo (en minutos) "
-<<<<<<< HEAD
 		if( -not ($lease -match '^[0-9]+$') -or [int] $lease -le 0 ){
 			write-host "No debe de de ser 0 :D"
-=======
 		if( -not ($lease -match '^[0-9]+$') -or [int] $lease -le 0){
 			write-host "No debe deser 0 o menor"
->>>>>>> 114d522de8b898fe65e63f926b57dc8d543dc383
 			$valido = $false
 		}else{
 			$valido = $true
