@@ -109,6 +109,7 @@ function configurar-dhcp{
 		        $valido = $false
 		        continue
 		    }
+		}
 		if ([string]::isnullorwhitespace($segmento)){
 			$segmento = (($rangoInicial -split '\.')[0..2] -join '.') + ".0"
 			write-host = ""
