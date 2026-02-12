@@ -100,7 +100,7 @@ configurar_parametros(){
 	read -p "Nombre del ambito: " ambito
 
 while true; do
-	segmento=$(pedir_ip "Ingrese el segmento de Red (ej: 192.168.0.0) ")
+	segmento=$(pedir_ip "Ingrese el segmento de Red (ej: 192.168.0.0) " si)
 
 	break
 done
@@ -110,14 +110,16 @@ while true; do
 	rangoInicial=$(pedir_ip "Ingrese el rango inicial de la IP (ej: 192.168.0.100) ")
 	rangoFinal=$(pedir_ip "Ingrese el rango final de la IP (ej: 192.168.0.150) ")
 
-	if ! misma_red "$rangoInicial" "$segmento"; then
-		echo "Esta mal: El rango de inicial no pertenece al segmento."
-		continue
-	fi
-
-	if ! misma_red "$rangoFinal" "$segmento"; then
-		echo "Esta mal: El rango final no pertenence al segmento"
-		continue
+	if [[ -n "$segmento" ]]; then
+	    if ! misma_red "$rangoInicial" "$segmento"; then
+	        echo "Esta mal: El rango inicial no pertenece al segmento."
+	        continue
+	    fi
+	
+	    if ! misma_red "$rangoFinal" "$segmento"; then
+	        echo "Esta mal: El rango final no pertenece al segmento."
+	        continue
+	    fi
 	fi
 
 	if (( $(ip_entero "$rangoInicial") >= $(ip_entero "$rangoFinal") )); then
@@ -127,6 +129,10 @@ while true; do
 
 	break
 done
+	if [[ -z "$segmento" ]]; then
+    	segmento="${rangoInicial%.*}.0"
+	fi
+	
 	while true; do
 	    read -p "Ingrese el tiempo (ej: 600) " leaseTime
 	    
@@ -234,8 +240,7 @@ generar_config_kea(){
 		"persist": true,
 		"name": "/var/lib/kea/kea-leases4.csv"
 	},
-	"valid-lifetime": 600,
-	"max-valid-lifetime": 7200,
+	"valid-lifetime": $leasetime,
 
 	"subnet4": [
 		{
