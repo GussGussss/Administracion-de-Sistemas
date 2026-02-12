@@ -240,7 +240,7 @@ generar_config_kea(){
 		"persist": true,
 		"name": "/var/lib/kea/kea-leases4.csv"
 	},
-	"valid-lifetime": $leasetime,
+	"valid-lifetime": $leaseTime,
 
 	"subnet4": [
 		{
