@@ -127,7 +127,15 @@ while true; do
 
 	break
 done
-
+	while true; do
+	    read -p "Ingrese el tiempo de concesion en segundos (ej: 600): " leaseTime
+	    
+	    if [[ "$leaseTime" =~ ^[0-9]+$ ]] && (( leaseTime > 0 )); then
+	        break
+	    else
+	        echo "Esta mal: Debe ingresar un numero mayor a 0"
+	    fi
+	done
 	gateway=$(pedir_ip "Ingrese la puerta de enlace (opcional) (ej: 192.168.0.1) " si)
 	dns=$(pedir_ip "Ingrese el DNS (opcional) (ej: 192.168.0.70) " si)
 
