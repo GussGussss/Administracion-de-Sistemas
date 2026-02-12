@@ -168,7 +168,7 @@ function configurar-dhcp{
 		add-dhcpserverv4scope -Name $ambito -StartRange $rangoInicial -EndRange $rangoFinal -SubNetmask $mask -leaseduration (new-timespan -minutes $lease) -State Active
 	}
 
-	set-dhcpserverv4optionvalue -scopedid $segmento -Router $gateway
+	set-dhcpserverv4optionvalue -scopeid $segmento -Router $gateway
 	try{
 		set-dhcpserverv4optionvalue -scopeid $segmento -DnsServer $dns -erroraction stop
 	}catch{
