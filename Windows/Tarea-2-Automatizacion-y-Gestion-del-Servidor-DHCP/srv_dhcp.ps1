@@ -210,7 +210,7 @@ function mostrar-leases{
 
     $scope = Get-DhcpServerv4Scope
 
-	write-host "******* Concesiones ******
+	write-host "******* Concesiones ******"
 
     if (-not $scope){
         Write-Host "No hay scopes configurados"
