@@ -78,6 +78,27 @@ function instalar-dhcp{
     read-host "Presiona ENTER para continuar"
 }
 
+function cambiar-ip-servidor{
+    param(
+        [string]$NuevaIP,
+        [string]$Prefijo
+    )
+
+    write-host ""
+    write-host "Cambiando IP del servidor a $NuevaIP..."
+
+    $adaptador = Get-NetAdapter | Where-Object {$_.Status -eq "Up"} | Select-Object -First 1
+
+    Get-NetIPAddress -InterfaceIndex $adaptador.ifIndex -AddressFamily IPv4 |
+        Remove-NetIPAddress -Confirm:$false
+
+    New-NetIPAddress -InterfaceIndex $adaptador.ifIndex `
+        -IPAddress $NuevaIP `
+        -PrefixLength $Prefijo
+
+    write-host "Nueva IP asignada correctamente."
+}
+
 function configurar-dhcp{
 	instalar-dhcp
 	write-host "***** CONFIGURACION DEL DHCP ******"
@@ -130,6 +151,7 @@ function configurar-dhcp{
     	if ([string]::IsNullOrWhiteSpace($dns)){
         	$dns = $rangoInicial
     	}
+		cambiar-ip-servidor -NuevaIP $dns -Prefijo $prefijo
 
     	if ([string]::IsNullOrWhiteSpace($gateway)){
         	$gatewayNumero = (ip-a-entero $rangoFinal) + 1
