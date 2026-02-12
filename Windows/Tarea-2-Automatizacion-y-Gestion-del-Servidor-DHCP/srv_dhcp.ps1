@@ -168,9 +168,12 @@ function configurar-dhcp{
 		add-dhcpserverv4scope -Name $ambito -StartRange $rangoInicial -EndRange $rangoFinal -SubNetmask $mask -leaseduration (new-timespan -minutes $lease) -State Active
 	}
 
-	$scopeIP = [ipaddress]$segmento
-	set-dhcpserverv4optionvalue -scopeid $scopeIP -Router $gateway
-	set-dhcpserverv4optionvalue -scopeid $scopeIP -OptionId 6 -Value $dns
+	$scopeIP = [System.Net.IPAddress]::Parse($segmento)
+
+	set-dhcpserverv4optionvalue -scopeid $scopeIP -Router ([System.Net.IPAddress]$gateway)
+	
+	$dnsIP = [System.Net.IPAddress]::Parse($dns)
+	set-dhcpserverv4optionvalue -scopeid $scopeIP -OptionId 6 -Value ([System.Net.IPAddress]$dns)
 }
 
 function estado-dhcp{
