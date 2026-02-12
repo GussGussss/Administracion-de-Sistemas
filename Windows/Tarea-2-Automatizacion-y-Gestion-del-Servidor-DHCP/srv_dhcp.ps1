@@ -82,14 +82,8 @@ function configurar-dhcp{
 	instalar-dhcp
 	write-host "***** CONFIGURACION DEL DHCP ******"
 	$ambito = read-host "Nombre del ambito: "
-	do{
-	    $segmento = pedir-ip "Ingrese el segmento de red (ej: 192.168.0.0)"
-	    $segmentoServidor = (($ipActual -split '\.')[0..2] -join '.') + ".0"
-	
-	    if ($segmento -ne $segmentoServidor){
-	        write-host "El segmento debe coincidir con el del servidor ($segmentoServidor)"
-	    }
-	}while($segmento -ne $segmentoServidor)
+
+	$segmento = pedir-ip "Ingrese el segmento de red (ej: 192.168.0.0)"
 	
 	$prefijo = read-host "Prefijo (ej: 24): "
 	do{
@@ -104,16 +98,20 @@ function configurar-dhcp{
 	        $valido = $false
 	        continue
 	    }
-	
-	    $segmentoBase = ($segmento -split '\.')[0..2] -join '.'
-	
-	    if (($rangoInicial -split '\.')[0..2] -join '.' -ne $segmentoBase -or
-	        ($rangoFinal -split '\.')[0..2] -join '.' -ne $segmentoBase){
-	        write-host "El rango no pertenece al segmento"
-	        $valido = $false
-	        continue
-	    }
-	
+
+
+		if (-not [string]::isnullorwhitespace($segmento)){
+	    	$segmentoBase = ($segmento -split '\.')[0..2] -join '.'
+			
+		    if (($rangoInicial -split '\.')[0..2] -join '.' -ne $segmentoBase -or
+		        ($rangoFinal -split '\.')[0..2] -join '.' -ne $segmentoBase){
+		        write-host "El rango no pertenece al segmento"
+		        $valido = $false
+		        continue
+		    }
+		if ([string]::isnullorwhitespace($segmento)){
+			$segmento = (($rangoInicial -split '\.')[0..2] -join '.') + ".0"
+			write-host = ""
 	    $valido = $true
 	
 	}while(-not $valido)
@@ -138,7 +136,7 @@ function configurar-dhcp{
 	
 	do{
 		$lease = read-host "Ingresa el tiempo (en minutos) "
-		if( -not ($lease -match '^[0-9]+$') -or [int] $lease -le 0 or ){
+		if( -not ($lease -match '^[0-9]+$') -or [int] $lease -le 0){
 			write-host "No debe deser 0 o menor"
 			$valido = $false
 		}else{
@@ -165,7 +163,7 @@ function configurar-dhcp{
 	if($scopeExiste) {
 		write-host "El scope (ambito) ya existe, no se volver a crear"
 	}else{
-		add-dhcpserverv4scope -Name $ambito -StartRange $rangoInicial -EndRange $rangoFinal -SubNetmask $mask leaseduration (new-timespan -minutes $lease)-State Active
+		add-dhcpserverv4scope -Name $ambito -StartRange $rangoInicial -EndRange $rangoFinal -SubNetmask $mask -leaseduration (new-timespan -minutes $lease) -State Active
 	}
 
 	set-dhcpserverv4optionvalue -Router $gateway
