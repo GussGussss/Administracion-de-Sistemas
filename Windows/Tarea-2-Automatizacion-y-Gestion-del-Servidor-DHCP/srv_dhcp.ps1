@@ -92,9 +92,7 @@ function cambiar-ip-servidor{
     Get-NetIPAddress -InterfaceIndex $adaptador.ifIndex -AddressFamily IPv4 |
         Remove-NetIPAddress -Confirm:$false
 
-    New-NetIPAddress -InterfaceIndex $adaptador.ifIndex `
-        -IPAddress $NuevaIP `
-        -PrefixLength $Prefijo
+    New-NetIPAddress -InterfaceIndex $adaptador.ifIndex -IPAddress $NuevaIP -PrefixLength $Prefijo
 
     write-host "Nueva IP asignada correctamente."
 }
