@@ -83,7 +83,7 @@ function configurar-dhcp{
 	write-host "***** CONFIGURACION DEL DHCP ******"
 	$ambito = read-host "Nombre del ambito: "
 
-	$segmento = pedir-ip "Ingrese el segmento de red (ej: 192.168.0.0)"
+	$segmento = pedir-ip "Ingrese el segmento de red (ej: 192.168.0.0)" $true
 	
 	$prefijo = read-host "Prefijo (ej: 24): "
 	do{
