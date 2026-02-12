@@ -87,33 +87,30 @@ function configurar-dhcp{
 	
 	$prefijo = read-host "Prefijo (ej: 24): "
 	do{
-	    $rangoInicial = pedir-ip "Ingrese el rango inicial"
-	    $rangoFinal   = pedir-ip "Ingrese el rango final"
+		$rangoInicial = pedir-ip "Ingrese el rango inicial"
+	    	$rangoFinal   = pedir-ip "Ingrese el rango final"
 	
-	    $ini = ip-a-entero $rangoInicial
-	    $fin = ip-a-entero $rangoFinal
+	    	$ini = ip-a-entero $rangoInicial
+	    	$fin = ip-a-entero $rangoFinal
 	
-	    if ($ini -ge $fin){
-	        write-host "El rango inicial debe ser menor al rango final"
-	        $valido = $false
-	        continue
-	    }
+	    	if ($ini -ge $fin){
+	        	write-host "El rango inicial debe ser menor al rango final"
+	        	$valido = $false
+	        	continue
+	    	}
 
 
-	if (-not [string]::isnullorwhitespace($segmento)){
-		$segmentoBase = ($segmento -split '\.')[0..2] -join '.'
+		if (-not [string]::isnullorwhitespace($segmento)){
+			$segmentoBase = ($segmento -split '\.')[0..2] -join '.'
 			
-			if (($rangoInicial -split '\.')[0..2] -join '.' -ne $segmentoBase -or
-				($rangoFinal -split '\.')[0..2] -join '.' -ne $segmentoBase){
+			if (($rangoInicial -split '\.')[0..2] -join '.' -ne $segmentoBase -or ($rangoFinal -split '\.')[0..2] -join '.' -ne $segmentoBase){
 				write-host "El rango no pertenece al segmento"
 				$valido = $false
 		        	continue
 		    	}
-		
-			if ([string]::isnullorwhitespace($segmento)){
-				$segmento = (($rangoInicial -split '\.')[0..2] -join '.') + ".0"
-				write-host = ""
-			}
+		}else{
+			$segmento = (($rangoInicial -split '\.')[0..2] -join '.') + ".0"
+			write-host = ""
 		
 	}
 	    $valido = $true
