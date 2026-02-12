@@ -203,13 +203,39 @@ function mostrar-leases{
 	}
 }
 
+function eliminar-scope{
+	$scopes = get-dhcpserverv4scope
+
+	if (-not $scopes){
+		write-host "no hay scopes configurados"
+		return
+	}
+
+	write-host ""
+	write-host "Scopes que hay: "
+	$scopes | format-table scopeid, name, startrange, endrange -autozise
+	write-host ""
+			
+	$scopeid = read-host "ingrese el scopeid que desea eliminar (ej: 192.168.0.0)"
+	
+	if  ($scopes.scopeid -contains $scopeid){
+		remove-dhcpserver4scope -scopeid $scopeid -force
+		write-host "scope eliminado"
+	}
+	else{
+		write-host "scope no encontrado"
+	}
+
+	read-host "presione ENTER para continuar
+}
 do {
 	write-host ""
 	write-host "1) Instalar servicio DHPC"
 	write-host "2) Configurar DHCP"
 	write-host "3) Ver el estado del DHPC"
 	write-host "4) Ver concesiones"
-	write-host "5) Salir"
+	write-host "5) Eliminar scopes"
+	write-host "6) Salir"
 	$opcion = read-host "Elije una opcion: "
 
 	switch ($opcion){
@@ -217,7 +243,8 @@ do {
 		"2" {configurar-dhcp}
 		"3" {estado-dhcp}
 		"4" {mostrar-leases}
-		"5" {break}
+		"5" {eliminar-scope}
+		"6" {break}
 		default {write-host "Opcion no valida :p"}
 	}
 }while($true)
