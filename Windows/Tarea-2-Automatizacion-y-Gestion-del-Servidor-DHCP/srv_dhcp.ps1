@@ -216,7 +216,7 @@ function eliminar-scope{
 	$scopeid = read-host "ingrese el scopeid que desea eliminar (ej: 192.168.0.0)"
 	
 	if  ($scopes.scopeid -contains $scopeid){
-		remove-dhcpserver4scope -scopeid $scopeid -force
+		remove-dhcpserverv4scope -scopeid $scopeid -force
 		write-host "scope eliminado"
 	}
 	else{
