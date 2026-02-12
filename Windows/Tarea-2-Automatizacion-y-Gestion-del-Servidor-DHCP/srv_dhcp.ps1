@@ -169,7 +169,7 @@ function configurar-dhcp{
 	}
 
 	$scopeIP = [ipaddress]$segmento
-	set-dhcpserverv4optionvalue -scopeid $scopeIP -Router $gateway -DnsServer ([IPAdrres]$dns)
+	set-dhcpserverv4optionvalue -scopeid $scopeIP -Router $gateway -DnsServer ([IPAddress]$dns)
 }
 
 function estado-dhcp{
