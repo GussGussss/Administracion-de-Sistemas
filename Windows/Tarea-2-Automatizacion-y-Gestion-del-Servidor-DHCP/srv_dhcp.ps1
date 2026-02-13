@@ -139,6 +139,7 @@ function configurar-dhcp{
 
 			$cantidad = ($fin - $ini) + 1
 			$bits = [math]::Ceiling([math]::Log($cantidad,2))
+			if ($bits -lt 1){ $bits = 1 }
 			$prefijo = 32 - $bits
 			Write-Host "Prefijo: /$prefijo"
 			
