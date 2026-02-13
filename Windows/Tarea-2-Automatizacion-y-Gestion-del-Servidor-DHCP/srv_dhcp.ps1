@@ -68,7 +68,7 @@ function calcular-red {
     param($ip, $prefijo)
 
     $ipInt = ip-a-entero $ip
-    $mascara = [uint32]0xffffffff -shl (32 - [int]$prefijo)
+    $mascara = [uint32]([math]::Pow(2,32) - [math]::Pow(2,(32 - [int]$prefijo)))
     $redInt = $ipInt -band $mascara
 
     return entero-a-ip $redInt
@@ -78,7 +78,7 @@ function calcular-broadcast {
     param($red, $prefijo)
 
     $redInt = ip-a-entero $red
-    $mascara = [uint32]0xffffffff -shl (32 - [int]$prefijo)
+    $mascara = [uint32]([math]::Pow(2,32) - [math]::Pow(2,(32 - [int]$prefijo)))
     $broadcastInt = $redInt -bor (-bnot $mascara)
 
     return entero-a-ip $broadcastInt
@@ -219,8 +219,7 @@ function configurar-dhcp{
 
 	$segmentoServidor = (($ipActual -split '\.')[0..2] -join '.') + ".0"
 	
-	$maskNumero = [uint32]0xffffffff -shl (32 - [int]$prefijo)
-	$mask = entero-a-ip $maskNumero
+	$mask = entero-a-ip ([uint32]([math]::Pow(2,32) - [math]::Pow(2,(32 - [int]$prefijo))))
 
 	$scopeExiste=get-dhcpserverv4scope -erroraction SilentlyContinue | where-object {$_.subnetaddress -eq $segmento}	
 	
