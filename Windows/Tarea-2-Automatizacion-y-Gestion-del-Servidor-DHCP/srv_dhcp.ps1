@@ -123,7 +123,7 @@ function configurar-dhcp{
 	$ambito = read-host "Nombre del ambito: "
 
 	$segmento = pedir-ip "Ingrese el segmento de red (ej: 192.168.0.0)" $true
-	
+	$broadcast = calcular-broadcast $segmento $prefijo
 	$prefijo = read-host "Prefijo (ej: 24): "
 	do{
 		$rangoInicial = pedir-ip "Ingrese el rango inicial"
@@ -138,9 +138,31 @@ function configurar-dhcp{
 	        	continue
 	    	}
 
+			if ($rangoInicial -eq $segmento) {
+			    Write-Host "No puedes usar la direccion de red"
+			    $valido = $false
+			    continue
+			}
+			
+			if ($rangoFinal -eq $broadcast) {
+			    Write-Host "No puedes usar la direccion broadcast"
+			    $valido = $false
+			    continue
+			}
 
-		if (-not [string]::isnullorwhitespace($segmento)){
-			$segmentoBase = ($segmento -split '\.')[0..2] -join '.'
+			
+			$segmentoCalculado = calcular-red $rangoInicial $prefijo
+			
+			if (-not [string]::IsNullOrWhiteSpace($segmento)) {
+			    if ($segmento -ne $segmentoCalculado) {
+			        Write-Host "El rango no pertenece al segmento"
+			        $valido = $false
+			        continue
+			    }
+			}
+			else {
+			    $segmento = $segmentoCalculado
+			}
 			
 			if (($rangoInicial -split '\.')[0..2] -join '.' -ne $segmentoBase -or ($rangoFinal -split '\.')[0..2] -join '.' -ne $segmentoBase){
 				write-host "El rango no pertenece al segmento"
@@ -157,7 +179,17 @@ function configurar-dhcp{
 	
 	}while(-not $valido)
 
-	$ipServidorNumero = ip-a-entero $ipActual
+	$ipServidor = $rangoInicial
+
+	if ($ipServidor -eq $segmento -or $ipServidor -eq $broadcast) {
+	    Write-Host "IP del servidor invalida"
+	    return
+	}
+	
+	$iniNumero = ip-a-entero $rangoInicial
+	$nuevoInicioNumero = $iniNumero + 1
+	$nuevoInicioPool = entero-a-ip $nuevoInicioNumero
+
 	
 	if ($ipServidorNumero -ge $ini -and $ipServidorNumero -le $fin){
 	    write-host "El rango incluye la IP del servidor"
@@ -174,7 +206,8 @@ function configurar-dhcp{
 		Start-Sleep -Seconds 3
 
     	if ([string]::IsNullOrWhiteSpace($gateway)){
-        	$gatewayNumero = (ip-a-entero $rangoFinal) + 1
+        	$broadcastNumero = ip-a-entero $broadcast
+			$gatewayNumero = $broadcastNumero - 1
         	$gateway = entero-a-ip $gatewayNumero
     	}
 	
@@ -207,7 +240,7 @@ function configurar-dhcp{
 	if($scopeExiste) {
 		write-host "El scope (ambito) ya existe, no se volver a crear"
 	}else{
-		add-dhcpserverv4scope -Name $ambito -StartRange $rangoInicial -EndRange $rangoFinal -SubNetmask $mask -leaseduration (new-timespan -minutes $lease) -State Active
+		add-dhcpserverv4scope -Name $ambito -StartRange $nuevoInicioPool -EndRange $rangoFinal -SubNetmask $mask -leaseduration (new-timespan -minutes $lease) -State Active
 	}
 
 	$scopeIP = [System.Net.IPAddress]::Parse($segmento)
@@ -216,7 +249,7 @@ function configurar-dhcp{
 	
 	set-dhcpserverv4optionvalue -scopeid $scopeIP -DnsServer $dns -Force
 
-	cambiar-ip-servidor -NuevaIP $dns -Prefijo $prefijo
+	cambiar-ip-servidor -NuevaIP $ipServidor -Prefijo $prefijo
 }
 
 function estado-dhcp{
