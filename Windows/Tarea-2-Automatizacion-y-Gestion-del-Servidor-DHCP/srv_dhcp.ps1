@@ -167,7 +167,6 @@ function configurar-dhcp{
 			else {
 			    $segmento = $segmentoCalculado
 			}
-		}
 
 	    $valido = $true
 	
@@ -251,22 +250,22 @@ function estado-dhcp{
 
 function mostrar-leases{
 
-    $scope = Get-DhcpServerv4Scope
+    $scopes = Get-DhcpServerv4Scope
 
-	write-host "******* Concesiones ******"
+    write-host "******* Concesiones ******"
 
-    if (-not $scope){
+    if (-not $scopes){
         Write-Host "No hay scopes configurados"
         return
     }
 
-	
-	foreach ($scope in $scopes){
-		write-host ""
-		write-host "Scope: $($scope.ScopeId)"
-		get-dhcpserverv4lease -scopeid $scope.scopeid
-	}
-	read-host "presione ENTER para continuar"
+    foreach ($scope in $scopes){
+        write-host ""
+        write-host "Scope: $($scope.ScopeId)"
+        Get-DhcpServerv4Lease -ScopeId $scope.ScopeId
+    }
+
+    read-host "presione ENTER para continuar"
 }
 
 function eliminar-scope{
