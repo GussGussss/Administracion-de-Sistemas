@@ -123,18 +123,21 @@ function configurar-dhcp{
 	$ambito = read-host "Nombre del ambito: "
 
 	$segmento = pedir-ip "Ingrese el segmento de red (ej: 192.168.0.0)" $true
-	$prefijo = read-host "Prefijo (ej: 24): "
-	if (-not ($prefijo -match '^[0-9]+$') -or [int]$prefijo -lt 8 -or [int]$prefijo -gt 30) {
-	    Write-Host "Prefijo invalido"
-	    return
-	}
+
 	do{
 		$rangoInicial = pedir-ip "Ingrese el rango inicial"
 	    	$rangoFinal   = pedir-ip "Ingrese el rango final"
 	
 	    	$ini = ip-a-entero $rangoInicial
 	    	$fin = ip-a-entero $rangoFinal
-	
+
+			$cantidad = ($fin - $ini) + 1
+
+			$bits = [math]::Ceiling([math]::Log($cantidad,2))
+			$prefijo = 32 - $bits
+			
+			Write-Host "Prefijo: /$prefijo"
+
 	    	if ($ini -ge $fin){
 	        	write-host "El rango inicial debe ser menor al rango final"
 	        	$valido = $false
@@ -172,14 +175,13 @@ function configurar-dhcp{
 	
 	}while(-not $valido)
 
+	$segmento = calcular-red $rangoInicial $prefijo
 	$broadcast = calcular-broadcast $segmento $prefijo
+	
+	Write-Host "Segmento calculado: $segmento"
+	Write-Host "Broadcast calculado: $broadcast"
 
 	$ipServidor = $rangoInicial
-
-	if ($ipServidor -eq $segmento -or $ipServidor -eq $broadcast) {
-	    Write-Host "IP del servidor invalida"
-	    return
-	}
 	
 	$iniNumero = ip-a-entero $rangoInicial
 	$nuevoInicioNumero = $iniNumero + 1
