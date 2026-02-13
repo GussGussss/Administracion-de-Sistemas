@@ -379,7 +379,7 @@ menu(){
 	echo "1) Instalar servicio DHCP"
 	echo "2) Configurar DCHP (KEA)"
 	echo "3) Ver el estado del servicio DHCP"
-	echo "4) Ver concesiones"
+	echo "4) Monitoreo (Ver concesiones)"
 	echo "5) Eliminar Scope"	
 	echo "6) Salir"
 	read -p "Selecciones una opcion: " opcion
