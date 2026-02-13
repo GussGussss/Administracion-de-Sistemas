@@ -46,6 +46,8 @@ function pedir-ip{
 
     }while (-not (validar-ip $ip))
 
+	$ip = ($ip.Split('.') | ForEach-Object { [int]$_ }) -join '.'
+
     return $ip
 }
 
@@ -227,7 +229,7 @@ function configurar-dhcp{
 
 	$segmentoServidor = (($ipActual -split '\.')[0..2] -join '.') + ".0"
 	
-	$maskNumero = ([uint32]0xffffffff) -shl (32 - [int]$prefijo)
+	$maskNumero = [uint32]([math]::Pow(2,32) - [math]::Pow(2,(32 - [int]$prefijo)))
 	$mask = entero-a-ip $maskNumero
 
 	$scopeExiste=get-dhcpserverv4scope -erroraction SilentlyContinue | where-object {$_.subnetaddress -eq $segmento}	
