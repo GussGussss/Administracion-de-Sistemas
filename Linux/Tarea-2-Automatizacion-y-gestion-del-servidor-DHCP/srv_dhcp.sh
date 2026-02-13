@@ -84,7 +84,7 @@ calcular_prefijo_desde_rango(){
         ((bits++))
     done
 
-	pref=$((32 - bits))
+	local pref=$((32 - bits))
 	
 	if (( pref < 1 )); then
 	    pref=1
@@ -179,12 +179,12 @@ while true; do
 	segmento_temp=$(calcular_red "$rangoInicial" "$prefijo")
 	broadcast_temp=$(calcular_broadcast "$segmento_temp" "$prefijo")
 
-	if [[ "$rangoInicial" == "$segmento" ]]; then
-	    echo "Esta mal: El rango inicial no puede ser la direccion de red ($segmento)"
+	if [[ "$rangoInicial" == "$segmento_temp" ]]; then
+	    echo "Esta mal: El rango inicial no puede ser la direccion de red ($segmento_temp)"
 	    continue
 	fi
 	if [[ "$rangoFinal" == "$broadcast_temp" ]]; then
-	    echo "Esta mal: El rango final no puede ser la direccion broadcast ($broadcast)"
+	    echo "Esta mal: El rango final no puede ser la direccion broadcast ($broadcast_temp)"
 	    continue
 	fi
 	
@@ -193,6 +193,13 @@ done
 	segmento=$(calcular_red "$rangoInicial" "$prefijo")
 	broadcast=$(calcular_broadcast "$segmento" "$prefijo")
 	
+	ini_entero=$(ip_entero "$rangoInicial")
+	seg_entero=$(ip_entero "$segmento")
+	
+	if (( ini_entero < seg_entero )); then
+	    echo "El rango no está alineado correctamente a la red calculada"
+	    return
+	fi
 	fin_entero=$(ip_entero "$rangoFinal")
 	broadcast_entero=$(ip_entero "$broadcast")
 	
