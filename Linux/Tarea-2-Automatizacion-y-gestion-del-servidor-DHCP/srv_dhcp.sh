@@ -84,10 +84,14 @@ calcular_prefijo_desde_rango(){
         ((bits++))
     done
 
-    pref=$((32 - bits))
-
+	pref=$((32 - bits))
+	
 	if (( pref < 1 )); then
 	    pref=1
+	fi
+	
+	if (( pref > 30 )); then
+	    pref=30
 	fi
 	
 	echo $pref
@@ -148,11 +152,10 @@ configurar_parametros(){
 	echo "**** CONFIGURACION DEL DHCP ******"
 	read -p "Nombre del ambito: " ambito
 
-while true; do
-	segmento=$(pedir_ip "Ingrese el segmento de Red (ej: 192.168.0.0) " si)
-
-	break
-done
+	while true; do
+		segmento=$(pedir_ip "Ingrese el segmento de Red (ej: 192.168.0.0) " si)
+		break
+	done
 
 while true; do
 	rangoInicial=$(pedir_ip "Ingrese el rango inicial de la IP (ej: 192.168.0.100) ")
@@ -166,31 +169,21 @@ while true; do
 	prefijo=$(calcular_prefijo_desde_rango "$rangoInicial" "$rangoFinal")
 	echo "Prefijo calculado: /$prefijo"
 
-	if [[ -n "$segmento" ]]; then
-	    if ! misma_red "$rangoInicial" "$segmento" "$prefijo"; then
-	        echo "Esta mal: El rango inicial no pertenece al segmento."
-	        continue
-	    fi
+	segmento_temp=$(calcular_red "$rangoInicial" "$prefijo")
 	
-	    if ! misma_red "$rangoFinal" "$segmento" "$prefijo"; then
-	        echo "Esta mal: El rango final no pertenece al segmento."
-	        continue
-	    fi
+	if [[ -n "$segmento" && "$segmento" != "$segmento_temp" ]]; then
+	    echo "El segmento ingresado no coincide con el segmento calculado ($segmento_temp)"
+	    continue
 	fi
 
 	segmento_temp=$(calcular_red "$rangoInicial" "$prefijo")
 	broadcast_temp=$(calcular_broadcast "$segmento_temp" "$prefijo")
-	
-	if [[ "$rangoFinal" == "$broadcast_temp" ]]; then
-	    echo "Esta mal: El rango final no puede ser broadcast"
-	    continue
-	fi
 
 	if [[ "$rangoInicial" == "$segmento" ]]; then
 	    echo "Esta mal: El rango inicial no puede ser la direccion de red ($segmento)"
 	    continue
 	fi
-	if [[ "$rangoFinal" == "$broadcast" ]]; then
+	if [[ "$rangoFinal" == "$broadcast_temp" ]]; then
 	    echo "Esta mal: El rango final no puede ser la direccion broadcast ($broadcast)"
 	    continue
 	fi
