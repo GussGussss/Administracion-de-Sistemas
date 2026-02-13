@@ -162,7 +162,9 @@ done
 	if [[ -z "$segmento" ]]; then
 	    segmento=$(calcular_red "$rangoInicial" "$prefijo")
 	fi
+	
 	broadcast=$(calcular_broadcast "$segmento" "$prefijo")
+	
 	while true; do
 	    read -p "Ingrese el tiempo (ej: 600) " leaseTime
 	    
