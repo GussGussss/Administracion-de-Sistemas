@@ -326,13 +326,57 @@ mexicanada(){
 	sudo cat /var/lib/kea/kea-leases4.csv
 }
 
+eliminar_scope(){
+    CONFIG_FILE="/etc/kea/kea-dhcp4.conf"
+
+    echo ""
+    echo "******** SCOPES CONFIGURADOS ********"
+
+    subnets=$(grep '"subnet":' $CONFIG_FILE | awk -F '"' '{print $4}')
+
+    if [[ -z "$subnets" ]]; then
+        echo "No hay scopes configurados."
+        read -p "Presiona ENTER para continuar"
+        return
+    fi
+
+    i=1
+    declare -a lista_subnets
+    for subnet in $subnets; do
+        echo "$i) $subnet"
+        lista_subnets[$i]=$subnet
+        ((i++))
+    done
+
+    echo ""
+    read -p "Selecciona el numero del scope a eliminar: " opcion
+
+    if [[ -z "${lista_subnets[$opcion]}" ]]; then
+        echo "Opcion invalida."
+        read -p "Presiona ENTER para continuar"
+        return
+    fi
+
+    subnetEliminar=${lista_subnets[$opcion]}
+    echo "Eliminando scope $subnetEliminar..."
+
+    sudo sed -i "/\"subnet\": \"$subnetEliminar\"/,/}/d" $CONFIG_FILE
+
+    validar_config_kea
+    reiniciar_kea
+
+    echo "Scope eliminado correctamente."
+    read -p "Presiona ENTER para continuar"
+}
+
 menu(){
 	echo ""
 	echo "1) Instalar servicio DHCP"
 	echo "2) Configurar DCHP (KEA)"
 	echo "3) Ver el estado del servicio DHCP"
 	echo "4) Ver concesiones"
-	echo "5) Salir"
+	echo "5) Eliminar Scope"	
+	echo "6) Salir"
 	read -p "Selecciones una opcion: " opcion
 	
 	case $opcion in
@@ -340,7 +384,8 @@ menu(){
 		2)configurar_parametros ;;
 		3)estado_dhcp_kea ;;
 		4)mexicanada ;;
-		5)exit 0 ;;
+		5)eliminar_scope
+		6)exit 0 ;;
 		*)echo "opcion invalida" ;;
 	esac
 
