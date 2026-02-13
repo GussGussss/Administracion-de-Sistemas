@@ -197,13 +197,16 @@ function configurar-dhcp{
 		Restart-Service dhcpserver -Force
 		Start-Sleep -Seconds 3
 
-    	if ([string]::IsNullOrWhiteSpace($gateway)){
-        	$broadcastNumero = ip-a-entero $broadcast
-			if ($gatewayNumero -le $iniNumero -or $gatewayNumero -gt $fin){
-			    $gateway = entero-a-ip ($iniNumero + 1)
-			}
-        	$gateway = entero-a-ip $gatewayNumero
-    	}
+		if ([string]::IsNullOrWhiteSpace($gateway)){
+		    $broadcastNumero = ip-a-entero $broadcast
+		    $gatewayNumero = $broadcastNumero - 1
+		
+		    if ($gatewayNumero -le $iniNumero -or $gatewayNumero -gt $fin){
+		        $gatewayNumero = $iniNumero + 1
+		    }
+		
+		    $gateway = entero-a-ip $gatewayNumero
+		}
 	
 	do{
 		$lease = read-host "Ingresa el tiempo (en minutos) "
@@ -223,7 +226,8 @@ function configurar-dhcp{
 
 	$segmentoServidor = (($ipActual -split '\.')[0..2] -join '.') + ".0"
 	
-	$mask = entero-a-ip ([uint32]0xffffffff -shl (32 - [int]$prefijo))
+	$maskNumero = ([uint32]0xffffffff) -shl (32 - [int]$prefijo)
+	$mask = entero-a-ip $maskNumero
 
 	$scopeExiste=get-dhcpserverv4scope -erroraction SilentlyContinue | where-object {$_.subnetaddress -eq $segmento}	
 	
