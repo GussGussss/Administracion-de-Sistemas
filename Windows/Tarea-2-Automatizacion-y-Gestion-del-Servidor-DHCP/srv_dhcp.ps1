@@ -124,6 +124,10 @@ function configurar-dhcp{
 
 	$segmento = pedir-ip "Ingrese el segmento de red (ej: 192.168.0.0)" $true
 	$prefijo = read-host "Prefijo (ej: 24): "
+	if (-not ($prefijo -match '^[0-9]+$') -or [int]$prefijo -lt 8 -or [int]$prefijo -gt 30) {
+	    Write-Host "Prefijo invalido"
+	    return
+	}
 	do{
 		$rangoInicial = pedir-ip "Ingrese el rango inicial"
 	    	$rangoFinal   = pedir-ip "Ingrese el rango final"
@@ -143,13 +147,14 @@ function configurar-dhcp{
 			    continue
 			}
 			
-			if ($rangoFinal -eq $broadcast) {
+			$broadcastTemp = calcular-broadcast (calcular-red $rangoInicial $prefijo) $prefijo
+			
+			if ($rangoFinal -eq $broadcastTemp) {
 			    Write-Host "No puedes usar la direccion broadcast"
 			    $valido = $false
 			    continue
 			}
 
-			
 			$segmentoCalculado = calcular-red $rangoInicial $prefijo
 			
 			if (-not [string]::IsNullOrWhiteSpace($segmento)) {
@@ -207,12 +212,6 @@ function configurar-dhcp{
 		}
 	}while(-not $valido)
 
-	if ([string]::IsNullOrWhiteSpace($segmento)) {
-	    $segmento = calcular-red $rangoInicial $prefijo
-	}
-	
-	$broadcast = calcular-broadcast $segmento $prefijo
-
     	write-host ""
     	write-host "Segmento: $segmento"
     	write-host "Rango: $rangoInicial - $rangoFinal"
@@ -262,7 +261,7 @@ function mostrar-leases{
     }
 
 	
-	foreach ($scope in scopes){
+	foreach ($scope in $scopes){
 		write-host ""
 		write-host "Scope: $($scope.ScopeId)"
 		get-dhcpserverv4lease -scopeid $scope.scopeid
