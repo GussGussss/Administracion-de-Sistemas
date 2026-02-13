@@ -190,11 +190,6 @@ done
 		return
 	fi
 
-	if [[ -n "$dns" ]] && ! misma_red "$dns" "$segmento" "$prefijo"; then
-    	echo "El DNS no pertenece al segmento"
-    	return
-	fi
-
 	ipServidor="$rangoInicial"
 
 	if [[ "$ipServidor" == "$segmento" ]]; then
