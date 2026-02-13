@@ -123,7 +123,6 @@ function configurar-dhcp{
 	$ambito = read-host "Nombre del ambito: "
 
 	$segmento = pedir-ip "Ingrese el segmento de red (ej: 192.168.0.0)" $true
-	$broadcast = calcular-broadcast $segmento $prefijo
 	$prefijo = read-host "Prefijo (ej: 24): "
 	do{
 		$rangoInicial = pedir-ip "Ingrese el rango inicial"
@@ -163,21 +162,13 @@ function configurar-dhcp{
 			else {
 			    $segmento = $segmentoCalculado
 			}
-			
-			if (($rangoInicial -split '\.')[0..2] -join '.' -ne $segmentoBase -or ($rangoFinal -split '\.')[0..2] -join '.' -ne $segmentoBase){
-				write-host "El rango no pertenece al segmento"
-				$valido = $false
-		        	continue
-		    	}
-		}
-		else{
-			$segmento = (($rangoInicial -split '\.')[0..2] -join '.') + ".0"
-			write-host ""
 		}
 
 	    $valido = $true
 	
 	}while(-not $valido)
+
+	$broadcast = calcular-broadcast $segmento $prefijo
 
 	$ipServidor = $rangoInicial
 
@@ -190,11 +181,6 @@ function configurar-dhcp{
 	$nuevoInicioNumero = $iniNumero + 1
 	$nuevoInicioPool = entero-a-ip $nuevoInicioNumero
 
-	
-	if ($ipServidorNumero -ge $ini -and $ipServidorNumero -le $fin){
-	    write-host "El rango incluye la IP del servidor"
-	    return
-	}
     	$gateway = pedir-ip "Ingrese el gateway (opcional)" $true
     	$dns     = pedir-ip "Ingrese el DNS (opcional)" $true
 
@@ -220,7 +206,13 @@ function configurar-dhcp{
 			$valido = $true
 		}
 	}while(-not $valido)
+
+	if ([string]::IsNullOrWhiteSpace($segmento)) {
+	    $segmento = calcular-red $rangoInicial $prefijo
+	}
 	
+	$broadcast = calcular-broadcast $segmento $prefijo
+
     	write-host ""
     	write-host "Segmento: $segmento"
     	write-host "Rango: $rangoInicial - $rangoFinal"
@@ -229,11 +221,8 @@ function configurar-dhcp{
 
 	$segmentoServidor = (($ipActual -split '\.')[0..2] -join '.') + ".0"
 	
-	$mask = switch ($prefijo){
-	24 {"255.255.255.0"}
-	16 {"255.255.0.0"}
-	default {"255.255.255.0"}
-	}
+	$maskNumero = [uint32]0xffffffff -shl (32 - [int]$prefijo)
+	$mask = entero-a-ip $maskNumero
 
 	$scopeExiste=get-dhcpserverv4scope -erroraction SilentlyContinue | where-object {$_.subnetaddress -eq $segmento}	
 	
@@ -273,7 +262,7 @@ function mostrar-leases{
     }
 
 	
-	foreach ($scope in $scopes){
+	foreach ($scope in scopes){
 		write-host ""
 		write-host "Scope: $($scope.ScopeId)"
 		get-dhcpserverv4lease -scopeid $scope.scopeid
