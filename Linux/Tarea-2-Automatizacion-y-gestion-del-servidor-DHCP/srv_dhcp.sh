@@ -94,20 +94,6 @@ misma_red(){
 	[[ "${ip%.*}.0" == "$red" ]]
 }
 
-cambiar_ip_servidor(){
-    echo ""
-    echo "Configurando nueva IP del servidor..."
-
-   	nueva_ip="$gateway/$prefijo"
-
-    sudo ip addr flush dev enp0s8
-    sudo ip addr add "$nueva_ip" dev enp0s8
-    sudo ip link set enp0s8 up
-
-    echo "Nueva IP asignada al servidor: $nueva_ip"
-
-    ipActual="$gateway"
-}
 configurar_parametros(){
 	instalar_kea
 	echo "**** CONFIGURACION DEL DHCP ******"
@@ -136,7 +122,7 @@ while true; do
 	    fi
 	fi
 
-	if (( $(ip_entero "$rangoInicial") >= $(ip_entero "$rangoFinal" ) | $(ip_entero "$rangoInicial") == $(ip_entero "$rangoFinal") )); then
+	if (( $(ip_entero "$rangoInicial") >= $(ip_entero "$rangoFinal" ) )); then
 		echo "Esta mal: El rango inicial debe ser menor al rango final o no deben de ser iguales"
 		continue
 	fi
@@ -164,18 +150,11 @@ done
 		return
 	fi
 
-	if [[ -n "$dns" ]] && ! misma_red "$dns" "$segmento"; then
-		echo "El dns no pertenece al segmenteo"
-		return
-	fi
+	ipServidor="$rangoInicial"
 
-	if [[ -z "$dns" ]]; then
-		dns="$rangoInicial"
-	fi
-
-	echo "cambiando ip del servidor a $dns..."
+	echo "Cambiando IP del servidor a $ipServidor..."
 	sudo ip addr flush dev enp0s8
-	sudo ip addr add $dns/$prefijo dev enp0s8
+	sudo ip addr add $ipServidor/$prefijo dev enp0s8
 	sudo ip link set enp0s8 up
 	sleep 2
 
@@ -196,15 +175,6 @@ done
 
 	if (( $(ip_entero "$rangoInicial") >= $(ip_entero "$rangoFinal") )); then
 		echo "Esta mal: El rango inicial debe de ser menor al rango final"
-		return
-	fi
-
-	ip_srv_entero=$(ip_entero "$ipActual")
-	inicial_entero=$(ip_entero "$rangoInicial")
-	final_entero=$(ip_entero "$rangoFinal")
-
-	if (( ip_srv_entero >= inicial_entero && ip_srv_entero <= final_entero )); then
-		echo "El rango incluye la IP del servidor ($ipActual)"
 		return
 	fi
 	cambiar_ip_servidor
@@ -278,8 +248,10 @@ generar_config_kea(){
 					"data": "$gateway"
 				},
 				{
-					"name": "domain-name-servers",
-					"data": "$dns"
+					$( [[ -n "$dns" ]] && echo '{
+				    "name": "domain-name-servers",
+				    "data": "'"$dns"'"
+				},' )
 				}
 			]
 		}
