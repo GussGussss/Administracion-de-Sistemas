@@ -149,7 +149,9 @@ function configurar-dhcp{
     	if ([string]::IsNullOrWhiteSpace($dns)){
         	$dns = $rangoInicial
     	}
-		cambiar-ip-servidor -NuevaIP $dns -Prefijo $prefijo
+		
+		Restart-Service dhcpserver -Force
+		Start-Sleep -Seconds 3
 
     	if ([string]::IsNullOrWhiteSpace($gateway)){
         	$gatewayNumero = (ip-a-entero $rangoFinal) + 1
@@ -193,6 +195,8 @@ function configurar-dhcp{
 	set-dhcpserverv4optionvalue -scopeid $scopeIP -Router $gateway -Force
 	
 	set-dhcpserverv4optionvalue -scopeid $scopeIP -DnsServer $dns -Force
+
+	cambiar-ip-servidor -NuevaIP $dns -Prefijo $prefijo
 }
 
 function estado-dhcp{
