@@ -90,8 +90,8 @@ calcular_prefijo_desde_rango(){
 	    pref=1
 	fi
 	
-	if (( pref > 30 )); then
-	    pref=30
+	if (( pref > 29 )); then
+	    pref=29
 	fi
 	
 	echo $pref
@@ -169,12 +169,12 @@ while true; do
 	prefijo=$(calcular_prefijo_desde_rango "$rangoInicial" "$rangoFinal")
 	echo "Prefijo calculado: /$prefijo"
 
-	segmento_temp=$(calcular_red "$rangoInicial" "$prefijo")
+	ssegmento_temp=$(calcular_red "$rangoInicial" "$prefijo")
 	broadcast_temp=$(calcular_broadcast "$segmento_temp" "$prefijo")
 	
 	if [[ -n "$segmento" && "$segmento" != "$segmento_temp" ]]; then
 	    echo "El segmento ingresado no coincide con el segmento calculado ($segmento_temp)"
-	    continue
+	    echo "Se usará el segmento calculado."
 	fi
 
 	if [[ "$rangoInicial" == "$segmento_temp" ]]; then
@@ -188,6 +188,8 @@ while true; do
 	
 	break
 done
+	segmento="$segmento_temp"
+	
 	segmento=$(calcular_red "$rangoInicial" "$prefijo")
 	broadcast=$(calcular_broadcast "$segmento" "$prefijo")
 	
@@ -200,11 +202,6 @@ done
 	fi
 	fin_entero=$(ip_entero "$rangoFinal")
 	broadcast_entero=$(ip_entero "$broadcast")
-
-	if (( ini_entero < seg_entero )); then
-	    echo "El rango no está alineado correctamente a la red calculada"
-	    return
-	fi
 	
 	if (( fin_entero > broadcast_entero )); then
 	    echo "El rango excede el tamaño de la red calculada"
