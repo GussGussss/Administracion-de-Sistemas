@@ -144,7 +144,7 @@ while true; do
 	break
 done
 	if [[ -z "$segmento" ]]; then
-    	segmento="${rangoInicial%.*}.0"
+	    segmento=$(calcular_red "$rangoInicial" "$prefijo")
 	fi
 	
 	while true; do
@@ -159,12 +159,21 @@ done
 	gateway=$(pedir_ip "Ingrese la puerta de enlace (opcional) (ej: 192.168.0.1) " si)
 	dns=$(pedir_ip "Ingrese el DNS (opcional) (ej: 192.168.0.70) " si)
 
-	if [[ -n "$gateway" ]] && ! misma_red "$gateway" "$segmento"; then
+	if [[ -n "$gateway" ]] && ! misma_red "$gateway" "$segmento" "$prefijo"; then
 		echo "Esta mal: La puerta de enlace no pertenece al segmento"
 		return
 	fi
 
+	if [[ -n "$dns" ]] && ! misma_red "$dns" "$segmento" "$prefijo"; then
+    	echo "El DNS no pertenece al segmento"
+    	return
+	fi
+
 	ipServidor="$rangoInicial"
+
+	ini_entero=$(ip_entero "$rangoInicial")
+	nuevo_inicio_entero=$((ini_entero + 1))
+	nuevoInicioPool=$(entero_ip $nuevo_inicio_entero)
 
 	echo "Cambiando IP del servidor a $ipServidor..."
 	sudo ip addr flush dev enp0s8
@@ -246,7 +255,7 @@ generar_config_kea(){
 			"id": 1,
 			"pools": [
 				{
-					"pool": "$rangoInicial - $rangoFinal"
+					"pool": "$nuevoInicioPool - $rangoFinal"
 				}
 			],
 			"option-data": [
