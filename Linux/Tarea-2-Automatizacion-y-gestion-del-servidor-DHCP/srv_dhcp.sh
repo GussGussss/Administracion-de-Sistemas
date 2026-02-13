@@ -84,7 +84,13 @@ calcular_prefijo_desde_rango(){
         ((bits++))
     done
 
-    echo $((32 - bits))
+    pref=$((32 - bits))
+
+	if (( pref < 1 )); then
+	    pref=1
+	fi
+	
+	echo $pref
 }
 
 instalar_kea(){
@@ -152,6 +158,14 @@ while true; do
 	rangoInicial=$(pedir_ip "Ingrese el rango inicial de la IP (ej: 192.168.0.100) ")
 	rangoFinal=$(pedir_ip "Ingrese el rango final de la IP (ej: 192.168.0.150) ")
 
+	if (( $(ip_entero "$rangoInicial") >= $(ip_entero "$rangoFinal" ) )); then
+		echo "Esta mal: El rango inicial debe ser menor al rango final o no deben de ser iguales"
+		continue
+	fi
+
+	prefijo=$(calcular_prefijo_desde_rango "$rangoInicial" "$rangoFinal")
+	echo "Prefijo calculado: /$prefijo"
+
 	if [[ -n "$segmento" ]]; then
 	    if ! misma_red "$rangoInicial" "$segmento" "$prefijo"; then
 	        echo "Esta mal: El rango inicial no pertenece al segmento."
@@ -163,14 +177,6 @@ while true; do
 	        continue
 	    fi
 	fi
-
-	if (( $(ip_entero "$rangoInicial") >= $(ip_entero "$rangoFinal" ) )); then
-		echo "Esta mal: El rango inicial debe ser menor al rango final o no deben de ser iguales"
-		continue
-	fi
-
-	prefijo=$(calcular_prefijo_desde_rango "$rangoInicial" "$rangoFinal")
-	echo "Prefijo calculado: /$prefijo"
 
 	segmento_temp=$(calcular_red "$rangoInicial" "$prefijo")
 	broadcast_temp=$(calcular_broadcast "$segmento_temp" "$prefijo")
@@ -191,17 +197,6 @@ while true; do
 	
 	break
 done
-	if [[ -z "$segmento" ]]; then
-	    segmento=$(calcular_red "$rangoInicial" "$prefijo")
-	fi
-	
-	broadcast=$(calcular_broadcast "$segmento" "$prefijo")
-	
-	if [[ "$rangoFinal" == "$broadcast" ]]; then
-	    echo "Esta mal: El rango final no puede ser la direccion broadcast ($broadcast)"
-	    return
-	fi
-
 	segmento=$(calcular_red "$rangoInicial" "$prefijo")
 	broadcast=$(calcular_broadcast "$segmento" "$prefijo")
 	
