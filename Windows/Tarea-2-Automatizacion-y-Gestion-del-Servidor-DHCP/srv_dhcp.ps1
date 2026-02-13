@@ -64,6 +64,26 @@ function entero-a-ip($numero){
            "$($numero -band 255)"
 }
 
+function calcular-red {
+    param($ip, $prefijo)
+
+    $ipInt = ip-a-entero $ip
+    $mascara = [uint32]0xffffffff -shl (32 - [int]$prefijo)
+    $redInt = $ipInt -band $mascara
+
+    return entero-a-ip $redInt
+}
+
+function calcular-broadcast {
+    param($red, $prefijo)
+
+    $redInt = ip-a-entero $red
+    $mascara = [uint32]0xffffffff -shl (32 - [int]$prefijo)
+    $broadcastInt = $redInt -bor (-bnot $mascara)
+
+    return entero-a-ip $broadcastInt
+}
+
 function instalar-dhcp{
     $dhcp = Get-WindowsFeature DHCP
 
