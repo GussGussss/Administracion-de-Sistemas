@@ -1,4 +1,4 @@
-write-host "****** AUTOMATIZACION Y GESTION DEL SERVIDOR DHCP *****"
+﻿write-host "****** AUTOMATIZACION Y GESTION DEL SERVIDOR DHCP *****"
 $hostname = hostname
 $ipActual = (get-netipaddress -addressfamily IPv4 | where-object { $_.interfacealias -notlike "*Loopback*" } | select-object -first 1).ipaddress
 write-host "Host: $hostname"
@@ -308,7 +308,7 @@ do {
 	write-host "1) Instalar servicio DHPC"
 	write-host "2) Configurar DHCP"
 	write-host "3) Ver el estado del DHPC"
-	write-host "4) Ver concesiones"
+	write-host "4) Monitor (Ver concesiones)"
 	write-host "5) Eliminar scopes"
 	write-host "6) Salir"
 	$opcion = read-host "Elije una opcion: "
