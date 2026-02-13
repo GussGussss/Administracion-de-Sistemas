@@ -169,7 +169,7 @@ while true; do
 	prefijo=$(calcular_prefijo_desde_rango "$rangoInicial" "$rangoFinal")
 	echo "Prefijo calculado: /$prefijo"
 
-	ssegmento_temp=$(calcular_red "$rangoInicial" "$prefijo")
+	segmento_temp=$(calcular_red "$rangoInicial" "$prefijo")
 	broadcast_temp=$(calcular_broadcast "$segmento_temp" "$prefijo")
 	
 	if [[ -n "$segmento" && "$segmento" != "$segmento_temp" ]]; then
@@ -189,9 +189,7 @@ while true; do
 	break
 done
 	segmento="$segmento_temp"
-	
-	segmento=$(calcular_red "$rangoInicial" "$prefijo")
-	broadcast=$(calcular_broadcast "$segmento" "$prefijo")
+	broadcast="$broadcast_temp"
 	
 	ini_entero=$(ip_entero "$rangoInicial")
 	seg_entero=$(ip_entero "$segmento")
