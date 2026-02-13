@@ -203,7 +203,15 @@ function configurar-dhcp{
 			}
 
 			$segmentoCalculado = calcular-red $rangoInicial $prefijo
+
+			$redInicio = calcular-red $rangoInicial $prefijo
+			$redFinal  = calcular-red $rangoFinal   $prefijo
 			
+			if ($redInicio -ne $redFinal){
+			    Write-Host "El rango inicial y final no pertenecen al mismo segmento."
+			    $valido = $false
+			    continue
+			}
 			if (-not [string]::IsNullOrWhiteSpace($segmento)) {
 			    if ($segmento -ne $segmentoCalculado) {
 			        Write-Host "El rango no pertenece al segmento"
