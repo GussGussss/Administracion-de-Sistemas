@@ -89,9 +89,23 @@ instalar_kea(){
 }
 
 misma_red(){
-	local ip=$1
-	local red=$2
-	[[ "${ip%.*}.0" == "$red" ]]
+    local ip=$1
+    local red=$2
+    local prefijo=$3
+
+    [[ "$(calcular_red "$ip" "$prefijo")" == "$red" ]]
+}
+
+
+calcular_red(){
+    local ip=$1
+    local prefijo=$2
+
+    local ip_int=$(ip_entero "$ip")
+    local mascara=$(( 0xFFFFFFFF << (32 - prefijo) & 0xFFFFFFFF ))
+    local red_int=$(( ip_int & mascara ))
+
+    entero_ip $red_int
 }
 
 configurar_parametros(){
@@ -111,12 +125,12 @@ while true; do
 	rangoFinal=$(pedir_ip "Ingrese el rango final de la IP (ej: 192.168.0.150) ")
 
 	if [[ -n "$segmento" ]]; then
-	    if ! misma_red "$rangoInicial" "$segmento"; then
+	    if ! misma_red "$rangoInicial" "$segmento" "$prefijo"; then
 	        echo "Esta mal: El rango inicial no pertenece al segmento."
 	        continue
 	    fi
 	
-	    if ! misma_red "$rangoFinal" "$segmento"; then
+	    if ! misma_red "$rangoFinal" "$segmento" "$prefijo"; then
 	        echo "Esta mal: El rango final no pertenece al segmento."
 	        continue
 	    fi
@@ -171,13 +185,6 @@ done
 	echo "Gateway: $gateway"
 	echo "DNS: $dns"
 	echo ""
-
-
-	if (( $(ip_entero "$rangoInicial") >= $(ip_entero "$rangoFinal") )); then
-		echo "Esta mal: El rango inicial debe de ser menor al rango final"
-		return
-	fi
-	cambiar_ip_servidor
 	
 	generar_config_kea
 	validar_config_kea
@@ -243,22 +250,18 @@ generar_config_kea(){
 				}
 			],
 			"option-data": [
-				{
-					"name": "routers",
-					"data": "$gateway"
-				},
-				{
-					$( [[ -n "$dns" ]] && echo '{
-				    "name": "domain-name-servers",
-				    "data": "'"$dns"'"
-				},' )
-				}
-			]
+				    {
+				        "name": "routers",
+				        "data": "$gateway"
+				    }$( [[ -n "$dns" ]] && echo ',
+				    {
+				        "name": "domain-name-servers",
+				        "data": "'"$dns"'"
+				    }' )
+				]
 		}
 	]
 }
-
-
 }
 EOF
 }
