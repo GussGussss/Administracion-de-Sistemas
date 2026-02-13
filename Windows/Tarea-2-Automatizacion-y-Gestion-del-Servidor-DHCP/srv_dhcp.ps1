@@ -87,18 +87,49 @@ function calcular-broadcast {
 }
 
 function instalar-dhcp{
+
     $dhcp = Get-WindowsFeature DHCP
 
     if (-not $dhcp.Installed){
-        write-host "Instalando servicio DHCP..."
-        Install-WindowsFeature DHCP -IncludeManagementTools
-        write-host "Instalacion completada."
-    }else{
-        write-host "El servicio DHCP ya esta instalado."
-    }
 
-    read-host "Presiona ENTER para continuar"
+        Write-Host "Instalando servicio DHCP..."
+        Install-WindowsFeature DHCP -IncludeManagementTools
+        Write-Host "Instalacion completada."
+
+    }
+    else{
+
+        Write-Host "El servicio DHCP ya esta instalado."
+
+        do{
+            $opcion = Read-Host "¿Desea reinstalarlo? (s/n)"
+
+            switch ($opcion.ToLower()){
+
+                "s"{
+                    Write-Host "Reinstalando servicio DHCP..."
+
+                    Uninstall-WindowsFeature DHCP
+                    Install-WindowsFeature DHCP -IncludeManagementTools
+
+                    Write-Host "Reinstalacion completada."
+                    $valido = $true
+                }
+
+                "n"{
+                    Write-Host "No se realizo ninguna accion."
+                    $valido = $true
+                }
+                default{
+                    Write-Host "Opcion invalida. Escriba s o n."
+                    $valido = $false
+                }
+            }
+        }while(-not $valido)
+    }
+    Read-Host "Presiona ENTER para continuar"
 }
+
 
 function cambiar-ip-servidor{
     param(
