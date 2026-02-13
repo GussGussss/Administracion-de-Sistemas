@@ -131,24 +131,16 @@ function configurar-dhcp{
 	    	$ini = ip-a-entero $rangoInicial
 	    	$fin = ip-a-entero $rangoFinal
 
-			$cantidad = ($fin - $ini) + 1
-
-			$bits = [math]::Ceiling([math]::Log($cantidad,2))
-			$prefijo = 32 - $bits
-			
-			Write-Host "Prefijo: /$prefijo"
-
 	    	if ($ini -ge $fin){
 	        	write-host "El rango inicial debe ser menor al rango final"
 	        	$valido = $false
 	        	continue
 	    	}
 
-			if ($rangoInicial -eq $segmento) {
-			    Write-Host "No puedes usar la direccion de red"
-			    $valido = $false
-			    continue
-			}
+			$cantidad = ($fin - $ini) + 1
+			$bits = [math]::Ceiling([math]::Log($cantidad,2))
+			$prefijo = 32 - $bits
+			Write-Host "Prefijo: /$prefijo"
 			
 			$broadcastTemp = calcular-broadcast (calcular-red $rangoInicial $prefijo) $prefijo
 			
@@ -177,7 +169,15 @@ function configurar-dhcp{
 
 	$segmento = calcular-red $rangoInicial $prefijo
 	$broadcast = calcular-broadcast $segmento $prefijo
-	
+
+	$broadcastNumero = ip-a-entero $broadcast
+
+	if ($fin -gt $broadcastNumero){
+	    Write-Host "El rango excede el tamaño de la red calculada"
+	    return
+	}
+
+
 	Write-Host "Segmento calculado: $segmento"
 	Write-Host "Broadcast calculado: $broadcast"
 
@@ -199,7 +199,9 @@ function configurar-dhcp{
 
     	if ([string]::IsNullOrWhiteSpace($gateway)){
         	$broadcastNumero = ip-a-entero $broadcast
-			$gatewayNumero = $broadcastNumero - 1
+			if ($gatewayNumero -le $iniNumero -or $gatewayNumero -gt $fin){
+			    $gateway = entero-a-ip ($iniNumero + 1)
+			}
         	$gateway = entero-a-ip $gatewayNumero
     	}
 	
@@ -221,7 +223,7 @@ function configurar-dhcp{
 
 	$segmentoServidor = (($ipActual -split '\.')[0..2] -join '.') + ".0"
 	
-	$mask = entero-a-ip ([uint32]([math]::Pow(2,32) - [math]::Pow(2,(32 - [int]$prefijo))))
+	$mask = entero-a-ip ([uint32]0xffffffff -shl (32 - [int]$prefijo))
 
 	$scopeExiste=get-dhcpserverv4scope -erroraction SilentlyContinue | where-object {$_.subnetaddress -eq $segmento}	
 	
