@@ -108,6 +108,17 @@ calcular_red(){
     entero_ip $red_int
 }
 
+calcular_broadcast(){
+    local red=$1
+    local prefijo=$2
+
+    local red_int=$(ip_entero "$red")
+    local mascara=$(( 0xFFFFFFFF << (32 - prefijo) & 0xFFFFFFFF ))
+    local broadcast_int=$(( red_int | (~mascara & 0xFFFFFFFF) ))
+
+    entero_ip $broadcast_int
+}
+
 configurar_parametros(){
 	instalar_kea
 	echo "**** CONFIGURACION DEL DHCP ******"
@@ -140,13 +151,18 @@ while true; do
 		echo "Esta mal: El rango inicial debe ser menor al rango final o no deben de ser iguales"
 		continue
 	fi
-
+	
+	if [[ "$rangoFinal" == "$broadcast" ]]; then
+	    echo "Esta mal: El rango final no puede ser la direccion broadcast ($broadcast)"
+	    continue
+	fi
+	
 	break
 done
 	if [[ -z "$segmento" ]]; then
 	    segmento=$(calcular_red "$rangoInicial" "$prefijo")
 	fi
-	
+	broadcast=$(calcular_broadcast "$segmento" "$prefijo")
 	while true; do
 	    read -p "Ingrese el tiempo (ej: 600) " leaseTime
 	    
@@ -174,7 +190,12 @@ done
 	ini_entero=$(ip_entero "$rangoInicial")
 	nuevo_inicio_entero=$((ini_entero + 1))
 	nuevoInicioPool=$(entero_ip $nuevo_inicio_entero)
-
+	
+	if [[ "$ipServidor" == "$broadcast" ]]; then
+	    echo "Error: No puedes asignar la direccion broadcast al servidor"
+	    return
+	fi
+	
 	echo "Cambiando IP del servidor a $ipServidor..."
 	sudo ip addr flush dev enp0s8
 	sudo ip addr add $ipServidor/$prefijo dev enp0s8
@@ -185,6 +206,11 @@ done
 		final_entero=$(ip_entero "$rangoFinal")
 		gateway_entero=$((final_entero + 1))
 		gateway=$(entero_ip $gateway_entero)
+	fi
+
+	if [[ "$gateway" == "$broadcast" ]]; then
+	    echo "Error: El gateway calculado es la direccion broadcast ($broadcast)"
+	    return
 	fi
 
 	echo ""
