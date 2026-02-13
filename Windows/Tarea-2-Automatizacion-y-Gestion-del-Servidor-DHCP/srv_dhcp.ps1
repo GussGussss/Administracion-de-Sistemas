@@ -119,6 +119,26 @@ function cambiar-ip-servidor{
     write-host "Nueva IP asignada correctamente."
 }
 
+function calcular-prefijo-desde-rango {
+    param(
+        [string]$ipInicio,
+        [string]$ipFin
+    )
+
+    $ini = ip-a-entero $ipInicio
+    $fin = ip-a-entero $ipFin
+
+    $xor = $ini -bxor $fin
+
+    $bits = 0
+    while ($xor -gt 0) {
+        $xor = $xor -shr 1
+        $bits++
+    }
+
+    return 32 - $bits
+}
+
 function configurar-dhcp{
 	instalar-dhcp
 	write-host "***** CONFIGURACION DEL DHCP ******"
@@ -139,11 +159,9 @@ function configurar-dhcp{
 	        	continue
 	    	}
 
-			$cantidad = ($fin - $ini) + 1
-			$bits = [math]::Ceiling([math]::Log($cantidad,2))
-			if ($bits -lt 1){ $bits = 1 }
-			$prefijo = 32 - $bits
-			Write-Host "Prefijo: /$prefijo"
+			$prefijo = calcular-prefijo-desde-rango $rangoInicial $rangoFinal
+			Write-Host "Prefijo calculado: /$prefijo"
+
 			
 			$broadcastTemp = calcular-broadcast (calcular-red $rangoInicial $prefijo) $prefijo
 			
