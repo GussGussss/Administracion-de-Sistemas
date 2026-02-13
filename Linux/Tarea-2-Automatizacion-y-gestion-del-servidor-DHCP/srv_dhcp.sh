@@ -166,8 +166,16 @@ while true; do
 		continue
 	fi
 
-	prefijo=$(calcular_prefijo_desde_rango "$rangoInicial" "$rangoFinal")
-	echo "Prefijo calculado: /$prefijo"
+	read -p "Ingrese el prefijo manual (opcional, ej: 24): " prefijo_manual
+
+	if [[ -n "$prefijo_manual" ]]; then
+	    prefijo=$prefijo_manual
+	    echo "Prefijo manual usado: /$prefijo"
+	else
+	    prefijo=$(calcular_prefijo_desde_rango "$rangoInicial" "$rangoFinal")
+	    echo "Prefijo calculado automaticamente: /$prefijo"
+	fi
+
 
 	segmento_temp=$(calcular_red "$rangoInicial" "$prefijo")
 	broadcast_temp=$(calcular_broadcast "$segmento_temp" "$prefijo")
