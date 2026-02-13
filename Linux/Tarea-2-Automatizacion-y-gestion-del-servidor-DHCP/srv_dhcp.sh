@@ -332,7 +332,7 @@ eliminar_scope(){
     echo ""
     echo "******** SCOPES CONFIGURADOS ********"
 
-    subnets=$(grep '"subnet":' $CONFIG_FILE | awk -F '"' '{print $4}')
+    subnets=$(sudo grep '"subnet":' $CONFIG_FILE | awk -F '"' '{print $4}')
 
     if [[ -z "$subnets" ]]; then
         echo "No hay scopes configurados."
@@ -384,7 +384,7 @@ menu(){
 		2)configurar_parametros ;;
 		3)estado_dhcp_kea ;;
 		4)mexicanada ;;
-		5)eliminar_scope
+		5)eliminar_scope ;;
 		6)exit 0 ;;
 		*)echo "opcion invalida" ;;
 	esac
