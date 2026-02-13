@@ -151,7 +151,10 @@ while true; do
 		echo "Esta mal: El rango inicial debe ser menor al rango final o no deben de ser iguales"
 		continue
 	fi
-	
+	if [[ "$rangoInicial" == "$segmento" ]]; then
+	    echo "Esta mal: El rango inicial no puede ser la direccion de red ($segmento)"
+	    continue
+	fi
 	if [[ "$rangoFinal" == "$broadcast" ]]; then
 	    echo "Esta mal: El rango final no puede ser la direccion broadcast ($broadcast)"
 	    continue
@@ -164,6 +167,11 @@ done
 	fi
 	
 	broadcast=$(calcular_broadcast "$segmento" "$prefijo")
+	
+	if [[ "$rangoFinal" == "$broadcast" ]]; then
+	    echo "Esta mal: El rango final no puede ser la direccion broadcast ($broadcast)"
+	    return
+	fi
 	
 	while true; do
 	    read -p "Ingrese el tiempo (ej: 600) " leaseTime
@@ -189,6 +197,11 @@ done
 
 	ipServidor="$rangoInicial"
 
+	if [[ "$ipServidor" == "$segmento" ]]; then
+	    echo "Error: No puedes usar la direccion de red ($segmento) como IP del servidor"
+	    return
+	fi
+	
 	ini_entero=$(ip_entero "$rangoInicial")
 	nuevo_inicio_entero=$((ini_entero + 1))
 	nuevoInicioPool=$(entero_ip $nuevo_inicio_entero)
@@ -205,9 +218,10 @@ done
 	sleep 2
 
 	if [[ -z "$gateway" ]]; then
-		final_entero=$(ip_entero "$rangoFinal")
-		gateway_entero=$((final_entero + 1))
-		gateway=$(entero_ip $gateway_entero)
+	    red_entero=$(ip_entero "$segmento")
+	    broadcast_entero=$(ip_entero "$broadcast")
+	    gateway_entero=$((broadcast_entero - 1))
+	    gateway=$(entero_ip $gateway_entero)
 	fi
 
 	if [[ "$gateway" == "$broadcast" ]]; then
