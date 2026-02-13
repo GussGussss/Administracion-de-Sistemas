@@ -247,13 +247,9 @@ done
 	    return
 	fi
 	
-	echo "Cambiando IP del servidor a $ipServidor..."
-	ipActual=$(ip -4 addr show enp0s8 | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -1)
+	echo "Cambiando IPs..."
+	sudo ip -4 addr flush dev enp0s8
 
-	if [[ -n "$ipActual" ]]; then
-	    sudo ip addr del $ipActual/$prefijo dev enp0s8 2>/dev/null
-	fi
-	
 	sudo ip addr add $ipServidor/$prefijo dev enp0s8
 	sudo ip link set enp0s8 up
 	sleep 2
