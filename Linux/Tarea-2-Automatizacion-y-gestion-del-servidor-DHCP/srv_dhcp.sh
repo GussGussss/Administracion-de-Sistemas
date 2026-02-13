@@ -99,22 +99,46 @@ calcular_prefijo_desde_rango(){
 
 instalar_kea(){
 	echo ""
-	echo "Viendo si el servicio DHCP ya esta instalado......"
+	echo "Verificando si el servicio DHCP (KEA) está instalado..."
+
 	if rpm -q kea &>/dev/null; then
-		echo "El servicio DHCP ya esta instalado :D"
+		echo "El servicio DHCP ya está instalado."
+
+		while true; do
+			read -p "¿Desea reinstalarlo? (s/n): " opcion
+
+			case $opcion in
+				s|S)
+					echo "Reinstalando KEA..."
+					sudo dnf reinstall -y kea > /dev/null 2>&1
+					echo "Reinstalación completada."
+					break
+					;;
+				n|N)
+					echo "No se realizará ninguna acción."
+					break
+					;;
+				*)
+					echo "Opción inválida. Escriba s o n."
+					;;
+			esac
+		done
+
 	else
-		echo "El servicio DHCP no esta instalado, lo instalaremos enseguida...."
+		echo "El servicio DHCP no está instalado."
+		echo "Instalando KEA..."
 		sudo dnf install -y kea > /dev/null 2>&1
 
 		if rpm -q kea &>/dev/null; then
-			echo "Instalacion completada"
+			echo "Instalación completada correctamente."
 		else
-			echo "Hubo un error en la instalacion"
+			echo "Hubo un error en la instalación."
 		fi
 	fi
 
-	read -p "Presiona ENTER para volver al continuar"
+	read -p "Presiona ENTER para continuar..."
 }
+
 
 misma_red(){
     local ip=$1
