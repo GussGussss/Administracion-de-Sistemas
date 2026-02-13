@@ -69,6 +69,24 @@ entero_ip(){
 	echo "$(( (entero>>24)&255 )).$(( (entero>>16)&255 )).$(( (entero>>8)&255 )).$(( entero&255 ))"
 }
 
+calcular_prefijo_desde_rango(){
+    local ipInicio=$1
+    local ipFin=$2
+
+    local ini=$(ip_entero "$ipInicio")
+    local fin=$(ip_entero "$ipFin")
+
+    local xor=$(( ini ^ fin ))
+    local bits=0
+
+    while (( xor > 0 )); do
+        xor=$(( xor >> 1 ))
+        ((bits++))
+    done
+
+    echo $((32 - bits))
+}
+
 instalar_kea(){
 	echo ""
 	echo "Viendo si el servicio DHCP ya esta instalado......"
@@ -129,7 +147,6 @@ while true; do
 
 	break
 done
-	read -p "Prefijo (ej: 24) " prefijo
 
 while true; do
 	rangoInicial=$(pedir_ip "Ingrese el rango inicial de la IP (ej: 192.168.0.100) ")
@@ -151,6 +168,18 @@ while true; do
 		echo "Esta mal: El rango inicial debe ser menor al rango final o no deben de ser iguales"
 		continue
 	fi
+
+	prefijo=$(calcular_prefijo_desde_rango "$rangoInicial" "$rangoFinal")
+	echo "Prefijo calculado: /$prefijo"
+
+	segmento_temp=$(calcular_red "$rangoInicial" "$prefijo")
+	broadcast_temp=$(calcular_broadcast "$segmento_temp" "$prefijo")
+	
+	if [[ "$rangoFinal" == "$broadcast_temp" ]]; then
+	    echo "Esta mal: El rango final no puede ser broadcast"
+	    continue
+	fi
+
 	if [[ "$rangoInicial" == "$segmento" ]]; then
 	    echo "Esta mal: El rango inicial no puede ser la direccion de red ($segmento)"
 	    continue
@@ -172,7 +201,18 @@ done
 	    echo "Esta mal: El rango final no puede ser la direccion broadcast ($broadcast)"
 	    return
 	fi
+
+	segmento=$(calcular_red "$rangoInicial" "$prefijo")
+	broadcast=$(calcular_broadcast "$segmento" "$prefijo")
 	
+	fin_entero=$(ip_entero "$rangoFinal")
+	broadcast_entero=$(ip_entero "$broadcast")
+	
+	if (( fin_entero > broadcast_entero )); then
+	    echo "El rango excede el tamaño de la red calculada"
+	    return
+	fi
+
 	while true; do
 	    read -p "Ingrese el tiempo (ej: 600) " leaseTime
 	    
