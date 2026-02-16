@@ -109,11 +109,14 @@ function crear-dominio-principal{
 		return
 	}
 	write-host ""
+	write-host "Creando zona..."
+	add-dnsserverprimaryzone -name $zona -zonefile "$zona.dns"
+	write-host ""
 	write-host "Creando registro A..."
 	add-dnsserverresourcerecorda -name "@" -zonename $zona -ipv4address $ipDominio
 	write-host ""
 	write-host "Creando registro CNAME..."
-	add-dnsserverresourcerecorda -name "www" -zonename $zona -ipv4address $ipDominio
+	add-dnsserverresourcerecordcname -name "www" -zonename $zona -hostnamealias $zona
 	write-host ""
 	write-host "Dominio configurado correctamente"
 	read-host "Presiona ENTER para continuar"
