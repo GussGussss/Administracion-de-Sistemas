@@ -9,7 +9,33 @@ write-host "Host: $hostname"
 write-host "IP: $ipActual"
 write-host ""
 
+function validar-ip{
+	param ([string]$IP)
+
+    if ($IP -notmatch '^([0-9]{1,3}\.){3}[0-9]{1,3}$'){
+        return $false
+    }
+
+    $octetos = $IP.Split('.')
+    foreach ($o in $octetos){
+        if ([int]$o -lt 0 -or [int]$o -gt 255){
+            return $false
+        }
+    }
+
+    if ($IP -eq "0.0.0.0" -or
+        $IP -eq "255.255.255.255" -or
+        $IP -eq "127.0.0.1"){
+        return $false
+    }
+
+    return $true
+}
+
 function instalar-dns{
+	write-host ""
+	write-host ""
+	write-host "**** Instalacion del Servicio DNS *****"
 	$dns=get-windowsfeature DNS
 
 	if(-not $dns.Installed){
@@ -57,16 +83,54 @@ function estado-dns{
 	read-host "presione ENTER para continuar"
 }
 
+function crear-dominio-principal{
+	write-host ""
+	write-host ""
+	write-host "***** Creacion del dominio por default (reprobados.com)"
+
+	$zona="reprobados.com"
+	$existe=get-dnsserverzone -name $zona -erroraction silentlycontinue
+
+	if($existe){
+		write-host "La zona $zona ya existe"
+		read-host "presione ENTER para continuar"
+		return	
+	}
+
+	$ipDominio=read-host "Ingrese la IP que tendra el Dominio (ej: 192.168.0.71) "
+	if([string]::isnullorwhitespace($ipDominio)){
+		$ipDominio = "192.168.0.72"
+	}
+	
+	if(-not(validar-ip $ipDominio)){
+		write-host "IP invalida"
+		read-host "Presiona ENTER"
+		return
+	}
+	write-host ""
+	write-host "Creando registro A..."
+	add-dnsserverresourcerecorda -name "@" -zonename $zona -ipv4address $ipDominio
+	write-host ""
+	write-host "Creando registro CNAME..."
+	add-dnsserverresourcerecorda -name "www" -zonename $zona -ipv4address $ipDominio
+	write-host ""
+	write-host "Dominio configurado correctamente"
+	read-host "Presiona ENTER para continuar"
+}
+
 do{
 	write-host ""
 	write-host ""
 	write-host "***** MENU ****"
 	write-host "1) Instalar Servicio DNS"
+	write-host "2) Ver estaod del Servicio DNS"
+	write-host "3) Crear dominio principal (reprobados.com)"
 	$opcion=read-host "Seleciona una opcion "
 	
 	switch($opcion){
 		"1" {instalar-dns}
 		"2" {estado-dns}
+		"3" {crear-dominio-principal}
 		"0" {exit}
 	}
 }while($true)
