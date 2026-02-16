@@ -9,6 +9,7 @@ write-host "Host: $hostname"
 write-host "IP: $ipActual"
 write-host ""
 
+import-module dnsserver -erroraction silentlycontinue
 function validar-ip{
 	param ([string]$IP)
 
