@@ -125,7 +125,7 @@ function crear-dominio-principal{
 do{
 	write-host ""
 	write-host ""
-	write-host "***** MENU ****"
+	write-host "***** MENU ****"S
 	write-host "1) Instalar Servicio DNS"
 	write-host "2) Ver estaod del Servicio DNS"
 	write-host "3) Crear dominio principal (reprobados.com)"
