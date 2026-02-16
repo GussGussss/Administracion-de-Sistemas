@@ -176,7 +176,22 @@ function todos-los-dominios{
 	read-host "Presione ENTER para continuar"
 }
 
+function eliminar-dominio{
+	write-host ""
+	write-host "***** Eliminar dominio *****"
+	
+	$dominio=read-host "Ingrese el nombre del domino que quiere eliminar "
+	$existe=get-dnsserverzone -name $dominio -erroraction silentlycontinue
+	if(-not $existe){
+		write-host "El dominio no existe"
+		read-host "Presiona ENTER para continuar"
+		return
+	}
+	remove-dnsserverzone -name $dominio -force
 
+	write-host "El dominio se ha eliminado :D"
+	read-host "Presiona ENTER para continuar"
+}
 do{
 	write-host ""
 	write-host ""
@@ -185,8 +200,9 @@ do{
 	write-host "2) Ver estaod del Servicio DNS"
 	write-host "3) Crear dominio principal (reprobados.com)"
 	write-host "4) Crear dominio"
-	write-host "5) Ver todos los dominios"
-	$opcion=read-host "Seleciona una opcion "ver
+	write-host "5) Consultar todos los dominios"
+	write-host "6) Eliminar dominio"
+	$opcion=read-host "Seleciona una opcion "
 	
 	switch($opcion){
 		"1" {instalar-dns}
@@ -194,6 +210,7 @@ do{
 		"3" {crear-dominio-principal}
 		"4" {crear-dominio}
 		"5" {todos-los-dominios}
+		"6" {eliminar-dominio}
 		"0" {exit}
 	}
 }while($true)
