@@ -122,19 +122,61 @@ function crear-dominio-principal{
 	read-host "Presiona ENTER para continuar"
 }
 
+function crear-dominio{
+	write-host ""
+	write-host ""
+	write-host "***** Agregar nuevo dominio *****"
+
+	$zona=read-host "Ingresa el nombre del dominio (ej: pikachu.com) "
+
+	if([string]::isnullorwhitespace($zon)){
+		write-host "El nombre del dominio no puede estar vacio"
+		read-host "Presion ENTER para continuar"
+		return
+	}
+	
+	$existe=get-dnsserverzone -name $zona -erroraction silentlycontinue
+	if($existe){
+		write-host "La zona '$zona' ya existe :c"
+		read-host "Presion ENTER para continuar"
+		return
+	}
+
+	$ipDominio=read-host "Ingresa la IP del dominio "
+	if(-not(validar-ip $ipDominio)){
+		write-host "IP invalida"
+		read-host "presiona ENTER para continuar"
+		return
+	}
+	write-host ""
+	write-host "Creando zona...."
+	add-dnsserverprimaryzone -name $zona -zonefile "$zona.dns"
+	write-host ""
+	write-host "Creando registro A..."
+	add-dnsserverresourcerecorda -name "@" -zonename $zona -ipv4address $ipDominio
+	write-host ""
+	write-host "Creando registro www...."
+	add-dnsserverresourcerecordcname -name "www" -zonename $zona -hostnamealias $zona
+	write-host ""
+	write-host "Dominio agregado correctamente :D"
+	read-host "Presione ENTERE para continuar"
+}
+
 do{
 	write-host ""
 	write-host ""
-	write-host "***** MENU ****"S
+	write-host "***** MENU ****"
 	write-host "1) Instalar Servicio DNS"
 	write-host "2) Ver estaod del Servicio DNS"
 	write-host "3) Crear dominio principal (reprobados.com)"
+	write-host "4) Crear dominio"
 	$opcion=read-host "Seleciona una opcion "
 	
 	switch($opcion){
 		"1" {instalar-dns}
 		"2" {estado-dns}
 		"3" {crear-dominio-principal}
+		"4" {crear-dominio}
 		"0" {exit}
 	}
 }while($true)
