@@ -172,7 +172,6 @@ calcular_broadcast(){
 }
 
 configurar_parametros(){
-	instalar_kea
 	echo "**** CONFIGURACION DEL DHCP ******"
 	read -p "Nombre del ambito: " ambito
 
