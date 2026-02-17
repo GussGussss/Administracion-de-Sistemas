@@ -557,7 +557,7 @@ crear_dominio(){
 		return
 	fi
 
-	if grep -q "zone \"$dominio"" /etc/named.rfc1912.zones; then
+	if grep -q "zone \"$dominio\"" /etc/named.rfc1912.zones; then
 		echo "EL dominio ya existe"
 		read -p "Presione ENTER para continuar"
 	fi
@@ -606,11 +606,11 @@ listar_dominio(){
 	read -p "Presione ENTER para continuar"
 }
 
-eliminar_dominios(){
+eliminar_dominio(){
 	echo ""
 	echo "***** Eliminar dominio ******"
 	read -p "Ingresa el nombre del dominio a eliminar: " dominio
-	if !grep -q "zone \"$dominio\""/etc/named.rfc1912.zones; then
+	if ! grep -q "zone \"$dominio\""/etc/named.rfc1912.zones; then
 		echo "El dominio no existe"
 		read -p "Presione ENTER para continuar"
 		return
@@ -645,7 +645,7 @@ while true; do
         2) estado_dns ;;
         3) crear_dominio_principal ;;
         4) crear_dominio ;;
-        5) listar_dominios ;;
+        5) listar_dominio ;;
         6) eliminar_dominio ;;
         7) break ;;
         0) exit 0 ;;
@@ -660,18 +660,18 @@ menu_dhcp(){
 	echo "2) Configurar DCHP (KEA)"
 	echo "3) Ver el estado del servicio DHCP"
 	echo "4) Monitoreo (Ver concesiones)"
-	echo "5) Eliminar Scope"	
+	echo "5) Eliminar Scope"
 	echo "6) Volver al menu principal"
 	echo "0) Salir"
 	read -p "Selecciones una opcion: " opcion
-	
+
 	case $opcion in
 		1)instalar_kea ;;
 		2)configurar_parametros ;;
 		3)estado_dhcp_kea ;;
 		4)mexicanada ;;
 		5)eliminar_scope ;;
-		6)menu_principal ;;	
+		6)menu_principal ;;
 		0)exit 0 ;;
 		*)echo "opcion invalida" ;;
 	esac
