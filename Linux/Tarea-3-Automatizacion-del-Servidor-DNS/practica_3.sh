@@ -160,3 +160,55 @@ eliminar-dominios(){
 	echo "Dominio eliminado correctamente"
 	read -p "Presiona ENTER para continuar"
 }
+
+menu_dns(){
+
+while true; do
+    echo ""
+    echo "***** MENU DNS *****"
+    echo "1) Instalar servicio DNS"
+    echo "2) Ver estado del servicio DNS"
+    echo "3) Crear dominio principal (reprobados.com)"
+    echo "4) Crear dominio"
+    echo "5) Listar dominios"
+    echo "6) Eliminar dominio"
+    echo "7) Volver al menu principal"
+    echo "0) Salir"
+
+    read -p "Selecciona una opcion: " opcion
+
+    case $opcion in
+        1) instalar_dns ;;
+        2) estado_dns ;;
+        3) crear_dominio_principal ;;
+        4) crear_dominio ;;
+        5) listar_dominios ;;
+        6) eliminar_dominio ;;
+        7) break ;;
+        0) exit 0 ;;
+        *) echo "Opcion invalida"; sleep 1 ;;
+    esac
+done
+}
+
+menu_principal(){
+
+while true; do
+    echo ""
+    echo "***** MENU PRINCIPAL *****"
+    echo "1) Ir a DHCP"
+    echo "2) Ir a DNS"
+    echo "0) Salir"
+
+    read -p "Selecciona una opcion: " opcion
+
+    case $opcion in
+        1) menu ;;
+        2) menu_dns ;;
+        0) exit 0 ;;
+        *) echo "Opcion invalida" ;;
+    esac
+done
+}
+
+menu_principal
