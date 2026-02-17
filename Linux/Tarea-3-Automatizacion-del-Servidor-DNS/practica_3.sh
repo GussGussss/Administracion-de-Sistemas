@@ -567,7 +567,7 @@ crear_dominio(){
 		ipDominio=$ipActual
 	fi
 
-	zone_file="/var/named/$dominio.db"
+	zona_file="/var/named/$dominio.db"
 	sudo tee -a /etc/named.rfc1912.zones > /dev/null << EOF
 
 zone "$dominio" IN {
