@@ -596,7 +596,7 @@ EOF
 	sudo named-checkzone $dominio $zona_file
 	sudo systemctl restart named
 	echo "Dominio creado correctamente"
-	read -p "presione ENTER para continuar
+	read -p "presione ENTER para continuar"
 }
 
 listar_dominio(){
