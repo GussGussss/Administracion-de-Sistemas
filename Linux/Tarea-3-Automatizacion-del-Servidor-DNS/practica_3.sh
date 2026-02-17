@@ -1,4 +1,4 @@
-echo ""
+cecho ""
 echo ""
 echo "***** AUTOMATIZACION DEL SERVIDOR DNS ******"
 ipActual=$(ip -4 addr show enp0s8 | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -1)
