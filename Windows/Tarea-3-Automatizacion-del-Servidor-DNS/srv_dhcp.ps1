@@ -248,7 +248,7 @@ function configurar-dhcp{
 	$nuevoInicioPool = entero-a-ip $nuevoInicioNumero
 
     	$gateway = pedir-ip "Ingrese el gateway (opcional)" $true
-    	$dns     = pedir-ip "Ingrese el DNS (opcional)" $true
+    	$dns=$ipServidor
 
     	if ([string]::IsNullOrWhiteSpace($dns)){
         	$dns = $rangoInicial
@@ -299,11 +299,10 @@ function configurar-dhcp{
 
 	$scopeIP = [System.Net.IPAddress]::Parse($segmento)
 
+	cambiar-ip-servidor -NuevaIP $ipServidor -Prefijo $prefijo
 	set-dhcpserverv4optionvalue -scopeid $scopeIP -Router $gateway -Force
-	
 	set-dhcpserverv4optionvalue -scopeid $scopeIP -DnsServer $dns -Force
 
-	cambiar-ip-servidor -NuevaIP $ipServidor -Prefijo $prefijo
 }
 
 function estado-dhcp{

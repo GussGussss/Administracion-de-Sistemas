@@ -70,6 +70,7 @@ function instalar-dns{
 }
 
 function estado-dns{
+	resolve-dnsname reprobados.com -erroraction silentlycontinue
 	write-host ""
 	write-host ""
 	write-host "***** Estado del servicio DNS *****"
@@ -100,7 +101,7 @@ function crear-dominio-principal{
 
 	$ipDominio=read-host "Ingrese la IP que tendra el Dominio (ej: 192.168.0.71) "
 	if([string]::isnullorwhitespace($ipDominio)){
-		$ipDominio = "192.168.0.72"
+		$ipDominio = $ipActual
 	}
 	
 	if(-not(validar-ip $ipDominio)){
@@ -129,7 +130,7 @@ function crear-dominio{
 
 	$dominio=read-host "Ingresa el nombre del dominio (ej: pikachu.com) "
 
-	if([string]::isnullorwhitespace($zon)){
+	if([string]::isnullorwhitespace($dominio)){
 		write-host "El nombre del dominio no puede estar vacio"
 		read-host "Presion ENTER para continuar"
 		return
