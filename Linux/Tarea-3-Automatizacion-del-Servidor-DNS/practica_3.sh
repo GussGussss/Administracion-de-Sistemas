@@ -474,7 +474,7 @@ instalar_dns(){
 	fi
 
 	sudo systemctl enable named
-	sudo systemctl start name
+	sudo systemctl start named
 
 	read -p "presiona ENTER para continuar"
 }
@@ -500,7 +500,7 @@ crear_dominio_principal(){
 		return
 	fi
 
-	read -p "Ingresa la IP del dominio (ej: 192.168.0.70 o presione ENTER para usar la IP del servidor) " ipDomino
+	read -p "Ingresa la IP del dominio (ej: 192.168.0.70 o presione ENTER para usar la IP del servidor) " ipDominio
 
 	if [[ -z "$ipDominio" ]]; then
 		ipDominio=$ipActual
@@ -508,7 +508,7 @@ crear_dominio_principal(){
 
 	if ! validar_ip "$ipDominio"; then
 		echo "IP invalida"
-		read -p "Presione ENTER para continuar
+		read -p "Presione ENTER para continuar"
 		return
 	fi
 
@@ -532,7 +532,7 @@ EOF
 
 @	IN 	NS	ns1.$dominio.
 ns1	IN	A	$ipActual
-@	IN	A	$IpDominio
+@	IN	A	$ipDominio
 www	IN	CNAME	$dominio.
 EOF
 
@@ -547,7 +547,7 @@ EOF
 
 }
 
-crear-dominio(){
+crear_dominio(){
 	echo ""
 	echo "***** Agregar nuevo dominio *****"
 	read -p "Ingresa el nombre del dominio (ej: pikachu.com) " dominio
@@ -599,18 +599,18 @@ EOF
 	read -p "presione ENTER para continuar
 }
 
-listar-dominio{
+listar_dominio(){
 	echo ""
 	echo "***** Lista de Dominios *****"
 	sudo grep 'zone "' /etc/named.rfc1912.zones | awk -F '"' '{print $2}'
 	read -p "Presione ENTER para continuar"
 }
 
-eliminar-dominios(){
+eliminar_dominios(){
 	echo ""
 	echo "***** Eliminar dominio ******"
 	read -p "Ingresa el nombre del dominio a eliminar: " dominio
-	if !grep -q "zone \"$dominio\"" /etc/named.rfc1912.zones; then
+	if !grep -q "zone \"$dominio\""/etc/named.rfc1912.zones; then
 		echo "El dominio no existe"
 		read -p "Presione ENTER para continuar"
 		return
