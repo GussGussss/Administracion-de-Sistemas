@@ -4,12 +4,10 @@ write-host ""
 write-host ""
 
 #$hostname=hostname
-#$ipActual=(get-netipaddress -addressfamily IPv4 | where-object { $_.interfacealias -notlike "*loopback*" } | select-object -first 1).ipaddress
+$ipActual=(get-netipaddress -addressfamily IPv4 | where-object { $_.interfacealias -notlike "*loopback*" } | select-object -first 1).ipaddress
 #write-host "Host: $hostname"
 #write-host "IP: $ipActual"
 #write-host ""
-
-import-module dnsserver -erroraction silentlycontinue
 
 function validar-ip{
 	param ([string]$IP)
@@ -52,7 +50,7 @@ function instalar-dns{
 				"s" {
 					write-host "Reinstalando servicio DNS...."
 					uninstall-windowsfeature DNS
-					install-windows-feature DNS -includemanagementtools
+					install-windowsfeature DNS -includemanagementtools
 					write-host "La reinstalacion ha finalizado :D"
 				}
 				"n" {
