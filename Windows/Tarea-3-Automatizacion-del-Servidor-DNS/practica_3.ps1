@@ -144,7 +144,6 @@ function crear-dominio-principal{
 	write-host ""
 	write-host "Creando zona..."
 	add-dnsserverprimaryzone -name $dominio -zonefile "$dominio.dns"
-	Resolve-DnsName $dominio -ErrorAction SilentlyContinue
 	write-host ""
 	write-host "Creando registro A..."
 	add-dnsserverresourcerecorda -name "@" -zonename $dominio -ipv4address $ipDominio
@@ -154,6 +153,8 @@ function crear-dominio-principal{
 	write-host ""
 	write-host "Dominio configurado correctamente"
 	read-host "Presiona ENTER para continuar"
+	Clear-DnsServerCache -Force
+	Restart-Service DNS
 }
 
 function crear-dominio{
@@ -185,7 +186,6 @@ function crear-dominio{
 	write-host ""
 	write-host "Creando zona...."
 	add-dnsserverprimaryzone -name $dominio -zonefile "$dominio.dns"
-	Resolve-DnsName $dominio -ErrorAction SilentlyContinue
 	write-host ""
 	write-host "Creando registro A..."
 	add-dnsserverresourcerecorda -name "@" -zonename $dominio -ipv4address $ipDominio
@@ -195,6 +195,8 @@ function crear-dominio{
 	write-host ""
 	write-host "Dominio agregado correctamente :D"
 	read-host "Presione ENTERE para continuar"
+	Clear-DnsServerCache -Force
+	Restart-Service DNS
 }
 
 function todos-los-dominios{
