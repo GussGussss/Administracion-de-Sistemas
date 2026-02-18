@@ -131,7 +131,7 @@ function crear-dominio-principal{
 		return	
 	}
 
-	$ipDominio=read-host "Ingrese la IP que tendra el Dominio (ej: 192.168.0.71) "
+	$ipDominio=read-host "Ingrese la IP que tendra el Dominio (opcional.... si queda vacio tomara la ip del servidor) "
 	if([string]::isnullorwhitespace($ipDominio)){
 		$ipDominio = $ipActual
 	}
@@ -177,12 +177,17 @@ function crear-dominio{
 		return
 	}
 
-	$ipDominio=read-host "Ingresa la IP del dominio "
+	$ipDominio=read-host "Ingrese la IP que tendra el Dominio (opcional.... si queda vacio tomara la ip del servidor) "
+	if([string]::isnullorwhitespace($ipDominio)){
+		$ipDominio = $ipActual
+	}
+	
 	if(-not(validar-ip $ipDominio)){
 		write-host "IP invalida"
-		read-host "presiona ENTER para continuar"
+		read-host "Presiona ENTER"
 		return
 	}
+	
 	write-host ""
 	write-host "Creando zona...."
 	add-dnsserverprimaryzone -name $dominio -zonefile "$dominio.dns"
