@@ -644,7 +644,7 @@ eliminar_dominio(){
 configurar_named_base(){
 
     echo ""
-    echo "***** Configuracion base profesional de BIND *****"
+    echo "***** Configuracion base de BIND *****"
 
     CONF="/etc/named.conf"
 
