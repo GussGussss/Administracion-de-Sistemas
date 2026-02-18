@@ -640,6 +640,7 @@ menu_dns(){
 
 while true; do
     echo ""
+    echo ""
     echo "***** MENU DNS *****"
     echo "1) Instalar servicio DNS"
     echo "2) Ver estado del servicio DNS"
@@ -667,7 +668,10 @@ done
 }
 
 menu_dhcp(){
+while true; do
 	echo ""
+	echo ""
+	echo "****** Menu DHCP *****"
 	echo "1) Instalar servicio DHCP"
 	echo "2) Configurar DCHP (KEA)"
 	echo "3) Ver el estado del servicio DHCP"
@@ -687,14 +691,15 @@ menu_dhcp(){
 		0)exit 0 ;;
 		*)echo "opcion invalida" ;;
 	esac
-
+done
 }
 
 menu_principal(){
 
 while true; do
     echo ""
-    echo "***** MENU PRINCIPAL *****"
+    echo ""
+    echo "***** Menu Principal *****"
     echo "1) DHCP"
     echo "2) DNS"
     echo "3) Estado de servicios (DNS y DHCP)"
