@@ -488,7 +488,11 @@ instalar_dns(){
 	sudo systemctl enable named
 	sudo systemctl start named
 	configurar_named_base
-	
+
+	echo ""
+	echo "Configurando firewall para permitir DNS"
+	sudo firewall-cmd --permanent --add-service=dns
+	sudo firewall-cmd --reload
 	read -p "presiona ENTER para continuar"
 }
 
