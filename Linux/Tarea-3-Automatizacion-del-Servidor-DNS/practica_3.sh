@@ -247,6 +247,8 @@ done
 	        echo "No debe de ser 0 o menor"
 	    fi
 	done
+
+	ipServidor="$rangoInicial"
 	gateway=$(pedir_ip "Ingrese la puerta de enlace (opcional) (ej: 192.168.0.1) " si)
 	dns=$(pedir_ip "Ingrese el DNS del dominio (ej: 192.168.0.70, si quiere usar el DNS del servidor deje vacio) " si)
 
@@ -266,8 +268,6 @@ done
 		echo "Esta mal: La puerta de enlace no pertenece al segmento"
 		return
 	fi
-
-	ipServidor="$rangoInicial"
 
 	if [[ "$ipServidor" == "$segmento" ]]; then
 	    echo "Error: No puedes usar la direccion de red ($segmento) como IP del servidor"
