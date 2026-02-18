@@ -222,17 +222,17 @@ while true; do
 done
 	segmento="$segmento_temp"
 	broadcast="$broadcast_temp"
-	
+
 	ini_entero=$(ip_entero "$rangoInicial")
 	seg_entero=$(ip_entero "$segmento")
-	
+
 	if (( ini_entero < seg_entero )); then
 	    echo "El rango no está alineado correctamente a la red calculada"
 	    return
 	fi
 	fin_entero=$(ip_entero "$rangoFinal")
 	broadcast_entero=$(ip_entero "$broadcast")
-	
+
 	if (( fin_entero > broadcast_entero )); then
 	    echo "El rango excede el tamaño de la red calculada"
 	    return
@@ -240,7 +240,7 @@ done
 
 	while true; do
 	    read -p "Ingrese el tiempo (ej: 600) " leaseTime
-	    
+
 	    if [[ "$leaseTime" =~ ^[0-9]+$ ]] && (( leaseTime > 0 )); then
 	        break
 	    else
@@ -248,7 +248,19 @@ done
 	    fi
 	done
 	gateway=$(pedir_ip "Ingrese la puerta de enlace (opcional) (ej: 192.168.0.1) " si)
-	dns=$(pedir_ip "Ingrese el DNS (opcional) (ej: 192.168.0.70) " si)
+	dns=$(pedir_ip "Ingrese el DNS del dominio (ej: 192.168.0.70, si quiere usar el DNS del servidor deje vacio) " si)
+
+	if [[ -z "$dns" ]]; then
+		dns="$ipServidor"
+	else
+		IFS=',' read -ra lista_dns <<< "$dns"
+		for d in "${lista_dns[@]}"; do
+			if ! validar_ip "$d"; then
+				echo "DNS invalido: $d"
+				return
+			fi
+		done
+	fi
 
 	if [[ -n "$gateway" ]] && ! misma_red "$gateway" "$segmento" "$prefijo"; then
 		echo "Esta mal: La puerta de enlace no pertenece al segmento"
