@@ -523,7 +523,7 @@ EOF
 	echo "Creando archivo de zona...."
 	sudo tee $zona_file > /dev/null <<EOF
 \$TTL 86400
-@	IN	SOA	ns1.$dominio. admin. $dominio. (
+@	IN	SOA	ns1.$dominio. admin.$dominio. (
 		2024021601
 		3600
 		1800
@@ -610,7 +610,7 @@ eliminar_dominio(){
 	echo ""
 	echo "***** Eliminar dominio ******"
 	read -p "Ingresa el nombre del dominio a eliminar: " dominio
-	if sudo ! grep -q "zone \"$dominio\"" /etc/named.rfc1912.zones; then
+	if ! sudo grep -q "zone \"$dominio\"" /etc/named.rfc1912.zones; then
 		echo "El dominio no existe"
 		read -p "Presione ENTER para continuar"
 		return
