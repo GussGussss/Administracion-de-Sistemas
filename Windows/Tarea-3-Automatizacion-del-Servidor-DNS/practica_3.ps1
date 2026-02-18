@@ -65,7 +65,40 @@ function instalar-dns{
 
 		} while (-not $valido)
 	}
+
+	verificar-puerto-dns
+	Set-DnsServerSetting -ListenAddresses @("0.0.0.0")
+	Restart-Service DNS
+	
+	write-host ""
+	Write-Host ""
+	Write-Host "Configurando firewall para permitir DNS..."
+	
+	if (-not (Get-NetFirewallRule -DisplayName "DNS Server (TCP-In)" -ErrorAction SilentlyContinue)) {
+	    New-NetFirewallRule -DisplayName "DNS Server TCP 53" -Direction Inbound -Protocol TCP -LocalPort 53 -Action Allow
+	}
+	
+	if (-not (Get-NetFirewallRule -DisplayName "DNS Server (UDP-In)" -ErrorAction SilentlyContinue)) {
+	    New-NetFirewallRule -DisplayName "DNS Server UDP 53" -Direction Inbound -Protocol UDP -LocalPort 53 -Action Allow
+	}
+	
+	Write-Host "Firewall configurado correctamente."
+	
 	read-host "presiona ENTER para continuar"
+}
+
+function verificar-puerto-dns {
+    Write-Host ""
+    Write-Host "Verificando puerto 53..."
+
+    $puerto = Get-NetTCPConnection -LocalPort 53 -ErrorAction SilentlyContinue
+
+    if ($puerto) {
+        Write-Host "DNS esta escuchando en puerto 53."
+    }
+    else {
+        Write-Host "ADVERTENCIA: DNS no esta escuchando en puerto 53."
+    }
 }
 
 function estado-dns{
@@ -111,6 +144,7 @@ function crear-dominio-principal{
 	write-host ""
 	write-host "Creando zona..."
 	add-dnsserverprimaryzone -name $dominio -zonefile "$dominio.dns"
+	Resolve-DnsName $dominio -ErrorAction SilentlyContinue
 	write-host ""
 	write-host "Creando registro A..."
 	add-dnsserverresourcerecorda -name "@" -zonename $dominio -ipv4address $ipDominio
@@ -151,6 +185,7 @@ function crear-dominio{
 	write-host ""
 	write-host "Creando zona...."
 	add-dnsserverprimaryzone -name $dominio -zonefile "$dominio.dns"
+	Resolve-DnsName $dominio -ErrorAction SilentlyContinue
 	write-host ""
 	write-host "Creando registro A..."
 	add-dnsserverresourcerecorda -name "@" -zonename $dominio -ipv4address $ipDominio
@@ -274,7 +309,7 @@ function instalar-dhcp{
         Write-Host "El servicio DHCP ya esta instalado."
 
         do{
-            $opcion = Read-Host "¿Desea reinstalarlo? (s/n)"
+            $opcion = Read-Host "Â¿Desea reinstalarlo? (s/n)"
 
             switch ($opcion.ToLower()){
 
@@ -299,6 +334,13 @@ function instalar-dhcp{
             }
         }while(-not $valido)
     }
+	Write-Host ""
+	Write-Host "Configurando firewall para DHCP..."
+	
+	New-NetFirewallRule -DisplayName "DHCP Server UDP 67" -Direction Inbound -Protocol UDP -LocalPort 67 -Action Allow -ErrorAction SilentlyContinue
+	
+	Write-Host "Firewall DHCP configurado."
+
     Read-Host "Presiona ENTER para continuar"
 }
 
@@ -343,7 +385,6 @@ function calcular-prefijo-desde-rango {
 }
 
 function configurar-dhcp{
-	#instalar-dhcp
 	write-host "***** CONFIGURACION DEL DHCP ******"
 	$ambito = read-host "Nombre del ambito: "
 
@@ -405,7 +446,7 @@ function configurar-dhcp{
 	$broadcastNumero = ip-a-entero $broadcast
 
 	if ($fin -gt $broadcastNumero){
-	    Write-Host "El rango excede el tamaño de la red calculada"
+	    Write-Host "El rango excede el tamaÃ±o de la red calculada"
 	    return
 	}
 
@@ -419,13 +460,27 @@ function configurar-dhcp{
 	$nuevoInicioNumero = $iniNumero + 1
 	$nuevoInicioPool = entero-a-ip $nuevoInicioNumero
 
-    	$gateway = pedir-ip "Ingrese el gateway (opcional)" $true
-    	$dns=$ipServidor
+	$gateway = pedir-ip "Ingrese el gateway (opcional)" $true
+	
+	$dnsInput = Read-Host "Ingrese el DNS (opcional.. Deja vacio para tomar como DNS la IP del servidor)"
+	
+	if ([string]::IsNullOrWhiteSpace($dnsInput)) {
+	    $dns = $ipServidor
+	}
+	else {
+	    $listaDns = $dnsInput.Split(",")
+	
+	    foreach ($d in $listaDns) {
+	        $d = $d.Trim()
+	        if (-not (validar-ip $d)) {
+	            Write-Host "DNS invalido: $d"
+	            return
+	        }
+	    }
+	
+	    $dns = ($listaDns | ForEach-Object { $_.Trim() })
+	}
 
-    	if ([string]::IsNullOrWhiteSpace($dns)){
-        	$dns = $rangoInicial
-    	}
-		
 		Restart-Service dhcpserver -Force
 		Start-Sleep -Seconds 3
 
