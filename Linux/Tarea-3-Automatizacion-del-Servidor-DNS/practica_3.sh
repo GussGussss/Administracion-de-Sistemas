@@ -494,7 +494,7 @@ crear_dominio_principal(){
 	dominio="reprobados.com"
 	zona_file="/var/named/$dominio.db"
 
-	if grep -q "$dominio" /etc/named.rfc1912.zones; then
+	if sudo grep -q "$dominio" /etc/named.rfc1912.zones; then
 		echo "El dominio ya existe"
 		read -p "Presione ENTERN para continuar"
 		return
@@ -557,7 +557,7 @@ crear_dominio(){
 		return
 	fi
 
-	if grep -q "zone \"$dominio\"" /etc/named.rfc1912.zones; then
+	if sudo grep -q "zone \"$dominio\"" /etc/named.rfc1912.zones; then
 		echo "EL dominio ya existe"
 		read -p "Presione ENTER para continuar"
 	fi
@@ -610,7 +610,7 @@ eliminar_dominio(){
 	echo ""
 	echo "***** Eliminar dominio ******"
 	read -p "Ingresa el nombre del dominio a eliminar: " dominio
-	if ! grep -q "zone \"$dominio\""/etc/named.rfc1912.zones; then
+	if sudo ! grep -q "zone \"$dominio\"" /etc/named.rfc1912.zones; then
 		echo "El dominio no existe"
 		read -p "Presione ENTER para continuar"
 		return
