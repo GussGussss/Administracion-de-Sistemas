@@ -230,6 +230,9 @@ function eliminar-dominio{
 	}
 	remove-dnsserverzone -name $dominio -force
 
+	Clear-DnsServerCache -Force
+	Restart-Service DNS
+	
 	write-host "El dominio se ha eliminado :D"
 	read-host "Presiona ENTER para continuar"
 }
