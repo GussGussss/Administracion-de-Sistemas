@@ -4,7 +4,13 @@ write-host ""
 write-host ""
 
 #$hostname=hostname
-$ipActual=(get-netipaddress -addressfamily IPv4 | where-object { $_.interfacealias -notlike "*loopback*" } | select-object -first 1).ipaddress
+#$ipActual=(get-netipaddress -addressfamily IPv4 | where-object { $_.interfacealias -notlike "*loopback*" } | select-object -first 1).ipaddress
+$ipActual = (Get-NetIPAddress -AddressFamily IPv4 |
+             Where-Object {
+                 $_.InterfaceAlias -eq "Ethernet 2" -and
+                 $_.IPAddress -notlike "169.*"
+             } |
+             Select-Object -First 1).IPAddress
 #write-host "Host: $hostname"
 #write-host "IP: $ipActual"
 #write-host ""
@@ -538,6 +544,13 @@ function configurar-dhcp{
 	cambiar-ip-servidor -NuevaIP $ipServidor -Prefijo $prefijo
 	set-dhcpserverv4optionvalue -scopeid $scopeIP -Router $gateway -Force
 	set-dhcpserverv4optionvalue -scopeid $scopeIP -DnsServer $dns -Force
+	
+	$nuevaIP = (Get-NetIPAddress -AddressFamily IPv4 |
+	            Where-Object { $_.InterfaceAlias -notlike "*NAT*" -and $_.IPAddress -notlike "169.*" } |
+	            Select-Object -First 1).IPAddress
+	
+	Set-DnsServerSetting -ListenAddresses $nuevaIP
+	Restart-Service DNS
 
 }
 
