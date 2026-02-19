@@ -101,7 +101,7 @@ function verificar-puerto-dns {
 }
 
 function estado-dns{
-	resolve-dnsname reprobados.com -erroraction silentlycontinue
+	#resolve-dnsname reprobados.com -erroraction silentlycontinue
 	write-host ""
 	write-host ""
 	write-host "***** Estado del servicio DNS *****"
