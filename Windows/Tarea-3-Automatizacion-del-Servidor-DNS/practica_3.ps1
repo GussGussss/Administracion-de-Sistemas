@@ -424,7 +424,7 @@ function configurar-dhcp{
 			
 			$broadcastTemp = calcular-broadcast (calcular-red $rangoInicial $prefijo) $prefijo
 			
-			if ($rangoFinal -eq $broadcastTemp) {
+			if ($prefijo -ne 31 -and $rangoFinal -eq $broadcastTemp) {
 			    Write-Host "No puedes usar la direccion broadcast"
 			    $valido = $false
 			    continue
@@ -460,7 +460,7 @@ function configurar-dhcp{
 
 	$broadcastNumero = ip-a-entero $broadcast
 
-	if ($fin -gt $broadcastNumero){
+	if ($prefijo -ne 31 -and $fin -gt $broadcastNumero){
 	    Write-Host "El rango excede el tamaño de la red calculada"
 	    return
 	}
