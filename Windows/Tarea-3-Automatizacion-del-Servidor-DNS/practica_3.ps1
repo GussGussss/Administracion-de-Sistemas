@@ -544,29 +544,8 @@ function configurar-dhcp{
 	cambiar-ip-servidor -NuevaIP $ipServidor -Prefijo $prefijo
 	set-dhcpserverv4optionvalue -scopeid $scopeIP -Router $gateway -Force
 	set-dhcpserverv4optionvalue -scopeid $scopeIP -DnsServer $dns -Force
-	
-	$nuevaIP = (Get-NetIPAddress -AddressFamily IPv4 |
-	            Where-Object {
-	                $_.InterfaceAlias -eq "Ethernet 2" -and
-	                $_.IPAddress -notlike "169.*"
-	            } |
-	            Select-Object -First 1).IPAddress
-	
-	if ($nuevaIP) {
-	    Write-Host "Actualizando DNS para escuchar en $nuevaIP ..."
-	
-	    Set-DnsServerSetting -AllInterfaces $false
-	    Set-DnsServerSetting -IPAddress $nuevaIP
-	
-	    Restart-Service DNS
-	    Write-Host "DNS actualizado correctamente."
-	}
-	else {
-	    Write-Host "No se pudo detectar la nueva IP."
-	}
 
 	Restart-Service DNS
-
 }
 
 function estado-dhcp{
