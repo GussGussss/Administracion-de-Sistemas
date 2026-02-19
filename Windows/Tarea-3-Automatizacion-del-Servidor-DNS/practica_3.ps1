@@ -1,4 +1,4 @@
-write-host ""
+﻿write-host ""
 write-host ""
 #write-host "***** Automatizacion del Servidor DNS ******"
 write-host ""
@@ -67,7 +67,6 @@ function instalar-dns{
 	}
 
 	verificar-puerto-dns
-	Set-DnsServerSetting -ListenAddresses @("0.0.0.0")
 	Restart-Service DNS
 	
 	write-host ""
