@@ -55,7 +55,22 @@ estado_ssh(){
   echo ""
   if systemctl is-active --quiet sshd; then
     echo "Estado: Servicio SSH activo"
-    sudo systemctl status sshd --no-pager
+    echo ""
+    echo "¿Quiere ver el estado detallado del servicio? (s/n): " opcion
+      case $opcion in
+        s|S)
+          echo "**** Estado detallado del Servicio DNS ****"
+          echo ""
+          sudo systemctl status sshd --no-pager
+          break
+          ;;
+        n|N)
+          break
+          ;;
+        *)
+          echo "opcion invalida... ingrese n o s"
+          ;;
+      esac
   else
     echo "Estado: Servicio SHH inactivo"
   fi
