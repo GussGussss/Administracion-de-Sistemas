@@ -56,7 +56,7 @@ estado_ssh(){
   if systemctl is-active --quiet sshd; then
     echo "Estado: Servicio SSH activo"
     echo ""
-    echo "¿Quiere ver el estado detallado del servicio? (s/n): " opcion
+    read -p "¿Quiere ver el estado detallado del servicio? (s/n): " opcion
       case $opcion in
         s|S)
           echo "**** Estado detallado del Servicio DNS ****"
