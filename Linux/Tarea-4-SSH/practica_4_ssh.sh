@@ -62,10 +62,10 @@ estado_ssh(){
           echo "**** Estado detallado del Servicio DNS ****"
           echo ""
           sudo systemctl status sshd --no-pager
-          break
+          return
           ;;
         n|N)
-          break
+          return
           ;;
         *)
           echo "opcion invalida... ingrese n o s"
