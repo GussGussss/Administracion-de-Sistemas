@@ -49,10 +49,10 @@ estado_dns(){
   echo ""
   echo "****** Estado del servicio DNS ******"
   echo ""
-  if systemctl is-active --quiet openssh-server; then
-    echo "Estado: Servicio DNS activo"
+  if systemctl is-active --quiet sshd; then
+    echo "Estado: Servicio SSH activo"
   else
-    echo "Estado: Servicio DNS inactivo"
+    echo "Estado: Servicio SHH inactivo"
   fi
 }
 
