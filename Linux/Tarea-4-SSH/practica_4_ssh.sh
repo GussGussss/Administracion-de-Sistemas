@@ -5,7 +5,6 @@ ipActual=$(ip -4 addr show enp0s8 | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -
 echo "Hostname: $(hostname)"
 echo "IP: $ipActual"
 echo ""
-echo ""
 
 instalar_ssh(){
   echo ""
@@ -14,7 +13,7 @@ instalar_ssh(){
   if rpm -q openssh-server &>/dev/null; then
     echo "El servicio SSH si esta instalado :D"
       while true; do
-        read -p "¿Quiere reinstalar el servicio? (s/n) "opcion
+        read -p "¿Quiere reinstalar el servicio? (s/n): " opcion
           case $opcion in
             s|S)
               echo "Reinstalando SSH..."
