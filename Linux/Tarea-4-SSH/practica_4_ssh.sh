@@ -42,6 +42,9 @@ instalar_ssh(){
   fi
   sudo systemctl start sshd
   sudo systemctl enable sshd
+  sudo systemctl status firewalld
+  sudo firewall-cmd --permanent --add-service=ssh
+  sudo firewall-cmd --reload
   read -p "Presione ENTER para continuar..."
 }
 
