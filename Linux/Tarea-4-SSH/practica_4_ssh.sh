@@ -42,17 +42,20 @@ instalar_ssh(){
   fi
   sudo systemctl start sshd
   sudo systemctl enable sshd
-  sudo firewall-cmd --permanent --add-service=ssh
-  sudo firewall-cmd --reload
+  if ! sudo firewall-cmd --list-services | grep -qw ssh; then  
+    sudo firewall-cmd --permanent --add-service=ssh
+    sudo firewall-cmd --reload
+  fi
   read -p "Presione ENTER para continuar..."
 }
 
-estado_dns(){
+estado_ssh(){
   echo ""
   echo "****** Estado del servicio DNS ******"
   echo ""
   if systemctl is-active --quiet sshd; then
     echo "Estado: Servicio SSH activo"
+    sudo systemctl status sshd --no-pager
   else
     echo "Estado: Servicio SHH inactivo"
   fi
@@ -68,7 +71,7 @@ while true; do
   read -p "Selecciona un opcion " opcion
   case $opcion in
     1)instalar_ssh ;;
-    2)estado_dns ;;
+    2)estado_ssh ;;
     *) echo "opcion invalida"; sleep 1;;
   esac
 done
