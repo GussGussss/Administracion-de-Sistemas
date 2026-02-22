@@ -45,16 +45,28 @@ instalar_ssh(){
   read -p "Presione ENTER para continuar..."
 }
 
+estado_dns(){
+  echo ""
+  echo "****** Estado del servicio DNS ******"
+  echo ""
+  if systemactl is-active --quiet openssh-server; then
+    echo "Estado: Servicio DNS activo"
+  else
+    echo "Estado: Servicio DNS inactivo"
+  fi
+}
+
 menu_ssh(){
 while true; do
   echo ""
   echo ""
   echo "***** Menu SSH ****"
   echo "1) Instalar servicio SSH"
-
+  echo "2) Estaod del servicio DNS"
   read -p "Selecciona un opcion " opcion
   case $opcion in
     1)instalar_ssh ;;
+    2)estado_dns ;;
     *) echo "opcion invalida"; sleep 1;;
   esac
 done
