@@ -1,7 +1,7 @@
 echo ""
 echo ""
 echo "****** Tarea 4: SSH **********"
-ipActual=$(ip -4 addr show enp0s8 | grep -oP '?<=inet\s)\d+(\.\d+){3}' | head -1)
+ipActual=$(ip -4 addr show enp0s8 | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -1)
 echo "Hostname: $(hostname)"
 echo "IP: $ipActual"
 echo ""
