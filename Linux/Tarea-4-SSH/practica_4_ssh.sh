@@ -83,7 +83,7 @@ while true; do
   echo "***** Menu SSH ****"
   echo "1) Instalar servicio SSH"
   echo "2) Estaod del servicio DNS"
-  read -p "Selecciona un opcion " opcion
+  read -p "Selecciona un opcion: " opcion
   case $opcion in
     1)instalar_ssh ;;
     2)estado_ssh ;;
