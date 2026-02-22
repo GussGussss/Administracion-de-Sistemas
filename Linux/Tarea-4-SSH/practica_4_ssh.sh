@@ -40,6 +40,8 @@ instalar_ssh(){
         echo "Ocurrio un error al instalar el servicio SSH :c"
       fi
   fi
+  sudo systemctl start sshd
+  sudo systemctl enable sshd
   read -p "Presione ENTER para continuar..."
 }
 
