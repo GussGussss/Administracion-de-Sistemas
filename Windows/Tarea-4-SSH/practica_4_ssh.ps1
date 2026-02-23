@@ -12,28 +12,24 @@ function instalar-ssh{
   $ssh=get-windowscapability -online -name OpenSSH.Server~~~~0.0.1.0
   if($ssh.state -eq "Installed"){
     write-host "El servicio SSH si esta instalado"
-    while ($true) {
-      $opcion=read-host "¿Quiere reinstalar el servicio? (s/n)"
+    $opcion=read-host "¿Quiere reinstalar el servicio? (s/n)"
       switch($opcion){
         "s"{
           write-host "Reintalado SSH...."
           remove-windowscapability -online -name OpenSSH.Server~~~~0.0.1.0
           add-windowscapability -online -name OpenSSH.Server~~~~0.0.1.0
           write-host "Reinstalacion completa :D"
-          break
         }
         "S"{
           write-host "Reintalado SSH...."
           remove-windowscapability -online -name OpenSSH.Server~~~~0.0.1.0
           add-windowscapability -online -name OpenSSH.Server~~~~0.0.1.0
           write-host "Reinstalacion completa :D"
-          break
         }
         "n" {break}
         "N" {break}
         default {write-host "Opcion incorrecta.... Ingrese s o n"}
       }
-    }
   }else{
     write-host "El servicio SSH no esta instalado"
     write-host "Instalando servicio SSH...."
