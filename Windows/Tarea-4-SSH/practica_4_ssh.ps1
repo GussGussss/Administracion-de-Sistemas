@@ -41,6 +41,14 @@ function instalar-ssh{
       write-host "Ocurrio un error al instalar el servicio SSH :c"
     }
   }
+
+  $sshPath = "C:\ProgramData\ssh"
+  $rsaKey = Join-Path $sshPath "ssh_host_rsa_key"
+  
+  if (-not (Test-Path $rsaKey)) {
+      Write-Host "Generando claves del servidor SSH..."
+      & "C:\Windows\System32\OpenSSH\ssh-keygen.exe" -A | Out-Null
+  }
   start-service sshd
   set-service -name sshd -startuptype automatic
   if (-not(get-netfirewallrule -name sshd -erroraction silentlycontinue)){
