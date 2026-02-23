@@ -1,4 +1,4 @@
-write-host ""
+﻿write-host ""
 write-host ""
 write-host "******* Tarea 4: SSH *******"
 $ipActual=(get-netipaddress -addressfamily ipv4 | where-object {$_.interfacealias -eq "Ethernet 2" -and $_.ipaddress -notlike "169.*"} | select-object -first 1).ipaddress
@@ -83,7 +83,7 @@ function menu_ssh{
     write-host ""
     write-host "**** Menu SSH ****"
     write-host "1) Instalar servicio SSH"
-    write-host "1) Ver estado del servicio SSH"
+    write-host "2) Ver estado del servicio SSH"
     $opcion=read-host "Selecciona una opcion"
 
     switch($opcion){
