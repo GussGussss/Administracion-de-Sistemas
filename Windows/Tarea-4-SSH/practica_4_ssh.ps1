@@ -16,14 +16,14 @@ function instalar-ssh{
       switch($opcion){
         "s"{
           write-host "Reintalado SSH...."
-          remove-windowscapability -online -name OpenSSH.Server~~~~0.0.1.0
-          add-windowscapability -online -name OpenSSH.Server~~~~0.0.1.0
+          remove-windowscapability -online -name OpenSSH.Server~~~~0.0.1.0 | out-null
+          add-windowscapability -online -name OpenSSH.Server~~~~0.0.1.0 | out-null
           write-host "Reinstalacion completa :D"
         }
         "S"{
           write-host "Reintalado SSH...."
-          remove-windowscapability -online -name OpenSSH.Server~~~~0.0.1.0
-          add-windowscapability -online -name OpenSSH.Server~~~~0.0.1.0
+          remove-windowscapability -online -name OpenSSH.Server~~~~0.0.1.0 | out-null
+          add-windowscapability -online -name OpenSSH.Server~~~~0.0.1.0  | out-null
           write-host "Reinstalacion completa :D"
         }
         "n" {break}
@@ -33,7 +33,7 @@ function instalar-ssh{
   }else{
     write-host "El servicio SSH no esta instalado"
     write-host "Instalando servicio SSH...."
-    add-windowscapability -online -name OpenSSH.Server~~~~0.0.1.0
+    add-windowscapability -online -name OpenSSH.Server~~~~0.0.1.0 | out-null
     $ssh=get-windowscapability -online -name OpenSSH.Server~~~~0.0.1.0
     if ($ssh.state -eq "Installed"){
       write-host "Instalacion completada :D"
@@ -44,7 +44,7 @@ function instalar-ssh{
   start-service sshd
   set-service -name sshd -startuptype automatic
   if (-not(get-netfirewallrule -name sshd -erroraction silentlycontinue)){
-    new-netfirewallrule -name sshd -displayname "OpenSSH Server (sshd)" -enabled true -direction inbound -protocol TCP -action allow -localport 22
+    new-netfirewallrule -name sshd -displayname "OpenSSH Server (sshd)" -enabled true -direction inbound -protocol TCP -action allow -localport 22 | out-null
   }
   read-host "Presione ENTER para continuar"
 }
