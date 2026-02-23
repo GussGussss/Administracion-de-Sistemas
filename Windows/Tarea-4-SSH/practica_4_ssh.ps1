@@ -52,6 +52,7 @@ function instalar-ssh{
   }
   read-host "Presione ENTER para continuar"
 }
+}
 
 function menu_ssh{
   while ($true) {
