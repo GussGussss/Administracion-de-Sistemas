@@ -63,7 +63,7 @@ function menu_ssh{
     $opcion=read-host "Selecciona una opcion"
 
     switch($opcion){
-      "1" {instalar_ssh}
+      "1" {instalar-ssh}
       default {write-host "Opcion invalida" }
     }
   }
