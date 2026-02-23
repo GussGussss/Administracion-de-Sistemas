@@ -49,8 +49,8 @@ function instalar-ssh{
       Write-Host "Generando claves del servidor SSH..."
       & "C:\Windows\System32\OpenSSH\ssh-keygen.exe" -A | Out-Null
   }
-  start-service sshd
   set-service -name sshd -startuptype automatic
+  start-service sshd
   if (-not(get-netfirewallrule -name sshd -erroraction silentlycontinue)){
     new-netfirewallrule -name sshd -displayname "OpenSSH Server (sshd)" -enabled true -direction inbound -protocol TCP -action allow -localport 22 | out-null
   }
