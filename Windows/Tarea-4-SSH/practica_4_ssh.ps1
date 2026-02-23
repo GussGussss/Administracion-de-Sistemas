@@ -71,11 +71,11 @@ function estado-ssh{
       "n" {return}
       "N" {return}
       default {write-host "Opcion invalida... ingresa s o n"}
+    }
     }else{
       write-host "Estado: Servicio SSH inactivo
     }
   }
-}
 
 function menu_ssh{
   while ($true) {
