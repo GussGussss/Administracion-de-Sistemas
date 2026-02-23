@@ -56,22 +56,22 @@ function estado-ssh{
 
   $servicio=get-service sshd -erroraction silentlycontinue
   if($servicio.status -eq "Running"){
-    write-host "Estado: Servicio SSH actiov"
+    write-host "Estado: Servicio SSH activo"
     write-host ""
     $opcion=read-host "¿Quiere ver el estado detallado del servicio? (s/n) "
     switch ($opcion) {
-      "s"{
+      "s" {
         get-service sshd | format-list *
         return
       }
-      "S"{
+      "S" {
         get-service sshd | format-list *
         return
       }
-      "n" {return}
-      "N" {return}
-      default {write-host "Opcion invalida... ingresa s o n"}
-    }
+      "n" { return }
+      "N"  {return }
+      default { write-host "Opcion invalida... ingresa s o n" }
+      }
     }else{
       write-host "Estado: Servicio SSH inactivo
     }
