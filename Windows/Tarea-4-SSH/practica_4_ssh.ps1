@@ -1,1 +1,54 @@
-write-host "Hola"
+write-host ""
+write-host ""
+write-host "******* Tarea 4: SSH *******"
+$ipActual=(get-netipaddress -addressfamily ipv4 | where-object {$_.interfacealias -eq "Ethernet 2" -and $_.ipaddress -notlike "169.*"} | select-objetc -first 1).ipaddress
+write-host "Hostname: $env:COMPUTERNAME"
+write-host "IP: $ipActual"
+write-host ""
+
+function instalar-ssh{
+  write-host ""
+  write-host "Checando que el servicio SSH ya este instalado...."
+  $ssh=get-windowscapability -online -name openssh.server~~~~0.0.1.0
+  if($shh.state -eq "Installed"){
+    write-host "El servicio SSH si esta instalado"
+    while ($true) {
+      $opcion=read-host "¿Quiere reinstalar el servicio? (s/n)"
+      switch($opcion){
+        "s"{
+          write-host "Reintalado SSH...."
+          remove-windowscapability -online -name openssh.server~~~~0.0.1.0
+          add-windowscapability -online -name openssh.server~~~~0.0.1.0
+          write-host "Reinstalacion completa :D"
+          break
+        }
+        "S"{
+          write-host "Reintalado SSH...."
+          remove-windowscapability -online -name openssh.server~~~~0.0.1.0
+          add-windowscapability -online -name openssh.server~~~~0.0.1.0
+          write-host "Reinstalacion completa :D"
+          break
+        }
+        "n" {break}
+        "N" {break}
+        default {write-host "Opcion incorrecta.... Ingrese s o n"
+      }
+    }
+  }else{
+    write-host "El servicio SSH no esta instalado"
+    write-host "Instalando servicio SSH...."
+    add-windowscapability -online -name openssh.server~~~~0.0.1.0
+    $ssh=get-windowscapability -online -name openssh.server~~~~0.0.1.0
+    if ($ssh.state -eq "Installed"){
+      write-host "Instalacion completada :D"
+    }else{
+      write-host "Ocurrio un error al instalar el servicio SSH :c"
+    }
+  }
+  start-service sshd
+  set-service -name sshd -startuptype automatic
+  if (-not(get-netfirewallrule -name sshd -erroraction silentlycontinue)){
+    new-netfirewallrule -name sshd -displayname "OpenSSH Server (sshd)" -enabled true -direction inbound -protocol TCP -action allow -localport 22
+  }
+  read-host "Presione ENTER para continuar"
+}
