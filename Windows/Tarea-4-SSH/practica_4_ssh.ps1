@@ -52,3 +52,20 @@ function instalar-ssh{
   }
   read-host "Presione ENTER para continuar"
 }
+
+function menu_ssh{
+  while ($true) {
+    write-host ""
+    write-host ""
+    write-host "**** Menu SSH ****"
+    write-host "1) Instalar servicio SSH"
+    $opcion=read-host "Selecciona una opcion"
+
+    switch($opcion){
+      "1" {instalar_ssh}
+      default {write-host "Opcion invalida"
+    }
+  }
+}
+
+menu_ssh
