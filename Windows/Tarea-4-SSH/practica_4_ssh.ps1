@@ -31,7 +31,7 @@ function instalar-ssh{
         }
         "n" {break}
         "N" {break}
-        default {write-host "Opcion incorrecta.... Ingrese s o n"
+        default {write-host "Opcion incorrecta.... Ingrese s o n"}
       }
     }
   }else{
@@ -51,7 +51,6 @@ function instalar-ssh{
     new-netfirewallrule -name sshd -displayname "OpenSSH Server (sshd)" -enabled true -direction inbound -protocol TCP -action allow -localport 22
   }
   read-host "Presione ENTER para continuar"
-}
 }
 
 function menu_ssh{
