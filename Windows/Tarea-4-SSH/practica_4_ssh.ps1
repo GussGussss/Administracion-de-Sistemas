@@ -49,16 +49,46 @@ function instalar-ssh{
   read-host "Presione ENTER para continuar"
 }
 
+function estado-ssh{
+  write-host ""
+  write-host "***** Estado del servicio SSH *****"
+  write-host ""
+
+  $servicio=get-service sshd -erroraction silentlycontinue
+  if($servicio.status -eq "Running"){
+    write-host "Estado: Servicio SSH actiov"
+    write-host ""
+    $opcion=read-host "¿Quiere ver el estado detallado del servicio? (s/n) "
+    switch ($opcion) {
+      "s"{
+        get-service sshd | format-list *
+        return
+      }
+      "S"{
+        get-service sshd | format-list *
+        return
+      }
+      "n" {return}
+      "N" {return}
+      default {write-host "Opcion invalida... ingresa s o n"}
+    }else{
+      write-host "Estado: Servicio SSH inactivo
+    }
+  }
+}
+
 function menu_ssh{
   while ($true) {
     write-host ""
     write-host ""
     write-host "**** Menu SSH ****"
     write-host "1) Instalar servicio SSH"
+    write-host "1) Ver estado del servicio SSH"
     $opcion=read-host "Selecciona una opcion"
 
     switch($opcion){
       "1" {instalar-ssh}
+      "2" {estado-ssh}
       default {write-host "Opcion invalida" }
     }
   }
