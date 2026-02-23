@@ -73,7 +73,7 @@ function estado-ssh{
       default { write-host "Opcion invalida... ingresa s o n" }
       }
     }else{
-      write-host "Estado: Servicio SSH inactivo
+      write-host "Estado: Servicio SSH inactivo"
     }
   }
 
