@@ -55,7 +55,7 @@ function estado-ssh{
   write-host ""
 
   $servicio=get-service sshd -erroraction silentlycontinue
-  if($servicio and $servicio.status -eq "Running"){
+  if($servicio.status -eq "Running"){
     write-host "Estado: Servicio SSH activo"
     write-host ""
     $opcion=read-host "¿Quiere ver el estado detallado del servicio? (s/n) "
