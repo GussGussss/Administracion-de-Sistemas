@@ -19,7 +19,7 @@ function instalar-dns{
 	        $resp = Read-Host "¿Desea reiniciar ahora? (s/n)"
 	
 	        if ($resp.ToLower() -eq "s") {
-	            Restart-Computer
+	            Restart-Computer -force
 	        }
 	
 	        return
@@ -44,7 +44,7 @@ function instalar-dns{
 					    $resp = Read-Host "¿Desea reiniciar ahora? (s/n)"
 					
 					    if ($resp.ToLower() -eq "s") {
-					        Restart-Computer
+					        Restart-Computer -force
 					    }
 					
 					    return
@@ -61,7 +61,7 @@ function instalar-dns{
 					    $resp = Read-Host "¿Desea reiniciar ahora? (s/n)"
 					
 					    if ($resp.ToLower() -eq "s") {
-					        Restart-Computer
+					        Restart-Computer -force
 					    }
 					
 					    return
