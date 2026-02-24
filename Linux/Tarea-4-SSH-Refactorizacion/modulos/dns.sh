@@ -1,4 +1,5 @@
 #!/bin/bash
+source ./lib/network.sh
 instalar_dns(){
 	echo ""
 	echo "Verificando si DNS (BIND) esta instalado...."
