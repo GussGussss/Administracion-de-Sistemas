@@ -23,7 +23,7 @@ menu_dhcp() {
 	echo "4) Monitoreo (Ver concesiones)"
 	echo "5) Eliminar Scope"	
 	echo "6) Volver al menu principal"
-	echi "0) Salir"
+	echo "0) Salir"
 	read -p "Selecciones una opcion: " opcion
 	
 	case $opcion in
