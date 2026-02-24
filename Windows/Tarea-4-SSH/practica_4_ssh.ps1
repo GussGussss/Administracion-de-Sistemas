@@ -1,11 +1,3 @@
-﻿write-host ""
-write-host ""
-write-host "******* Tarea 4: SSH *******"
-$ipActual=(get-netipaddress -addressfamily ipv4 | where-object {$_.interfacealias -eq "Ethernet 2" -and $_.ipaddress -notlike "169.*"} | select-object -first 1).ipaddress
-write-host "Hostname: $env:COMPUTERNAME"
-write-host "IP: $ipActual"
-write-host ""
-
 function instalar-ssh{
   write-host ""
   write-host "Checando que el servicio SSH ya este instalado...."
