@@ -93,4 +93,3 @@ function menu_ssh{
     }
   }
 }
-menu_ssh
