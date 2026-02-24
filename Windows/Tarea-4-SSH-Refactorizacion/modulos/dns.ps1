@@ -14,7 +14,7 @@ function instalar-dns{
 	    if ($resultado.RestartNeeded -eq "Yes") {
 	
 	        Write-Host ""
-	        Write-Host "Se requiere reiniciar el servidor para completar la instalación."
+	        Write-Host "Se requiere reiniciar el servidor para completar la instalacion."
 	
 	        $resp = Read-Host "¿Desea reiniciar ahora? (s/n)"
 	
@@ -25,7 +25,7 @@ function instalar-dns{
 	        return
 	    }
 	
-	    Write-Host "La instalación ha finalizado correctamente :D"
+	    Write-Host "La instalacion ha finalizado correctamente :D"
 	}
 	else{
 		write-host "El servicio DNS ya esta instalado"
