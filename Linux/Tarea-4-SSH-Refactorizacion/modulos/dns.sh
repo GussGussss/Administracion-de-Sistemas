@@ -166,3 +166,43 @@ eliminar_dominio(){
 	echo "Dominio eliminado correctamente"
 	read -p "Presiona ENTER para continuar"
 }
+
+configurar_named_base(){
+
+    echo ""
+    echo "***** Configuracion base de BIND *****"
+
+    CONF="/etc/named.conf"
+
+    if [[ ! -f ${CONF}.backup ]]; then
+        echo "Creando backup de named.conf..."
+        sudo cp $CONF ${CONF}.backup
+    fi
+
+    if ! sudo grep -q "listen-on port 53 { any; };" $CONF; then
+        echo "Configurando listen-on para todas las interfaces..."
+
+        sudo sed -i '/listen-on port 53/c\        listen-on port 53 { any; };' $CONF
+    else
+        echo "listen-on ya esta correctamente configurado."
+    fi
+
+    if ! sudo grep -q "allow-query     { any; };" $CONF; then
+        echo "Configurando allow-query para permitir consultas externas..."
+
+        sudo sed -i '/allow-query/c\        allow-query     { any; };' $CONF
+    else
+        echo "allow-query ya esta correctamente configurado."
+    fi
+    if sudo named-checkconf; then
+        echo "Configuracion valida."
+        sudo systemctl restart named
+        echo "Servicio DNS reiniciado correctamente."
+    else
+        echo "ERROR en la configuracion. Restaurando backup..."
+        sudo cp ${CONF}.backup $CONF
+        sudo systemctl restart named
+    fi
+
+    echo "Configuracion base finalizada."
+}
