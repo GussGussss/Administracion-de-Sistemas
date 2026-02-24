@@ -141,3 +141,10 @@ EOF
 	echo "Dominio creado correctamente"
 	read -p "presione ENTER para continuar"
 }
+
+listar_dominio(){
+	echo ""
+	echo "***** Lista de Dominios *****"
+	sudo grep 'zone "' /etc/named.rfc1912.zones | awk -F '"' '{print $2}'
+	read -p "Presione ENTER para continuar"
+}
