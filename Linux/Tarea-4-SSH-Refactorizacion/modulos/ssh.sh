@@ -1,3 +1,5 @@
+#!/bin/bash
+
 source ./lib/network.sh
 instalar_ssh(){
   echo ""
