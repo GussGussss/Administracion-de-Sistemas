@@ -119,8 +119,11 @@ done
 	    fi
 	done
 	gateway=$(pedir_ip "Ingrese la puerta de enlace (opcional) (ej: 192.168.0.1) " si)
-	dns=$(pedir_ip "Ingrese el DNS (opcional) (ej: 192.168.0.70) " si)
+	dns=$(pedir_ip "Ingrese el DNS (opcional, ENTER para usar el servidor) " si)
 
+	if [[ -z "$dns" ]]; then
+	    dns="$ipActual"
+	fi
 	if [[ -n "$gateway" ]] && ! misma_red "$gateway" "$segmento" "$prefijo"; then
 		echo "Esta mal: La puerta de enlace no pertenece al segmento"
 		return
