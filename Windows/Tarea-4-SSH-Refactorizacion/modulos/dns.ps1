@@ -6,11 +6,28 @@ function instalar-dns{
 	write-host "**** Instalacion del Servicio DNS *****"
 	$dns=get-windowsfeature DNS
 
-	if(-not $dns.Installed){
-		write-host "Instalando servicio DNS...."
-		install-windowsfeature DNS -includemanagementtools
-		write-host "La instalacion ha finalizado :D"
-	}else{
+		if (-not $dns.Installed) {
+	
+	    Write-Host "Instalando servicio DNS..."
+	    $resultado = Install-WindowsFeature DNS -IncludeManagementTools
+	
+	    if ($resultado.RestartNeeded -eq "Yes") {
+	
+	        Write-Host ""
+	        Write-Host "Se requiere reiniciar el servidor para completar la instalación."
+	
+	        $resp = Read-Host "¿Desea reiniciar ahora? (s/n)"
+	
+	        if ($resp.ToLower() -eq "s") {
+	            Restart-Computer
+	        }
+	
+	        return
+	    }
+	
+	    Write-Host "La instalación ha finalizado correctamente :D"
+	}
+	else{
 		write-host "El servicio DNS ya esta instalado"
 		do{
 			$opcion=read-host "Quieres reinstalar? (s/n)"
@@ -35,7 +52,6 @@ function instalar-dns{
 	}
 
 	verificar-puerto-dns
-	Restart-Service DNS
 	
 	write-host ""
 	Write-Host ""
