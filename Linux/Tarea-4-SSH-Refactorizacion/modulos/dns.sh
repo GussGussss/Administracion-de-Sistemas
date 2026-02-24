@@ -148,3 +148,21 @@ listar_dominio(){
 	sudo grep 'zone "' /etc/named.rfc1912.zones | awk -F '"' '{print $2}'
 	read -p "Presione ENTER para continuar"
 }
+
+eliminar_dominio(){
+	echo ""
+	echo "***** Eliminar dominio ******"
+	read -p "Ingresa el nombre del dominio a eliminar: " dominio
+	if ! sudo grep -q "zone \"$dominio\"" /etc/named.rfc1912.zones; then
+		echo "El dominio no existe"
+		read -p "Presione ENTER para continuar"
+		return
+	fi
+	zona_file="/var/named/$dominio.db"
+	sudo sed -i "/zone \"$dominio\"/,/};/d" /etc/named.rfc1912.zones
+	sudo rm -f $zona_file
+	sudo named-checkconf
+	sudo systemctl restart named
+	echo "Dominio eliminado correctamente"
+	read -p "Presiona ENTER para continuar"
+}
