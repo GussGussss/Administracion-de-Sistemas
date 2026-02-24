@@ -174,3 +174,47 @@ done
 	read -p "presion ENTER para volver al menu"
 
 }
+
+generar_config_kea(){
+	CONFIG_FILE="/etc/kea/kea-dhcp4.conf"
+
+	echo "Generando configuracion del KEA DHCP"
+
+	sudo tee $CONFIG_FILE > /dev/null <<EOF
+{
+	"Dhcp4":{
+		"interfaces-config":{
+			"interfaces": [ "enp0s8" ]
+	},
+	"lease-database": {
+		"type": "memfile",
+		"persist": true,
+		"name": "/var/lib/kea/kea-leases4.csv"
+	},
+	"valid-lifetime": $leaseTime,
+
+	"subnet4": [
+		{
+			"subnet": "$segmento/$prefijo",
+			"id": 1,
+			"pools": [
+				{
+					"pool": "$nuevoInicioPool - $rangoFinal"
+				}
+			],
+			"option-data": [
+				    {
+				        "name": "routers",
+				        "data": "$gateway"
+				    }$( [[ -n "$dns" ]] && echo ',
+				    {
+				        "name": "domain-name-servers",
+				        "data": "'"$dns"'"
+				    }' )
+				]
+		}
+	]
+}
+}
+EOF
+}
