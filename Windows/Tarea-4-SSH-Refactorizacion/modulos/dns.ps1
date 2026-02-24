@@ -34,8 +34,38 @@ function instalar-dns{
 			switch ($opcion.tolower()){
 				"s" {
 					write-host "Reinstalando servicio DNS...."
-					uninstall-windowsfeature DNS
-					install-windowsfeature DNS -includemanagementtools
+					$resultadoRemove = Uninstall-WindowsFeature DNS
+
+					if ($resultadoRemove.RestartNeeded -eq "Yes") {
+					
+					    Write-Host ""
+					    Write-Host "Se requiere reiniciar para completar la desinstalación."
+					
+					    $resp = Read-Host "¿Desea reiniciar ahora? (s/n)"
+					
+					    if ($resp.ToLower() -eq "s") {
+					        Restart-Computer
+					    }
+					
+					    return
+					}
+					
+					Write-Host "Instalando nuevamente DNS..."
+					$resultadoInstall = Install-WindowsFeature DNS -IncludeManagementTools
+					
+					if ($resultadoInstall.RestartNeeded -eq "Yes") {
+					
+					    Write-Host ""
+					    Write-Host "Se requiere reiniciar para completar la instalación."
+					
+					    $resp = Read-Host "¿Desea reiniciar ahora? (s/n)"
+					
+					    if ($resp.ToLower() -eq "s") {
+					        Restart-Computer
+					    }
+					
+					    return
+					}
 					write-host "La reinstalacion ha finalizado :D"
 				}
 				"n" {
