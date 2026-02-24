@@ -90,3 +90,23 @@ calcular_prefijo_desde_rango(){
 	
 	echo $pref
 }
+
+misma_red(){
+    local ip=$1
+    local red=$2
+    local prefijo=$3
+
+    [[ "$(calcular_red "$ip" "$prefijo")" == "$red" ]]
+}
+
+
+calcular_red(){
+    local ip=$1
+    local prefijo=$2
+
+    local ip_int=$(ip_entero "$ip")
+    local mascara=$(( 0xFFFFFFFF << (32 - prefijo) & 0xFFFFFFFF ))
+    local red_int=$(( ip_int & mascara ))
+
+    entero_ip $red_int
+}
