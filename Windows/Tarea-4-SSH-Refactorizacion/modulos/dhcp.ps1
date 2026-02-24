@@ -1,3 +1,4 @@
+. .\lib\network.ps1
 function instalar-dhcp{
 
     $dhcp = Get-WindowsFeature DHCP
