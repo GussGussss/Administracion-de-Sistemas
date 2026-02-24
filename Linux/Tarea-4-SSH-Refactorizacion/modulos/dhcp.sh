@@ -1,3 +1,6 @@
+#!/bin/bash
+source ./lib/network.sh
+
 instalar_kea(){
 	echo ""
 	echo "Verificando si el servicio DHCP (KEA) está instalado..."
