@@ -1,3 +1,5 @@
+#!/bin/bash
+
 validar_ip(){
 	local ip=$1
 	local expresionRegular="^([0-9]{1,3}\.){3}[0-9]{1,3}$"
@@ -121,3 +123,5 @@ calcular_broadcast(){
 
     entero_ip $broadcast_int
 }
+
+#!/bin/bash
