@@ -110,3 +110,14 @@ calcular_red(){
 
     entero_ip $red_int
 }
+
+calcular_broadcast(){
+    local red=$1
+    local prefijo=$2
+
+    local red_int=$(ip_entero "$red")
+    local mascara=$(( 0xFFFFFFFF << (32 - prefijo) & 0xFFFFFFFF ))
+    local broadcast_int=$(( red_int | (~mascara & 0xFFFFFFFF) ))
+
+    entero_ip $broadcast_int
+}
