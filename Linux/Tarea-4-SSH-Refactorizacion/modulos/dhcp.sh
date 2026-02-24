@@ -218,3 +218,12 @@ generar_config_kea(){
 }
 EOF
 }
+
+validar_config_kea(){
+	sudo kea-dhcp4 -t /etc/kea/kea-dhcp4.conf
+}
+
+reiniciar_kea(){
+	sudo systemctl enable kea-dhcp4
+	sudo systemctl restart kea-dhcp4
+}
