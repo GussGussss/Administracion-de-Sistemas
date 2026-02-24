@@ -51,3 +51,14 @@ pedir_ip(){
 		fi
 	done
 }
+
+ip_entero(){
+	local ip=$1
+	IFS='.' read -r a b c d <<< "$ip"
+	echo $((a<<24 | b<<16 | c<< 8 | d))
+}
+
+entero_ip(){
+	local entero=$1
+	echo "$(( (entero>>24)&255 )).$(( (entero>>16)&255 )).$(( (entero>>8)&255 )).$(( entero&255 ))"
+}
