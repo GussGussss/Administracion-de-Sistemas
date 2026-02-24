@@ -21,3 +21,14 @@ instalar_dns(){
 	sudo firewall-cmd --reload
 	read -p "presiona ENTER para continuar"
 }
+
+estado_dns(){
+	echo ""
+	echo "***** Estado del servicio DNS (BIND) *****"
+	if systemctl is-active --quiet named; then
+		echo "Servicio DNS (BIND) activo"
+	else
+		echo "Servicio DNS (BIND) no activo"
+	fi
+	read -p "Pesiona ENTER para continuar"
+}
