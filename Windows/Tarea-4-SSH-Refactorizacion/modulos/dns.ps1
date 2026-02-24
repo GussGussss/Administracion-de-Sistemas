@@ -1,3 +1,5 @@
+. .\lib\network.ps1
+
 function instalar-dns{
 	write-host ""
 	write-host ""
