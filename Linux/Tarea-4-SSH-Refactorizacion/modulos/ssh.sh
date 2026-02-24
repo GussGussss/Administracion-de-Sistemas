@@ -1,12 +1,4 @@
 source ./lib/network.sh
-echo ""
-echo ""
-echo "****** Tarea 4: SSH **********"
-ipActual=$(ip -4 addr show enp0s8 | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -1)
-echo "Hostname: $(hostname)"
-echo "IP: $ipActual"
-echo ""
-
 instalar_ssh(){
   echo ""
   echo "Checando que el servicio SSH ya este instalado....."
@@ -76,21 +68,3 @@ estado_ssh(){
     echo "Estado: Servicio SHH inactivo"
   fi
 }
-
-menu_ssh(){
-while true; do
-  echo ""
-  echo ""
-  echo "***** Menu SSH ****"
-  echo "1) Instalar servicio SSH"
-  echo "2) Estaod del servicio DNS"
-  read -p "Selecciona un opcion: " opcion
-  case $opcion in
-    1)instalar_ssh ;;
-    2)estado_ssh ;;
-    *) echo "opcion invalida"; sleep 1;;
-  esac
-done
-}
-
-menu_ssh
