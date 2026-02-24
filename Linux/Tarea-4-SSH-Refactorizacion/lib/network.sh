@@ -62,3 +62,31 @@ entero_ip(){
 	local entero=$1
 	echo "$(( (entero>>24)&255 )).$(( (entero>>16)&255 )).$(( (entero>>8)&255 )).$(( entero&255 ))"
 }
+
+calcular_prefijo_desde_rango(){
+    local ipInicio=$1
+    local ipFin=$2
+
+    local ini=$(ip_entero "$ipInicio")
+    local fin=$(ip_entero "$ipFin")
+
+    local xor=$(( ini ^ fin ))
+    local bits=0
+
+    while (( xor > 0 )); do
+        xor=$(( xor >> 1 ))
+        ((bits++))
+    done
+
+	local pref=$((32 - bits))
+	
+	if (( pref < 1 )); then
+	    pref=1
+	fi
+	
+	if (( pref > 29 )); then
+	    pref=29
+	fi
+	
+	echo $pref
+}
