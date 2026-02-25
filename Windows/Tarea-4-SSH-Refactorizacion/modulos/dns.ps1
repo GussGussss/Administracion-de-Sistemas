@@ -96,7 +96,14 @@ function instalar-dns{
 	}
 	
 	Write-Host "Firewall configurado correctamente."
-	
+	$adaptador = Get-NetAdapter -Name "Ethernet 2"
+
+	if ($adaptador) {
+	    Set-DnsClientServerAddress -InterfaceIndex $adaptador.ifIndex -ResetServerAddresses
+	    Set-DnsClientServerAddress -InterfaceIndex $adaptador.ifIndex -ServerAddresses 127.0.0.1
+	    Clear-DnsClientCache
+	    Write-Host "DNS local configurado en Ethernet 2."
+	}
 	read-host "presiona ENTER para continuar"
 }
 
