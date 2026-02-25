@@ -110,12 +110,16 @@ function cambiar-ip-servidor{
     Write-Host "Cambiando IP del servidor a $NuevaIP..."
 
     $adaptador = Get-NetAdapter -Name "Ethernet 2"
+    $ifIndex = $adaptador.ifIndex
 
-    Get-NetIPAddress -InterfaceIndex $adaptador.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
+    Get-NetIPAddress -InterfaceIndex $ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
 
-    New-NetIPAddress -InterfaceIndex $adaptador.ifIndex -IPAddress $NuevaIP -PrefixLength $Prefijo
+    New-NetIPAddress -InterfaceIndex $ifIndex -IPAddress $NuevaIP -PrefixLength $Prefijo
 
-    Set-DnsClientServerAddress -InterfaceIndex $adaptador.ifIndex -ServerAddresses $NuevaIP
+    Set-DnsClientServerAddress -InterfaceIndex $ifIndex -ResetServerAddresses
+    Set-DnsClientServerAddress -InterfaceIndex $ifIndex -ServerAddresses $NuevaIP
+
+    Clear-DnsClientCache
 
     Write-Host "Nueva IP y DNS configurados correctamente."
 }
