@@ -202,6 +202,7 @@ function crear-dominio{
 	read-host "Presione ENTERE para continuar"
 	Clear-DnsServerCache -Force
 	Restart-Service DNS
+	Clear-DnsClientCache
 }
 
 function todos-los-dominios{
