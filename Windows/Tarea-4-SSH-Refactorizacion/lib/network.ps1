@@ -111,11 +111,11 @@ function cambiar-ip-servidor{
 
     $adaptador = Get-NetAdapter -Name "Ethernet 2"
 
-	Get-NetIPAddress -InterfaceIndex $adaptador.ifIndex -AddressFamily IPv4 | Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
+    Get-NetIPAddress -InterfaceIndex $adaptador.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
 
-	Get-NetIPAddress -InterfaceIndex $adaptador.ifIndex -AddressFamily IPv4 | Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
+    New-NetIPAddress -InterfaceIndex $adaptador.ifIndex -IPAddress $NuevaIP -PrefixLength $Prefijo
 
-	Set-DnsClientServerAddress -InterfaceIndex $adaptador.ifIndex -ServerAddresses $NuevaIP
+    Set-DnsClientServerAddress -InterfaceIndex $adaptador.ifIndex -ServerAddresses $NuevaIP
 
     Write-Host "Nueva IP y DNS configurados correctamente."
 }
