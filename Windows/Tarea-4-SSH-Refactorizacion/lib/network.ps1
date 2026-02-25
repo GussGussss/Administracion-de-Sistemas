@@ -123,3 +123,23 @@ function cambiar-ip-servidor{
 
     Write-Host "Nueva IP y DNS configurados correctamente."
 }
+
+function forzar-dns-local {
+    $adaptador = Get-NetAdapter -Name "Ethernet 2"
+
+    if ($adaptador) {
+        Write-Host "Forzando DNS local en Ethernet 2..."
+
+        Set-DnsClientServerAddress -InterfaceIndex $adaptador.ifIndex -ResetServerAddresses
+
+        Set-DnsClient -InterfaceIndex $adaptador.ifIndex -RegisterThisConnectionsAddress $false
+
+        Set-DnsClientServerAddress -InterfaceIndex $adaptador.ifIndex -ServerAddresses 127.0.0.1
+
+        Clear-DnsClientCache
+
+        Restart-Service Dnscache -Force
+
+        Write-Host "DNS local configurado correctamente."
+    }
+}
