@@ -193,6 +193,7 @@ function configurar-dhcp{
 	$scopeIP = [System.Net.IPAddress]::Parse($segmento)
 
 	cambiar-ip-servidor -NuevaIP $ipServidor -Prefijo $prefijo
+	priorizar-red-interna
 	set-dhcpserverv4optionvalue -scopeid $scopeIP -Router $gateway -Force
 	set-dhcpserverv4optionvalue -scopeid $scopeIP -DnsServer $dns -Force
 
