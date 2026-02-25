@@ -146,10 +146,14 @@ done
 	fi
 	
 	echo "Cambiando IPs..."
-	sudo ip -4 addr flush dev enp0s8
-
-	sudo ip addr add $ipServidor/$prefijo dev enp0s8
-	sudo ip link set enp0s8 up
+	CONN="enp0s8"
+	
+	sudo nmcli connection modify $CONN ipv4.method manual
+	sudo nmcli connection modify $CONN ipv4.addresses "$ipServidor/$prefijo"
+	sudo nmcli connection modify $CONN ipv4.gateway ""
+	sudo nmcli connection modify $CONN ipv4.dns "$ipServidor"
+	sudo nmcli connection modify $CONN ipv4.ignore-auto-dns yes
+	sudo nmcli connection up $CONN
 	sleep 2
 	
 	ipActual=$ipServidor
