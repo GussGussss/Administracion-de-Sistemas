@@ -151,7 +151,10 @@ done
 	sudo ip addr add $ipServidor/$prefijo dev enp0s8
 	sudo ip link set enp0s8 up
 	sleep 2
-
+	
+	ipActual=$ipServidor
+	configurar_dns_local
+	
 	if [[ -z "$gateway" ]]; then
 	    red_entero=$(ip_entero "$segmento")
 	    broadcast_entero=$(ip_entero "$broadcast")
@@ -232,6 +235,17 @@ validar_config_kea(){
 reiniciar_kea(){
 	sudo systemctl enable kea-dhcp4
 	sudo systemctl restart kea-dhcp4
+}
+
+configurar_dns_local(){
+    echo "Configurando servidor para usar su propio DNS..."
+
+    sudo nmcli connection modify enp0s8 ipv4.dns "$ipServidor"
+    sudo nmcli connection modify enp0s8 ipv4.ignore-auto-dns yes
+
+    sudo nmcli connection up enp0s8 > /dev/null 2>&1
+
+    echo "DNS local configurado en $ipServidor"
 }
 
 eliminar_scope(){
