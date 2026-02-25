@@ -157,6 +157,8 @@ done
 	sleep 2
 	
 	ipActual=$ipServidor
+	export ipActual
+
 	configurar_dns_local
 	
 	if [[ -z "$gateway" ]]; then
