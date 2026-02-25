@@ -1,5 +1,5 @@
 #!/bin/bash
-ipActual=$(ip -4 addr show enp0s8 | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -1)
+ipActual=$(nmcli -g IP4.ADDRESS device show enp0s8 | cut -d/ -f1)
 export ipActual
 source ./lib/network.sh
 source ./modulos/dhcp.sh
