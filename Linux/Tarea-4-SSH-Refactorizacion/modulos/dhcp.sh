@@ -145,6 +145,13 @@ done
 	    return
 	fi
 	
+	if [[ -z "$gateway" ]]; then
+	    red_entero=$(ip_entero "$segmento")
+	    broadcast_entero=$(ip_entero "$broadcast")
+	    gateway_entero=$((broadcast_entero - 1))
+	    gateway=$(entero_ip $gateway_entero)
+	fi
+
 	echo "Cambiando IPs..."
 	CONN="enp0s8"
 	
@@ -158,16 +165,7 @@ done
 	
 	ipActual=$ipServidor
 	export ipActual
-
-	configurar_dns_local
 	
-	if [[ -z "$gateway" ]]; then
-	    red_entero=$(ip_entero "$segmento")
-	    broadcast_entero=$(ip_entero "$broadcast")
-	    gateway_entero=$((broadcast_entero - 1))
-	    gateway=$(entero_ip $gateway_entero)
-	fi
-
 	if [[ "$gateway" == "$broadcast" ]]; then
 	    echo "Error: El gateway calculado es la direccion broadcast ($broadcast)"
 	    return
