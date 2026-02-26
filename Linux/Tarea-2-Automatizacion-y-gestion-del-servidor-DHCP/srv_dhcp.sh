@@ -173,136 +173,89 @@ calcular_broadcast(){
 }
 
 configurar_parametros(){
-	echo "**** CONFIGURACION DEL DHCP ******"
-	read -p "Nombre del ambito: " ambito
+    echo "**** CONFIGURACION DEL DHCP ******"
+    read -p "Nombre del ambito: " ambito
 
-	while true; do
-		segmento=$(pedir_ip "Ingrese el segmento de Red (ej: 192.168.0.0) " si)
-		break
-	done
+    while true; do
+        segmento=$(pedir_ip "Ingrese el segmento de Red (ej: 192.168.0.0) " si)
+        break
+    done
 
-while true; do
-	rangoInicial=$(pedir_ip "Ingrese el rango inicial de la IP (ej: 192.168.0.100) ")
-	rangoFinal=$(pedir_ip "Ingrese el rango final de la IP (ej: 192.168.0.150) ")
+    while true; do
+        rangoInicial=$(pedir_ip "Ingrese el rango inicial de la IP (ej: 10.10.10.0) ")
+        rangoFinal=$(pedir_ip "Ingrese el rango final de la IP (ej: 10.10.10.10) ")
 
-	if (( $(ip_entero "$rangoInicial") >= $(ip_entero "$rangoFinal" ) )); then
-		echo "Esta mal: El rango inicial debe ser menor al rango final o no deben de ser iguales"
-		continue
-	fi
+        if (( $(ip_entero "$rangoInicial") >= $(ip_entero "$rangoFinal" ) )); then
+            echo "Esta mal: El rango inicial debe ser menor al rango final"
+            continue
+        fi
 
-	read -p "Ingrese el prefijo manual (opcional, ej: 24): " prefijo_manual
+        read -p "Ingrese el prefijo manual (opcional, ej: 24): " prefijo_manual
 
-	if [[ -n "$prefijo_manual" ]]; then
-	    prefijo=$prefijo_manual
-	    echo "Prefijo manual usado: /$prefijo"
-	else
-	    prefijo=$(calcular_prefijo_desde_rango "$rangoInicial" "$rangoFinal")
-	    echo "Prefijo calculado automaticamente: /$prefijo"
-	fi
+        if [[ -n "$prefijo_manual" ]]; then
+            prefijo=$prefijo_manual
+        else
+            prefijo=$(calcular_prefijo_desde_rango "$rangoInicial" "$rangoFinal")
+            echo "Prefijo calculado automaticamente: /$prefijo"
+        fi
 
+        # Calculamos red y broadcast solo para uso informativo/configuración, 
+        # pero ya no bloqueamos si las IPs coinciden con ellos.
+        segmento_temp=$(calcular_red "$rangoInicial" "$prefijo")
+        broadcast_temp=$(calcular_broadcast "$segmento_temp" "$prefijo")
+        
+        # Si el usuario no puso segmento, usamos el calculado
+        if [[ -z "$segmento" ]]; then
+            segmento="$segmento_temp"
+        fi
+        
+        broadcast="$broadcast_temp"
+        break
+    done
 
-	segmento_temp=$(calcular_red "$rangoInicial" "$prefijo")
-	broadcast_temp=$(calcular_broadcast "$segmento_temp" "$prefijo")
-	
-	if [[ -n "$segmento" && "$segmento" != "$segmento_temp" ]]; then
-	    echo "El segmento ingresado no coincide con el segmento calculado ($segmento_temp)"
-	    echo "Se usará el segmento calculado."
-	fi
+    while true; do
+        read -p "Ingrese el tiempo (ej: 600) " leaseTime
+        if [[ "$leaseTime" =~ ^[0-9]+$ ]] && (( leaseTime > 0 )); then
+            break
+        else
+            echo "No debe de ser 0 o menor"
+        fi
+    done
 
-	#if [[ "$rangoInicial" == "$segmento_temp" ]]; then
-	#    echo "Esta mal: El rango inicial no puede ser la direccion de red ($segmento_temp)"
-	#    continue
-	#fi
-	if [[ "$rangoFinal" == "$broadcast_temp" ]]; then
-	    echo "Esta mal: El rango final no puede ser la direccion broadcast ($broadcast_temp)"
-	    continue
-	fi
-	
-	break
-done
-	segmento="$segmento_temp"
-	broadcast="$broadcast_temp"
-	
-	ini_entero=$(ip_entero "$rangoInicial")
-	seg_entero=$(ip_entero "$segmento")
-	
-	if (( ini_entero < seg_entero )); then
-	    echo "El rango no está alineado correctamente a la red calculada"
-	    return
-	fi
-	fin_entero=$(ip_entero "$rangoFinal")
-	broadcast_entero=$(ip_entero "$broadcast")
-	
-	if (( fin_entero > broadcast_entero )); then
-	    echo "El rango excede el tamaño de la red calculada"
-	    return
-	fi
+    gateway=$(pedir_ip "Ingrese la puerta de enlace (opcional) " si)
+    dns=$(pedir_ip "Ingrese el DNS (opcional) " si)
 
-	while true; do
-	    read -p "Ingrese el tiempo (ej: 600) " leaseTime
-	    
-	    if [[ "$leaseTime" =~ ^[0-9]+$ ]] && (( leaseTime > 0 )); then
-	        break
-	    else
-	        echo "No debe de ser 0 o menor"
-	    fi
-	done
-	gateway=$(pedir_ip "Ingrese la puerta de enlace (opcional) (ej: 192.168.0.1) " si)
-	dns=$(pedir_ip "Ingrese el DNS (opcional) (ej: 192.168.0.70) " si)
+    # Definimos la IP del servidor como la inicial del rango y el pool también
+    ipServidor="$rangoInicial"
+    nuevoInicioPool="$rangoInicial"
+    
+    echo "Cambiando IPs en la interfaz enp0s8..."
+    sudo ip -4 addr flush dev enp0s8
+    sudo ip addr add $ipServidor/$prefijo dev enp0s8
+    sudo ip link set enp0s8 up
+    sleep 2
 
-	if [[ -n "$gateway" ]] && ! misma_red "$gateway" "$segmento" "$prefijo"; then
-		echo "Esta mal: La puerta de enlace no pertenece al segmento"
-		return
-	fi
+    # Lógica de Gateway por defecto si se dejó vacío
+    if [[ -z "$gateway" ]]; then
+        broadcast_entero=$(ip_entero "$broadcast")
+        gateway_entero=$((broadcast_entero - 1))
+        gateway=$(entero_ip $gateway_entero)
+    fi
 
-	ipServidor="$rangoInicial"
+    echo ""
+    echo "**** Datos ingresados ****"
+    echo "Segmento de red: $segmento"
+    echo "Rango de IPs: $rangoInicial - $rangoFinal"
+    echo "Gateway: $gateway"
+    echo "DNS: $dns"
+    echo ""
+    
+    generar_config_kea
+    validar_config_kea
+    reiniciar_kea
 
-	if [[ "$ipServidor" == "$segmento" ]]; then
-	    echo "Error: No puedes usar la direccion de red ($segmento) como IP del servidor"
-	    return
-	fi
-	
-	nuevoInicioPool="$rangoInicial"
-	
-	if [[ "$ipServidor" == "$broadcast" ]]; then
-	    echo "Error: No puedes asignar la direccion broadcast al servidor"
-	    return
-	fi
-	
-	echo "Cambiando IPs..."
-	sudo ip -4 addr flush dev enp0s8
-
-	sudo ip addr add $ipServidor/$prefijo dev enp0s8
-	sudo ip link set enp0s8 up
-	sleep 2
-
-	if [[ -z "$gateway" ]]; then
-	    red_entero=$(ip_entero "$segmento")
-	    broadcast_entero=$(ip_entero "$broadcast")
-	    gateway_entero=$((broadcast_entero - 1))
-	    gateway=$(entero_ip $gateway_entero)
-	fi
-
-	if [[ "$gateway" == "$broadcast" ]]; then
-	    echo "Error: El gateway calculado es la direccion broadcast ($broadcast)"
-	    return
-	fi
-
-	echo ""
-	echo "**** datos ingresado ****"
-	echo "segmento de red: $segmento"
-	echo "Rango de IPs: $rangoInicial - $rangoFinal"
-	echo "Gateway: $gateway"
-	echo "DNS: $dns"
-	echo ""
-	
-	generar_config_kea
-	validar_config_kea
-	reiniciar_kea
-
-	echo "Servidor DHCP configurado"
-	read -p "presion ENTER para volver al menu"
-
+    echo "Servidor DHCP configurado exitosamente"
+    read -p "Presiona ENTER para volver al menu"
 }
 
 estado_dhcp_kea(){
