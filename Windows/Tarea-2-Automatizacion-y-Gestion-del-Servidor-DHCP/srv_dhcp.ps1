@@ -182,38 +182,42 @@ function configurar-dhcp {
     $rangoInicial = pedir-ip "Ingrese el rango inicial (ej: 10.10.10.0)"
     $rangoFinal   = pedir-ip "Ingrese el rango final (ej: 10.10.10.10)"
     
-    $prefijo = calcular-prefijo-desde-rango $rangoInicial $rangoFinal
-    if ($prefijo -ge 24 -and $rangoInicial.EndsWith(".0")) {
-        $prefijoParaWindows = 23 # TRUCO: Forzamos /23 para que acepte la IP .0 como válida
-        Write-Host "Ajustando prefijo a /23 para compatibilidad de Windows con IP .0"
+    $prefijoBase = calcular-prefijo-desde-rango $rangoInicial $rangoFinal
+    
+    # FORZADO DE MÁSCARA PARA WINDOWS (.0)
+    # Si la IP termina en .0, forzamos /23 y la máscara correspondiente
+    if ($rangoInicial.EndsWith(".0")) {
+        $prefijoParaWindows = 23
+        $mask = "255.255.254.0" 
+        Write-Host "Ajustando prefijo a /23 y máscara a 255.255.254.0 para permitir IP .0"
     } else {
-        $prefijoParaWindows = $prefijo
+        $prefijoParaWindows = $prefijoBase
+        $maskNumero = [uint32]([math]::Pow(2,32) - [math]::Pow(2,(32 - [int]$prefijoParaWindows)))
+        $mask = entero-a-ip $maskNumero
     }
 
     $segmento = calcular-red $rangoInicial $prefijoParaWindows
-    $maskNumero = [uint32]([math]::Pow(2,32) - [math]::Pow(2,(32 - [int]$prefijoParaWindows)))
-    $mask = entero-a-ip $maskNumero
-
     $lease = read-host "Ingresa el tiempo de concesion (minutos)"
     $gateway = pedir-ip "Ingrese el gateway (opcional)" $true
     $dns = pedir-ip "Ingrese el DNS (opcional, ENTER para usar servidor)" $true
     if ([string]::IsNullOrWhiteSpace($dns)) { $dns = $rangoInicial }
 
-    # Creación del Scope
+    # 1. Reiniciar servicio para asegurar limpieza
     Restart-Service dhcpserver -Force
     Start-Sleep -Seconds 2
     
+    # 2. Creación del Scope (Usando la máscara forzada)
     Write-Host "Creando Ambito $ambito ($rangoInicial - $rangoFinal)..."
     Add-DhcpServerv4Scope -Name $ambito -StartRange $rangoInicial -EndRange $rangoFinal -SubNetmask $mask -LeaseDuration (New-TimeSpan -Minutes $lease) -State Active
 
-    # Configuración de Opciones
+    # 3. Configuración de Opciones (Usando el ID de red calculado)
     $scopeIP = [System.Net.IPAddress]::Parse($segmento)
     if (-not [string]::IsNullOrWhiteSpace($gateway)) {
         Set-DhcpServerv4OptionValue -ScopeId $scopeIP -Router $gateway -Force
     }
     Set-DhcpServerv4OptionValue -ScopeId $scopeIP -DnsServer $dns -Force
 
-    # Cambio de IP de la interfaz
+    # 4. Cambio de IP del Servidor (NMCLI equivalente en Windows)
     cambiar-ip-servidor -NuevaIP $rangoInicial -Prefijo $prefijoParaWindows
     priorizar-red-interna
     
