@@ -4,8 +4,8 @@ $ipActual = (get-netipaddress -addressfamily IPv4 | where-object { $_.interfacea
 write-host "Host: $hostname"
 write-host "IP: $ipActual"
 
-function validar-ip{
-	param ([string]$IP)
+function validar-ip {
+    param ([string]$IP)
 
     if ($IP -notmatch '^([0-9]{1,3}\.){3}[0-9]{1,3}$'){
         return $false
@@ -20,13 +20,13 @@ function validar-ip{
 
     if ($IP -eq "0.0.0.0" -or
         $IP -eq "255.255.255.255" -or
-        $IP -eq "127.0.0.1"){
+        $IP -eq "127.0.0.1" -or
+        $IP -eq "127.0.0.0"){
         return $false
     }
 
     return $true
 }
-
 function pedir-ip{
     param(
         [string]$mensaje,
@@ -171,7 +171,6 @@ function calcular-prefijo-desde-rango {
 }
 
 function configurar-dhcp{
-	instalar-dhcp
 	write-host "***** CONFIGURACION DEL DHCP ******"
 	$ambito = read-host "Nombre del ambito: "
 
@@ -196,22 +195,22 @@ function configurar-dhcp{
 			
 			$broadcastTemp = calcular-broadcast (calcular-red $rangoInicial $prefijo) $prefijo
 			
-			if ($rangoFinal -eq $broadcastTemp) {
-			    Write-Host "No puedes usar la direccion broadcast"
-			    $valido = $false
-			    continue
-			}
+			#if ($prefijo -ne 31 -and $rangoFinal -eq $broadcastTemp) {
+			#    Write-Host "No puedes usar la direccion broadcast"
+			#    $valido = $false
+			#    continue
+			#}
 
 			$segmentoCalculado = calcular-red $rangoInicial $prefijo
 
 			$redInicio = calcular-red $rangoInicial $prefijo
 			$redFinal  = calcular-red $rangoFinal   $prefijo
 			
-			if ($redInicio -ne $redFinal){
-			    Write-Host "El rango inicial y final no pertenecen al mismo segmento."
-			    $valido = $false
-			    continue
-			}
+			#if ($redInicio -ne $redFinal){
+			#    Write-Host "El rango inicial y final no pertenecen al mismo segmento."
+			#    $valido = $false
+			#    continue
+			#}
 			if (-not [string]::IsNullOrWhiteSpace($segmento)) {
 			    if ($segmento -ne $segmentoCalculado) {
 			        Write-Host "El rango no pertenece al segmento"
@@ -232,7 +231,7 @@ function configurar-dhcp{
 
 	$broadcastNumero = ip-a-entero $broadcast
 
-	if ($fin -gt $broadcastNumero){
+	if ($prefijo -ne 31 -and $fin -gt $broadcastNumero){
 	    Write-Host "El rango excede el tamaño de la red calculada"
 	    return
 	}
@@ -243,17 +242,32 @@ function configurar-dhcp{
 
 	$ipServidor = $rangoInicial
 	
-	$iniNumero = ip-a-entero $rangoInicial
-	$nuevoInicioNumero = $iniNumero + 1
-	$nuevoInicioPool = entero-a-ip $nuevoInicioNumero
+	#$iniNumero = ip-a-entero $rangoInicial
+	#$nuevoInicioNumero = $iniNumero + 1
+	#$nuevoInicioPool = entero-a-ip $nuevoInicioNumero
+	$nuevoInicioPool = $rangoInicial
+	
+	$gateway = pedir-ip "Ingrese el gateway (opcional)" $true
+	
+	$dnsInput = Read-Host "Ingrese el DNS (opcional.. Deja vacio para tomar como DNS la IP del servidor)"
+	
+	if ([string]::IsNullOrWhiteSpace($dnsInput)) {
+	    $dns = $ipServidor
+	}
+	else {
+	    $listaDns = $dnsInput.Split(",")
+	
+	    foreach ($d in $listaDns) {
+	        $d = $d.Trim()
+	        if (-not (validar-ip $d)) {
+	            Write-Host "DNS invalido: $d"
+	            return
+	        }
+	    }
+	
+	    $dns = ($listaDns | ForEach-Object { $_.Trim() })
+	}
 
-    	$gateway = pedir-ip "Ingrese el gateway (opcional)" $true
-    	$dns     = pedir-ip "Ingrese el DNS (opcional)" $true
-
-    	if ([string]::IsNullOrWhiteSpace($dns)){
-        	$dns = $rangoInicial
-    	}
-		
 		Restart-Service dhcpserver -Force
 		Start-Sleep -Seconds 3
 
@@ -299,11 +313,12 @@ function configurar-dhcp{
 
 	$scopeIP = [System.Net.IPAddress]::Parse($segmento)
 
+	cambiar-ip-servidor -NuevaIP $ipServidor -Prefijo $prefijo
+	priorizar-red-interna
 	set-dhcpserverv4optionvalue -scopeid $scopeIP -Router $gateway -Force
-	
 	set-dhcpserverv4optionvalue -scopeid $scopeIP -DnsServer $dns -Force
 
-	cambiar-ip-servidor -NuevaIP $ipServidor -Prefijo $prefijo
+	Restart-Service DNS
 }
 
 function estado-dhcp{
