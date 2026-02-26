@@ -172,7 +172,9 @@ function calcular-prefijo-desde-rango {
 
 function priorizar-red-interna {
     $interno = Get-NetAdapter -Name "Ethernet 2" -ErrorAction SilentlyContinue
-    if ($interno) { Set-NetIPInterface -InterfaceIndex $interno.ifIndex -InterfaceMetric 10 }
+    if ($interno) { 
+        Set-NetIPInterface -InterfaceIndex $interno.ifIndex -InterfaceMetric 10 
+    }
 }
 
 function configurar-dhcp {
@@ -186,11 +188,11 @@ function configurar-dhcp {
     
     # FORZADO DE MÁSCARA PARA WINDOWS (.0)
     # Si la IP termina en .0, forzamos /23 y la máscara correspondiente
-    if ($rangoInicial.EndsWith(".0")) {
-        $prefijoParaWindows = 23
-        $mask = "255.255.254.0" 
-        Write-Host "Ajustando prefijo a /23 y máscara a 255.255.254.0 para permitir IP .0"
-    } else {
+	if ($rangoInicial.EndsWith(".0")) {
+	    $mask = "255.255.254.0" # Esto es una máscara /23
+	    $prefijoParaWindows = 23
+	    Write-Host "Ajustando máscara a /23 para que Windows acepte la IP .0"
+	}else {
         $prefijoParaWindows = $prefijoBase
         $maskNumero = [uint32]([math]::Pow(2,32) - [math]::Pow(2,(32 - [int]$prefijoParaWindows)))
         $mask = entero-a-ip $maskNumero
