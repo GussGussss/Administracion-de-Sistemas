@@ -170,155 +170,54 @@ function calcular-prefijo-desde-rango {
     return 32 - $bits
 }
 
-function configurar-dhcp{
-	write-host "***** CONFIGURACION DEL DHCP ******"
-	$ambito = read-host "Nombre del ambito: "
+function priorizar-red-interna {
+    $interno = Get-NetAdapter -Name "Ethernet 2" -ErrorAction SilentlyContinue
+    if ($interno) { Set-NetIPInterface -InterfaceIndex $interno.ifIndex -InterfaceMetric 10 }
+}
 
-	$segmento = pedir-ip "Ingrese el segmento de red (ej: 192.168.0.0)" $true
+function configurar-dhcp {
+    write-host "`n***** CONFIGURACION DEL DHCP ******"
+    $ambito = read-host "Nombre del ambito: "
+    
+    $rangoInicial = pedir-ip "Ingrese el rango inicial (ej: 10.10.10.0)"
+    $rangoFinal   = pedir-ip "Ingrese el rango final (ej: 10.10.10.10)"
+    
+    $prefijo = calcular-prefijo-desde-rango $rangoInicial $rangoFinal
+    if ($prefijo -ge 24 -and $rangoInicial.EndsWith(".0")) {
+        $prefijoParaWindows = 23 # TRUCO: Forzamos /23 para que acepte la IP .0 como válida
+        Write-Host "Ajustando prefijo a /23 para compatibilidad de Windows con IP .0"
+    } else {
+        $prefijoParaWindows = $prefijo
+    }
 
-	do{
-		$rangoInicial = pedir-ip "Ingrese el rango inicial"
-	    	$rangoFinal   = pedir-ip "Ingrese el rango final"
-	
-	    	$ini = ip-a-entero $rangoInicial
-	    	$fin = ip-a-entero $rangoFinal
+    $segmento = calcular-red $rangoInicial $prefijoParaWindows
+    $maskNumero = [uint32]([math]::Pow(2,32) - [math]::Pow(2,(32 - [int]$prefijoParaWindows)))
+    $mask = entero-a-ip $maskNumero
 
-	    	if ($ini -ge $fin){
-	        	write-host "El rango inicial debe ser menor al rango final"
-	        	$valido = $false
-	        	continue
-	    	}
+    $lease = read-host "Ingresa el tiempo de concesion (minutos)"
+    $gateway = pedir-ip "Ingrese el gateway (opcional)" $true
+    $dns = pedir-ip "Ingrese el DNS (opcional, ENTER para usar servidor)" $true
+    if ([string]::IsNullOrWhiteSpace($dns)) { $dns = $rangoInicial }
 
-			$prefijo = calcular-prefijo-desde-rango $rangoInicial $rangoFinal
-			Write-Host "Prefijo calculado: /$prefijo"
+    # Creación del Scope
+    Restart-Service dhcpserver -Force
+    Start-Sleep -Seconds 2
+    
+    Write-Host "Creando Ambito $ambito ($rangoInicial - $rangoFinal)..."
+    Add-DhcpServerv4Scope -Name $ambito -StartRange $rangoInicial -EndRange $rangoFinal -SubNetmask $mask -LeaseDuration (New-TimeSpan -Minutes $lease) -State Active
 
-			
-			$broadcastTemp = calcular-broadcast (calcular-red $rangoInicial $prefijo) $prefijo
-			
-			#if ($prefijo -ne 31 -and $rangoFinal -eq $broadcastTemp) {
-			#    Write-Host "No puedes usar la direccion broadcast"
-			#    $valido = $false
-			#    continue
-			#}
+    # Configuración de Opciones
+    $scopeIP = [System.Net.IPAddress]::Parse($segmento)
+    if (-not [string]::IsNullOrWhiteSpace($gateway)) {
+        Set-DhcpServerv4OptionValue -ScopeId $scopeIP -Router $gateway -Force
+    }
+    Set-DhcpServerv4OptionValue -ScopeId $scopeIP -DnsServer $dns -Force
 
-			$segmentoCalculado = calcular-red $rangoInicial $prefijo
-
-			$redInicio = calcular-red $rangoInicial $prefijo
-			$redFinal  = calcular-red $rangoFinal   $prefijo
-			
-			#if ($redInicio -ne $redFinal){
-			#    Write-Host "El rango inicial y final no pertenecen al mismo segmento."
-			#    $valido = $false
-			#    continue
-			#}
-			if (-not [string]::IsNullOrWhiteSpace($segmento)) {
-			    if ($segmento -ne $segmentoCalculado) {
-			        Write-Host "El rango no pertenece al segmento"
-			        $valido = $false
-			        continue
-			    }
-			}
-			else {
-			    $segmento = $segmentoCalculado
-			}
-
-	    $valido = $true
-	
-	}while(-not $valido)
-
-	$segmento = calcular-red $rangoInicial $prefijo
-	$broadcast = calcular-broadcast $segmento $prefijo
-
-	$broadcastNumero = ip-a-entero $broadcast
-
-	if ($prefijo -ne 31 -and $fin -gt $broadcastNumero){
-	    Write-Host "El rango excede el tamaño de la red calculada"
-	    return
-	}
-
-
-	Write-Host "Segmento calculado: $segmento"
-	Write-Host "Broadcast calculado: $broadcast"
-
-	$ipServidor = $rangoInicial
-	
-	#$iniNumero = ip-a-entero $rangoInicial
-	#$nuevoInicioNumero = $iniNumero + 1
-	#$nuevoInicioPool = entero-a-ip $nuevoInicioNumero
-	$nuevoInicioPool = $rangoInicial
-	
-	$gateway = pedir-ip "Ingrese el gateway (opcional)" $true
-	
-	$dnsInput = Read-Host "Ingrese el DNS (opcional.. Deja vacio para tomar como DNS la IP del servidor)"
-	
-	if ([string]::IsNullOrWhiteSpace($dnsInput)) {
-	    $dns = $ipServidor
-	}
-	else {
-	    $listaDns = $dnsInput.Split(",")
-	
-	    foreach ($d in $listaDns) {
-	        $d = $d.Trim()
-	        if (-not (validar-ip $d)) {
-	            Write-Host "DNS invalido: $d"
-	            return
-	        }
-	    }
-	
-	    $dns = ($listaDns | ForEach-Object { $_.Trim() })
-	}
-
-		Restart-Service dhcpserver -Force
-		Start-Sleep -Seconds 3
-
-		if ([string]::IsNullOrWhiteSpace($gateway)){
-		    $broadcastNumero = ip-a-entero $broadcast
-		    $gatewayNumero = $broadcastNumero - 1
-		
-		    if ($gatewayNumero -le $iniNumero -or $gatewayNumero -gt $fin){
-		        $gatewayNumero = $iniNumero + 1
-		    }
-		
-		    $gateway = entero-a-ip $gatewayNumero
-		}
-	
-	do{
-		$lease = read-host "Ingresa el tiempo (en minutos) "
-		if( -not ($lease -match '^[0-9]+$') -or [int] $lease -le 0 ){
-			write-host "No debe de de ser 0 :D"
-			$valido = $false
-		}else{
-			$valido = $true
-		}
-	}while(-not $valido)
-
-    	write-host ""
-    	write-host "Segmento: $segmento"
-    	write-host "Rango: $rangoInicial - $rangoFinal"
-    	write-host "Gateway: $gateway"
-    	write-host "DNS: $dns"
-
-	$segmentoServidor = (($ipActual -split '\.')[0..2] -join '.') + ".0"
-	
-	$maskNumero = [uint32]([math]::Pow(2,32) - [math]::Pow(2,(32 - [int]$prefijo)))
-	$mask = entero-a-ip $maskNumero
-
-	$scopeExiste=get-dhcpserverv4scope -erroraction SilentlyContinue | where-object {$_.subnetaddress -eq $segmento}	
-	
-	if($scopeExiste) {
-		write-host "El scope (ambito) ya existe, no se volver a crear"
-	}else{
-		add-dhcpserverv4scope -Name $ambito -StartRange $nuevoInicioPool -EndRange $rangoFinal -SubNetmask $mask -leaseduration (new-timespan -minutes $lease) -State Active
-	}
-
-	$scopeIP = [System.Net.IPAddress]::Parse($segmento)
-
-	cambiar-ip-servidor -NuevaIP $ipServidor -Prefijo $prefijo
-	priorizar-red-interna
-	set-dhcpserverv4optionvalue -scopeid $scopeIP -Router $gateway -Force
-	set-dhcpserverv4optionvalue -scopeid $scopeIP -DnsServer $dns -Force
-
-	Restart-Service DNS
+    # Cambio de IP de la interfaz
+    cambiar-ip-servidor -NuevaIP $rangoInicial -Prefijo $prefijoParaWindows
+    priorizar-red-interna
+    
+    write-host "`nConfiguracion completada con exito."
 }
 
 function estado-dhcp{
