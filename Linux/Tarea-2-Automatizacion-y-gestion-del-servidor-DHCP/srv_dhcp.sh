@@ -262,9 +262,7 @@ done
 	    return
 	fi
 	
-	ini_entero=$(ip_entero "$rangoInicial")
-	nuevo_inicio_entero=$((ini_entero + 1))
-	nuevoInicioPool=$(entero_ip $nuevo_inicio_entero)
+	nuevoInicioPool="$rangoInicial"
 	
 	if [[ "$ipServidor" == "$broadcast" ]]; then
 	    echo "Error: No puedes asignar la direccion broadcast al servidor"
