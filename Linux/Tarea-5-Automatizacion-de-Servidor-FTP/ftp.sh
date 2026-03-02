@@ -157,10 +157,8 @@ crear_usuarios(){
        echo "Grupo inválido"
        continue
     fi
-    useradd -d /ftp/"$nombre" -s /bin/bash -g "$grupo" "$nombre"
+    useradd -d /ftp -s /bin/bash -g "$grupo" "$nombre"
     echo "$nombre:$password" | chpasswd
-    chown "$nombre":"$grupo" /ftp/"$nombre"
-    chmod 700 /ftp/"$nombre"
   done
 }
 
