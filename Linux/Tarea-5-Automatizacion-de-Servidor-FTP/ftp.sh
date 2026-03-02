@@ -55,7 +55,7 @@ instalar_ftp(){
 }
 
 configurarftp(){
-  cp -n /etc/vsftpd/vsftpd.conf /etc/vsftpd/vsftpd.conf.bak
+  cp -n /etc/vsftpd.conf /etc/vsftpd.conf.bak
 
   if grep -q "^anonymous_enable" /etc/vsftpd.conf; then
     sed -i "s/^anonymous_enable=.*/anonymous_enable=YES/" /etc/vsftpd.conf
