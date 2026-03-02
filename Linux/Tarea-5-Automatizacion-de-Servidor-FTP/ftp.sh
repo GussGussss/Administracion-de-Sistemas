@@ -188,11 +188,11 @@ menu(){
     case $opcion in
       1)instalar_ftp ;;
       2)configurarftp ;;
-      3)crear_grupo
-      4)crear_estructura
-      5)asignar_permisos
-      6)crear_usuarios
-      7)cambiar_grupo_usuario
+      3)crear_grupo ;;
+      4)crear_estructura ;;
+      5)asignar_permisos ;;
+      6)crear_usuarios ;;
+      7)cambiar_grupo_usuario ;;
       0)exit 0;;
       *) echo "opcion invalida"; sleep 1;;
     esac
