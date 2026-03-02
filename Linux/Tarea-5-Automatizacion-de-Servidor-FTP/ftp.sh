@@ -115,12 +115,41 @@ crear_grupo(){
 crear_estructura(){
   local raiz="/ftp"
   mkdir -p "$raiz"/{general,reprobados,recursadores}
-  echo 
+  echo "Estructura base creada"
 }
 
-asignar_permisos(){
-
+asignar_permisos_base(){
+  chgrp reprobados /ftp/reprobados
+  chgrp recursadores /ftp/recursadores
+  chmod 2770 /ftp/reprobados
+  chmod 2770 /ftp/recursadores
+  chmod 775 /ftp/general
+  chmod 755 /ftp
 }
+
+crear_usuarios(){
+  read -p "Ingrese el numero de usuarios a capturar: " usuarios
+  for (( i=1; i<=usuarios; i++ )); do
+    echo "Usuario $i"
+    read -p "Nombre de usuario: " nombre
+    if id "$nombre" &>/dev/null; then
+      echo "El usuario ya existe"
+      continue
+    fi
+    read -p "Contraseña: " password
+    read -p "Grupo: " grupo
+    if [[ "$grupo" != "reprobados" && "$grupo" != "recursadores" ]]; then
+       echo "Grupo inválido"
+       continue
+    fi
+    useradd -d /ftp -s /sbin/nologin -g "$grupo" "$nombre"
+    echo "$nombre:$password" | chpasswd
+    mkdir -p /ftp/"$nombre"
+    chown "$nombre":"$grupo" /ftp/"$nombre"
+    chmod 700 /ftp/"$nombre"
+  done
+}
+
 menu(){
   echo ""
   while true; do  
