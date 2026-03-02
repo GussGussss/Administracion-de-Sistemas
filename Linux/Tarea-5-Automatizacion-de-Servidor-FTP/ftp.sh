@@ -41,14 +41,16 @@ instalar_ftp(){
   		fi
   fi
 
-  if systemctl is-active --quiet vsftpd; then
-    echo "El servicio ya esta activo"
-  else
-    echo "Iniciando servicio"
-    systemctl start vsftpd
-    systemctl enable vsftpd
+  if ! systemctl is-enabled --quiet vsftpd; then
+     echo "Habilitando servicio..."
+     systemctl enable vsftpd
   fi
-
+  
+  if ! systemctl is-active --quiet vsftpd; then
+     echo "Iniciando servicio..."
+     systemctl start vsftpd
+  fi
+  
   read -p "Presione ENTER para continuar..."
 }
 
