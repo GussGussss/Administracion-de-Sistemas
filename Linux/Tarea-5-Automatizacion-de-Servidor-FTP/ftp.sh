@@ -96,6 +96,22 @@ configurarftp(){
   systemctl restart vsftpd
 }
 
+crear_grupo(){
+  if gatent group reprobados > /dev/null; then
+    echo "El grupo reprobados ya existe"
+  else
+    echo "Creando grupo reprobados...."
+    groupadd reprobados
+  fi
+
+  if gatent group recursadores > /dev/null; then
+    echo "El grupo recursadores ya existe"
+  else
+    echo "Creando grupo recursadores...."
+    groupadd recursadores
+  fi
+}
+
 menu(){
   echo ""
   while true; do  
