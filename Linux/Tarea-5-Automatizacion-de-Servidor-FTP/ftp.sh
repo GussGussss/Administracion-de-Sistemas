@@ -112,6 +112,15 @@ crear_grupo(){
   fi
 }
 
+crear_estructura(){
+  local raiz="/ftp"
+  mkdir -p "$raiz"/{general,reprobados,recursadores}
+  echo 
+}
+
+asignar_permisos(){
+
+}
 menu(){
   echo ""
   while true; do  
