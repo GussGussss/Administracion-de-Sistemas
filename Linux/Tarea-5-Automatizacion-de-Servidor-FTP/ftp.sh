@@ -92,7 +92,11 @@ configurarftp(){
   else
     echo "pasv_enable=YES" >> /etc/vsftpd.conf
   fi
-  
+  if grep -q "^anon_root" /etc/vsftpd.conf; then
+    sed -i "s|^anon_root=.*|anon_root=/ftp/general|" /etc/vsftpd.conf
+  else
+    echo "anon_root=/ftp/general" >> /etc/vsftpd.conf
+  fi
   systemctl restart vsftpd
 }
 
@@ -118,7 +122,7 @@ crear_estructura(){
   echo "Estructura base creada"
 }
 
-asignar_permisos_base(){
+asignar_permisos(){
   chgrp reprobados /ftp/reprobados
   chgrp recursadores /ftp/recursadores
   chmod 2770 /ftp/reprobados
@@ -150,14 +154,45 @@ crear_usuarios(){
   done
 }
 
+cambiar_grupo_usuario(){
+  echo ""
+  echo "***** Cambiar de grupo a usuario *****"
+  read -p "Ingrese el nombre del usario: " nombre
+  if ! id "$nombre" &>/dev/null; then
+    echo "El usuario no existe"
+    return
+  fi
+  read -p "Ingrese el nuevo grupo del usuario: " nuevo_grupo
+  if [[ "$nuevo_grupo" != "reprobados" && "$nuevo_grupo" != "recursadores" ]]; then
+    echo "Grupo inválido"
+    return
+  fi
+  usermod -g "$nuevo_grupo" "$nombre"
+  chown "$nombre":"$nuevo_grupo" /ftp/"$nombre"
+  echo "Grupo del usuario "$nombre" actualizado :D"
+}
+
 menu(){
   echo ""
   while true; do  
     echo "***** Menu FTP *****"
     echo "1) instalar servicio FTP"
+    echo "2) Configurar vsftpd"
+    echo "3) Crear grupos"
+    echo "4) Crear estructura base"
+    echo "5) Asignar permisos base"
+    echo "6) Crear usuarios"
+    echo "7) Cambiar grupo usuario"
+    echo "0) Salir"
     read -p "Seleccione una opcion: " opcion
     case $opcion in
       1)instalar_ftp ;;
+      2)configurarftp ;;
+      3)crear_grupo
+      4)crear_estructura
+      5)asignar_permisos
+      6)crear_usuarios
+      7)cambiar_grupo_usuario
       0)exit 0;;
       *) echo "opcion invalida"; sleep 1;;
     esac
