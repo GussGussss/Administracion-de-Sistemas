@@ -53,6 +53,7 @@ instalar_ftp(){
 }
 
 menu(){
+  echo ""
   while true; do  
     echo "***** Menu FTP *****"
     echo "1) instalar servicio FTP"
