@@ -108,6 +108,11 @@ configurarftp(){
   else
     echo "anon_root=/ftp/general" >> "$CONF"
   fi
+  if grep -q "^local_root" "$CONF"; then
+    sed -i "s|^local_root=.*|local_root=/ftp|" "$CONF"
+  else
+    echo "local_root=/ftp" >> "$CONF"
+  fi
   systemctl restart vsftpd
 }
 
