@@ -5,7 +5,7 @@ fi
 
 echo "****** Tarea 5: Automatizacion de Servidor FTP ********"
 
-instalar_vsftpd(){
+instalar_ftp(){
   echo ""
   echo "Verificando si el servicio vsftpd esta instalado....."
   echo ""
@@ -28,3 +28,18 @@ instalar_vsftpd(){
     systemctl start vsftpd
   fi
 }
+
+menu(){
+  while true; do  
+    echo "***** Menu FTP *****"
+    echo "1) instalar servicio FTP"
+    read -p "Seleccione una opcion: " opcion
+    case $opcion in
+      1)instalar_ftp ;;
+      0)exit 0;;
+      *) echo "opcion invalida"; sleep 1;;
+    esac
+  done
+}
+
+menu
