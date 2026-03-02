@@ -3,6 +3,14 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 
+configurar_firewall(){
+  if systemctl is-active --quiet firewalld; then
+     firewall-cmd --permanent --add-service=ftp
+     firewall-cmd --reload
+     echo "Firewall configurado para FTP"
+  fi
+}
+
 echo "****** Tarea 5: Automatizacion de Servidor FTP ********"
 
 instalar_ftp(){
@@ -50,7 +58,7 @@ instalar_ftp(){
      echo "Iniciando servicio..."
      systemctl start vsftpd
   fi
-  
+  configurar_firewall
   read -p "Presione ENTER para continuar..."
 }
 
@@ -149,7 +157,7 @@ crear_usuarios(){
        echo "Grupo inválido"
        continue
     fi
-    useradd -d /ftp -s /sbin/nologin -g "$grupo" "$nombre"
+    useradd -d /ftp -s /bin/bash -g "$grupo" "$nombre"
     echo "$nombre:$password" | chpasswd
     mkdir -p /ftp/"$nombre"
     chown "$nombre":"$grupo" /ftp/"$nombre"
