@@ -54,6 +54,48 @@ instalar_ftp(){
   read -p "Presione ENTER para continuar..."
 }
 
+configurarftp(){
+  cp -n /etc/vsftpd.conf /etc/vsftpd.conf.bak
+
+  if grep -q "^anonymous_enable" /etc/vsftpd.conf; then
+    sed -i "s/^anonymous_enable=.*/anonymous_enable=YES/" /etc/vsftpd.conf
+  else
+    echo "anonymous_enable=YES" >> /etc/vsftpd.conf
+  fi
+  
+  if grep -q "^local_enable" /etc/vsftpd.conf; then
+    sed -i "s/^local_enable=.*/local_enable=YES/" /etc/vsftpd.conf
+  else
+    echo "local_enable=YES" >> /etc/vsftpd.conf
+  fi
+  
+  if grep -q "^write_enable" /etc/vsftpd.conf; then
+    sed -i "s/^write_enable=.*/write_enable=YES/" /etc/vsftpd.conf
+  else
+    echo "write_enable=YES" >> /etc/vsftpd.conf
+  fi
+  
+  if grep -q "^chroot_local_user" /etc/vsftpd.conf; then
+    sed -i "s/^chroot_local_user=.*/chroot_local_user=YES/" /etc/vsftpd.conf
+  else
+    echo "chroot_local_user=YES" >> /etc/vsftpd.conf
+  fi
+
+  if grep -q "^allow_writeable_chroot" /etc/vsftpd.conf; then
+    sed -i "s/^allow_writeable_chroot=.*/allow_writeable_chroot=YES/" /etc/vsftpd.conf
+  else
+    echo "allow_writeable_chroot=YES" >> /etc/vsftpd.conf
+  fi
+
+  if grep -q "^pasv_enable" /etc/vsftpd.conf; then
+    sed -i "s/^pasv_enable=.*/pasv_enable=YES/" /etc/vsftpd.conf
+  else
+    echo "pasv_enable=YES" >> /etc/vsftpd.conf
+  fi
+  
+  systemctl restart vsftpd
+}
+
 menu(){
   echo ""
   while true; do  
