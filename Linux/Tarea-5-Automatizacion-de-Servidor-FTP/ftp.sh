@@ -112,6 +112,14 @@ configurarftp(){
   else
     echo "anon_root=/ftp/general" >> "$CONF"
   fi
+
+  if ! grep -q "^pasv_min_port" "$CONF"; then
+    echo "pasv_min_port=40000" >> "$CONF"
+  fi
+  
+  if ! grep -q "^pasv_max_port" "$CONF"; then
+    echo "pasv_max_port=40100" >> "$CONF"
+  fi
   systemctl restart vsftpd
 }
 
