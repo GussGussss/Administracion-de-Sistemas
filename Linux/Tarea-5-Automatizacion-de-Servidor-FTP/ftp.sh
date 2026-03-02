@@ -1,9 +1,10 @@
 if [[ $EUID -ne 0 ]]; then
-  echo "El script debe de ejecutarse como root"
+  echo "El script debe de ejecutarse como root :D"
   exit 1
 fi
 
 echo "****** Tarea 5: Automatizacion de Servidor FTP ********"
+
 instalar_vsftpd(){
   echo ""
   echo "Verificando si el servicio vsftpd esta instalado....."
