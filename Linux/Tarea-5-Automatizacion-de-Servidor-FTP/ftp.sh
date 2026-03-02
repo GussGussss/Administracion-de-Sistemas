@@ -55,47 +55,50 @@ instalar_ftp(){
 }
 
 configurarftp(){
-  cp -n /etc/vsftpd.conf /etc/vsftpd.conf.bak
-
-  if grep -q "^anonymous_enable" /etc/vsftpd.conf; then
-    sed -i "s/^anonymous_enable=.*/anonymous_enable=YES/" /etc/vsftpd.conf
+  CONF="/etc/vsftpd.conf"
+  cp -n "$CONF" "$CONF.bak"
+  
+  #cp -n /etc/vsftpd.conf /etc/vsftpd.conf.bak
+  
+  if grep -q "^anonymous_enable" "$CONF"; then
+    sed -i "s/^anonymous_enable=.*/anonymous_enable=YES/" "$CONF"
   else
-    echo "anonymous_enable=YES" >> /etc/vsftpd.conf
+    echo "anonymous_enable=YES" >> "$CONF"
   fi
   
-  if grep -q "^local_enable" /etc/vsftpd.conf; then
-    sed -i "s/^local_enable=.*/local_enable=YES/" /etc/vsftpd.conf
+  if grep -q "^local_enable" "$CONF"; then
+    sed -i "s/^local_enable=.*/local_enable=YES/" "$CONF"
   else
-    echo "local_enable=YES" >> /etc/vsftpd.conf
+    echo "local_enable=YES" >> "$CONF"
   fi
   
-  if grep -q "^write_enable" /etc/vsftpd.conf; then
-    sed -i "s/^write_enable=.*/write_enable=YES/" /etc/vsftpd.conf
+  if grep -q "^write_enable" "$CONF"; then
+    sed -i "s/^write_enable=.*/write_enable=YES/" "$CONF"
   else
-    echo "write_enable=YES" >> /etc/vsftpd.conf
+    echo "write_enable=YES" >> "$CONF"
   fi
   
-  if grep -q "^chroot_local_user" /etc/vsftpd.conf; then
-    sed -i "s/^chroot_local_user=.*/chroot_local_user=YES/" /etc/vsftpd.conf
+  if grep -q "^chroot_local_user" "$CONF"; then
+    sed -i "s/^chroot_local_user=.*/chroot_local_user=YES/" "$CONF"
   else
-    echo "chroot_local_user=YES" >> /etc/vsftpd.conf
+    echo "chroot_local_user=YES" >> "$CONF"
   fi
 
-  if grep -q "^allow_writeable_chroot" /etc/vsftpd.conf; then
-    sed -i "s/^allow_writeable_chroot=.*/allow_writeable_chroot=YES/" /etc/vsftpd.conf
+  if grep -q "^allow_writeable_chroot" "$CONF"; then
+    sed -i "s/^allow_writeable_chroot=.*/allow_writeable_chroot=YES/" "$CONF"
   else
-    echo "allow_writeable_chroot=YES" >> /etc/vsftpd.conf
+    echo "allow_writeable_chroot=YES" >> "$CONF"
   fi
 
-  if grep -q "^pasv_enable" /etc/vsftpd.conf; then
-    sed -i "s/^pasv_enable=.*/pasv_enable=YES/" /etc/vsftpd.conf
+  if grep -q "^pasv_enable" "$CONF"; then
+    sed -i "s/^pasv_enable=.*/pasv_enable=YES/" "$CONF"
   else
-    echo "pasv_enable=YES" >> /etc/vsftpd.conf
+    echo "pasv_enable=YES" >> "$CONF"
   fi
-  if grep -q "^anon_root" /etc/vsftpd.conf; then
-    sed -i "s|^anon_root=.*|anon_root=/ftp/general|" /etc/vsftpd.conf
+  if grep -q "^anon_root" "$CONF"; then
+    sed -i "s|^anon_root=.*|anon_root=/ftp/general|" "$CONF"
   else
-    echo "anon_root=/ftp/general" >> /etc/vsftpd.conf
+    echo "anon_root=/ftp/general" >> "$CONF"
   fi
   systemctl restart vsftpd
 }
