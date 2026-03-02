@@ -63,7 +63,7 @@ instalar_ftp(){
 }
 
 configurarftp(){
-  CONF="/etc/vsftpd.conf"
+  CONF="/etc/vsftpd/vsftpd.conf"
   cp -n "$CONF" "$CONF.bak"
   
   #cp -n /etc/vsftpd.conf /etc/vsftpd.conf.bak
