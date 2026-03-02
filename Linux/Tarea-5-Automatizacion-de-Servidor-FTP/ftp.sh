@@ -16,7 +16,7 @@ instalar_ftp(){
     echo "El servicio vsftpd no esta instalado"
     echo ""
     echo "Instalado....."
-    dnf install -y vsftpd /dev/null 2>&1
+    dnf install -y vsftpd
     echo "Instalacion completada :D"
     echo ""
   fi
@@ -26,6 +26,7 @@ instalar_ftp(){
   else
     echo "Iniciando servicio"
     systemctl start vsftpd
+    systemctl enable vsftpd
   fi
 }
 
