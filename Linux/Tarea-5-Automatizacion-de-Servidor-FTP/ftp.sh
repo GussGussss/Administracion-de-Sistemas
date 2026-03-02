@@ -60,6 +60,7 @@ instalar_ftp(){
      systemctl start vsftpd
   fi
   configurar_firewall
+  configurar_selinux
   read -p "Presione ENTER para continuar..."
 }
 
@@ -159,18 +160,29 @@ crear_usuarios(){
   for (( i=1; i<=usuarios; i++ )); do
     echo "Usuario $i"
     read -p "Nombre de usuario: " nombre
+
     if id "$nombre" &>/dev/null; then
       echo "El usuario ya existe"
       continue
     fi
+
     read -p "Contraseña: " password
     read -p "Grupo: " grupo
+
     if [[ "$grupo" != "reprobados" && "$grupo" != "recursadores" ]]; then
        echo "Grupo inválido"
        continue
     fi
-    useradd -d /ftp -s /bin/bash -g "$grupo" "$nombre"
+
+    useradd -d /ftp/"$nombre" -s /sbin/nologin -g "$grupo" "$nombre"
+
     echo "$nombre:$password" | chpasswd
+
+    mkdir -p /ftp/"$nombre"
+
+    chown "$nombre":"$grupo" /ftp/"$nombre"
+    chmod 700 /ftp/"$nombre"
+
   done
 }
 
@@ -190,6 +202,13 @@ cambiar_grupo_usuario(){
   usermod -g "$nuevo_grupo" "$nombre"
   chown "$nombre":"$nuevo_grupo" /ftp/"$nombre"
   echo "Grupo del usuario "$nombre" actualizado :D"
+}
+
+configurar_selinux(){
+  if getenforce | grep -q Enforcing; then
+     setsebool -P ftpd_full_access 1
+     echo "SELinux configurado para FTP"
+  fi
 }
 
 menu(){
