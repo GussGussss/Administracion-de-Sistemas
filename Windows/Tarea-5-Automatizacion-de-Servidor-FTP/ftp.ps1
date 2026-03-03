@@ -102,14 +102,14 @@ function Configurar-FTP {
         New-WebFtpSite -Name $siteName -Port 21 -PhysicalPath $ftpRoot -Force
     }
 
-    # UNIFICADO
+    # Configuración de Aislamiento de Usuarios FTP
+    # Usamos el modo UserHomeDirectory y aplicamos el cambio al sitio específico
     Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/userIsolation" -Name mode -Value "UserHomeDirectory"
-    Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/userIsolation" -Name rootaliaspath -Value "C:\FTP\LocalUser"
     
     # Limpieza de reglas previas
     Clear-WebConfiguration -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization"
 
-    # Permisos FTP
+    # Permisos FTP (Anonymous Read, Roles Write)
     Add-WebConfiguration -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization" -Value @{accessType="Allow"; users="anonymous"; permissions="Read"}
     Add-WebConfiguration -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization" -Value @{accessType="Allow"; roles="reprobados,recursadores"; permissions="Read,Write"}
 
