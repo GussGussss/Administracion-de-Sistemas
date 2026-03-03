@@ -1,0 +1,1 @@
+write-host "ftp ps1"
