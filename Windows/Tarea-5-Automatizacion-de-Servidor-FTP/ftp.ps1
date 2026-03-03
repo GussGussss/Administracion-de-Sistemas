@@ -99,3 +99,72 @@ function Instalar-FTP {
 
     Read-Host "Presione ENTER para continuar..."
 }
+
+function Configurar-FTP {
+
+    Import-Module WebAdministration
+
+    $ftpRoot = "C:\FTP"
+    $siteName = "FTPSite"
+
+    if (-not (Test-Path $ftpRoot)) {
+        New-Item -Path $ftpRoot -ItemType Directory
+    }
+
+    if (-not (Get-WebSite | Where-Object { $_.Name -eq $siteName })) {
+        New-WebFtpSite `
+            -Name $siteName `
+            -Port 21 `
+            -PhysicalPath $ftpRoot `
+            -Force
+    }
+
+    Set-WebConfigurationProperty `
+        -Filter "/system.ftpServer/security/authentication/anonymousAuthentication" `
+        -PSPath "IIS:\Sites\$siteName" `
+        -Name enabled -Value $true
+
+    Set-WebConfigurationProperty `
+        -Filter "/system.ftpServer/security/authentication/basicAuthentication" `
+        -PSPath "IIS:\Sites\$siteName" `
+        -Name enabled -Value $true
+
+    Clear-WebConfiguration `
+        -Filter "/system.ftpServer/security/authorization" `
+        -PSPath "IIS:\Sites\$siteName"
+
+    Add-WebConfiguration `
+        -Filter "/system.ftpServer/security/authorization" `
+        -PSPath "IIS:\Sites\$siteName" `
+        -Value @{
+            accessType="Allow";
+            users="anonymous";
+            permissions="Read"
+        }
+
+    Add-WebConfiguration `
+        -Filter "/system.ftpServer/security/authorization" `
+        -PSPath "IIS:\Sites\$siteName" `
+        -Value @{
+            accessType="Allow";
+            roles="reprobados,recursadores";
+            permissions="Read,Write"
+        }
+
+    Set-ItemProperty `
+        "IIS:\Sites\$siteName" `
+        -Name ftpServer.firewallSupport.passivePortRange `
+        -Value "40000-40100"
+
+    Set-WebConfigurationProperty `
+        -Filter "/system.ftpServer/userIsolation" `
+        -PSPath "IIS:\Sites\$siteName" `
+        -Name mode `
+        -Value "IsolateUsers"
+
+    # Reiniciar servicio FTP
+    Restart-Service FTPSVC
+
+    Write-Host "Configuracion FTP aplicada correctamente :D"
+}
+
