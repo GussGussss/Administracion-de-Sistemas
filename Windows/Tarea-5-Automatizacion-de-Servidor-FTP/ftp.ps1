@@ -309,8 +309,6 @@ function Configurar-SeguridadFTP {
 function Mostrar-Menu {
 
     while ($true) {
-
-        Clear-Host
         Write-Host ""
         Write-Host "***** Menu FTP *****"
         Write-Host "1) Instalar servicio FTP"
