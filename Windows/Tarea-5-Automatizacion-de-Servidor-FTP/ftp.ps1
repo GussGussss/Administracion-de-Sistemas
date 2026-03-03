@@ -159,7 +159,8 @@ function Crear-Estructura {
         "$raiz",
         "$raiz\general",
         "$raiz\reprobados",
-        "$raiz\recursadores"
+        "$raiz\recursadores",
+        "$raiz\LocalUser"
     )
 
     foreach ($dir in $directorios) {
@@ -234,7 +235,7 @@ function Crear-Usuarios {
         Add-LocalGroupMember -Group $grupo -Member $nombre
         Add-LocalGroupMember -Group "ftpusuarios" -Member $nombre
         
-        $rutaUsuario = "C:\FTP\$nombre"
+        $rutaUsuario = "C:\FTP\LocalUser\$nombre"
 
         if (-not (Test-Path $rutaUsuario)) {
             New-Item -Path $rutaUsuario -ItemType Directory | Out-Null
