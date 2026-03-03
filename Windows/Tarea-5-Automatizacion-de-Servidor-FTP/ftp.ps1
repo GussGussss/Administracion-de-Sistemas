@@ -88,32 +88,6 @@ function Instalar-FTP {
     Read-Host "Presione ENTER para continuar..."
 }
 
-function Configurar-FTP {
-    Import-Module WebAdministration
-    $siteName = "FTPSite"
-    $ftpRoot = "C:\FTP"
-    $localUserFolder = "$ftpRoot\LocalUser"
-    
-    if (-not (Test-Path $localUserFolder)) {
-        New-Item -Path $localUserFolder -ItemType Directory | Out-Null
-    }
-
-    if (-not (Get-Website | Where-Object { $_.Name -eq $siteName })) {
-        New-WebFtpSite -Name $siteName -Port 21 -PhysicalPath $ftpRoot -Force
-    }
-    Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/userIsolation" -Name mode -Value "IsolateAllDirectories"
-
-    Clear-WebConfiguration -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization"
-
-    Add-WebConfiguration -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization" -PSPath IIS:\ -Value @{accessType="Allow"; users="anonymous"; permissions="Read"}
-    Add-WebConfiguration -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization" -PSPath IIS:\ -Value @{accessType="Allow"; roles="reprobados,recursadores"; permissions="Read,Write"}
-
-    Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/ssl" -Name controlChannelPolicy -Value "SslAllow"
-    Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/ssl" -Name dataChannelPolicy -Value "SslAllow"
-
-    Restart-Service FTPSVC
-    Write-Host "Configuracion FTP aplicada correctamente :D"
-}
 
 function Crear-Grupos {
 
