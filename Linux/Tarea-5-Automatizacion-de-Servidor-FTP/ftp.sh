@@ -1,348 +1,256 @@
-$usuarioActual = [Security.Principal.WindowsIdentity]::GetCurrent()
-$principal = New-Object Security.Principal.WindowsPrincipal($usuarioActual)
+if [[ $EUID -ne 0 ]]; then
+  echo "El script debe de ejecutarse como root :D"
+  exit 1
+fi
 
-if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Write-Host "El script debe ejecutarse como Administrador :D"
-    exit 1
+configurar_firewall(){
+  if systemctl is-active --quiet firewalld; then
+     firewall-cmd --permanent --add-service=ftp
+     firewall-cmd --permanent --add-port=40000-40100/tcp
+     firewall-cmd --reload
+     echo "Firewall configurado para FTP"
+  fi
 }
 
-function Configurar-Firewall {
+echo "****** Tarea 5: Automatizacion de Servidor FTP ********"
 
-    Write-Host "Configurando Firewall para FTP..."
-    
-    if (-not (Get-NetFirewallRule -DisplayName "FTP Puerto 21" -ErrorAction SilentlyContinue)) {
-        New-NetFirewallRule -DisplayName "FTP Puerto 21" -Direction Inbound -Protocol TCP -LocalPort 21 -Action Allow
-    }
+instalar_ftp(){
+  echo ""
+  echo "Verificando si el servicio vsftpd esta instalado....."
+  echo ""
 
-    if (-not (Get-NetFirewallRule -DisplayName "FTP Pasivo 40000-40100" -ErrorAction SilentlyContinue)) {
-        New-NetFirewallRule -DisplayName "FTP Pasivo 40000-40100" -Direction Inbound -Protocol TCP -LocalPort 40000-40100 -Action Allow
-    }
+  if rpm -q vsftpd &>/dev/null; then
+    echo "El servicio vsftpd ya esta instalado :D"
+    while true; do
+      read -p "Desea reinstalarlo (s/n)?: " opcion
+      echo ""
+      case $opcion in
+        s|S)
+          echo "Reinstalando el servicio vsftpd...."
+          dnf reinstall -y vsftpd > /dev/null 2>&1
+          echo ""
+          echo "Reinstalacion completada :D"
+          break ;;
+        n|N)
+          echo "No se realizara ninguna accion"
+          break ;;
+        *)
+          echo "Opcion invalida... ingrese s o n" ;;
+      esac
+    done
+  else
+    echo "El servicio vsftpd no esta instalado"
+    echo ""
+    echo "Instalado....."
+    dnf install -y vsftpd > /dev/null 2>&1
+      if rpm -q vsftpd &>/dev/null; then
+  			echo "Instalación completada :D"
+  		else
+  			echo "Hubo un error en la instalación."
+  		fi
+  fi
 
-    Write-Host "Firewall configurado correctamente para FTP."
+  if ! systemctl is-enabled --quiet vsftpd; then
+     echo "Habilitando servicio..."
+     systemctl enable vsftpd
+  fi
+  
+  if ! systemctl is-active --quiet vsftpd; then
+     echo "Iniciando servicio..."
+     systemctl start vsftpd
+  fi
+  configurar_firewall
+  configurar_selinux
+  read -p "Presione ENTER para continuar..."
 }
 
-Write-Host "****** Tarea 5: Automatizacion de Servidor FTP ********"
+configurarftp(){
+  CONF="/etc/vsftpd/vsftpd.conf"
+  cp -n "$CONF" "$CONF.bak"
+  
+  #cp -n /etc/vsftpd.conf /etc/vsftpd.conf.bak
 
-function Instalar-FTP {
+  pasv_min_port=40000
+  pasv_max_port=40100
 
-    Write-Host ""
-    Write-Host "Verificando si el servicio FTP (IIS) esta instalado..."
-    Write-Host ""
+  if grep -q "^anonymous_enable" "$CONF"; then
+    sed -i "s/^anonymous_enable=.*/anonymous_enable=YES/" "$CONF"
+  else
+    echo "anonymous_enable=YES" >> "$CONF"
+  fi
+  
+  if grep -q "^local_enable" "$CONF"; then
+    sed -i "s/^local_enable=.*/local_enable=YES/" "$CONF"
+  else
+    echo "local_enable=YES" >> "$CONF"
+  fi
+  
+  if grep -q "^write_enable" "$CONF"; then
+    sed -i "s/^write_enable=.*/write_enable=YES/" "$CONF"
+  else
+    echo "write_enable=YES" >> "$CONF"
+  fi
+  
+  if grep -q "^chroot_local_user" "$CONF"; then
+    sed -i "s/^chroot_local_user=.*/chroot_local_user=YES/" "$CONF"
+  else
+    echo "chroot_local_user=YES" >> "$CONF"
+  fi
 
-    $ftpFeature = Get-WindowsFeature -Name Web-Ftp-Server
+  if grep -q "^allow_writeable_chroot" "$CONF"; then
+    sed -i "s/^allow_writeable_chroot=.*/allow_writeable_chroot=YES/" "$CONF"
+  else
+    echo "allow_writeable_chroot=YES" >> "$CONF"
+  fi
 
-    if ($ftpFeature.Installed) {
+  if grep -q "^pasv_enable" "$CONF"; then
+    sed -i "s/^pasv_enable=.*/pasv_enable=YES/" "$CONF"
+  else
+    echo "pasv_enable=YES" >> "$CONF"
+  fi
+  if grep -q "^anon_root" "$CONF"; then
+    sed -i "s|^anon_root=.*|anon_root=/ftp|" "$CONF"
+  else
+    echo "anon_root=/ftp" >> "$CONF"
+  fi
 
-        Write-Host "El servicio FTP ya esta instalado :D"
+  if ! grep -q "^pasv_min_port" "$CONF"; then
+    echo "pasv_min_port=40000" >> "$CONF"
+  fi
+  
+  if ! grep -q "^pasv_max_port" "$CONF"; then
+    echo "pasv_max_port=40100" >> "$CONF"
+  fi
 
-        while ($true) {
-            $opcion = Read-Host "Desea reinstalarlo (s/n)?"
-            Write-Host ""
-
-            switch ($opcion.ToLower()) {
-                "s" {
-                    Write-Host "Reinstalando el servicio FTP..."
-
-                    Remove-WindowsFeature -Name Web-Ftp-Server -ErrorAction SilentlyContinue
-                    Install-WindowsFeature -Name Web-Server,Web-Ftp-Server,Web-Ftp-Service,Web-Ftp-Ext -IncludeManagementTools
-                    Write-Host ""
-                    Write-Host "Reinstalacion completada :D"
-                    break
-                }
-                "n" {
-                    Write-Host "No se realizara ninguna accion"
-                    break
-                }
-                default {
-                    Write-Host "Opcion invalida... ingrese s o n"
-                }
-            }
-        }
-
-    } else {
-
-        Write-Host "El servicio FTP no esta instalado"
-        Write-Host ""
-        Write-Host "Instalando..."
-
-        $resultado = Install-WindowsFeature -Name Web-Server,Web-Ftp-Server,Web-Ftp-Service,Web-Ftp-Ext -IncludeManagementTools
-        if ($resultado.Success) {
-            Write-Host "Instalacion completada :D"
-        } else {
-            Write-Host "Hubo un error en la instalacion."
-        }
-    }
-
-    if ((Get-Service FTPSVC).StartType -ne "Automatic") {
-        Write-Host "Habilitando servicio..."
-        Set-Service -Name FTPSVC -StartupType Automatic
-    }
-
-    if ((Get-Service FTPSVC).Status -ne "Running") {
-        Write-Host "Iniciando servicio..."
-        Start-Service FTPSVC
-    }
-
-    Configurar-Firewall
-
-    Read-Host "Presione ENTER para continuar..."
+  if ! grep -q "^anon_upload_enable" "$CONF"; then
+    echo "anon_upload_enable=NO" >> "$CONF"
+  fi
+  
+  if ! grep -q "^anon_mkdir_write_enable" "$CONF"; then
+    echo "anon_mkdir_write_enable=NO" >> "$CONF"
+  fi
+  systemctl restart vsftpd
 }
 
-function Configurar-FTP {
+crear_grupo(){
+  if getent group reprobados > /dev/null; then
+    echo "El grupo reprobados ya existe"
+  else
+    echo "Creando grupo reprobados...."
+    groupadd reprobados
+  fi
 
-    Import-Module WebAdministration
+  if getent group recursadores > /dev/null; then
+    echo "El grupo recursadores ya existe"
+  else
+    echo "Creando grupo recursadores...."
+    groupadd recursadores
+  fi
 
-    $ftpRoot = "C:\FTP"
-    $siteName = "FTPSite"
-
-    if (-not (Test-Path $ftpRoot)) {
-        New-Item -Path $ftpRoot -ItemType Directory | Out-Null
-    }
-
-    if (-not (Get-Website | Where-Object { $_.Name -eq $siteName })) {
-        New-WebFtpSite -Name $siteName -Port 21 -PhysicalPath $ftpRoot -Force
-    }
-
-    Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authentication/anonymousAuthentication" -Name enabled -Value True
-    Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authentication/basicAuthentication" -Name enabled -Value True
-
-    Clear-WebConfiguration -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization"
-
-    Add-WebConfiguration -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization" -Value @{accessType="Allow"; users="anonymous"; permissions="Read"}
-        
-    Add-WebConfiguration -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization" -Value @{accessType="Allow"; roles="reprobados,recursadores"; permissions="Read,Write"}
-
-    Set-WebConfigurationProperty -Filter "system.applicationHost/ftpServer/firewallSupport" -Name passivePortRange -Value "40000-40100"
-
-    Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/userIsolation" -Name mode -Value "IsolateAllDirectories"
-
-    Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/ssl" -Name controlChannelPolicy -Value "SslAllow"
-
-    Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/ssl" -Name dataChannelPolicy -Value "SslAllow"
-
-    Restart-Service FTPSVC
-
-    Write-Host "Configuracion FTP aplicada correctamente :D"
+  if ! getent group ftpusuarios > /dev/null; then
+    groupadd ftpusuarios
+  fi     
 }
 
-function Crear-Grupos {
-
-    if (Get-LocalGroup -Name "reprobados" -ErrorAction SilentlyContinue) {
-        Write-Host "El grupo reprobados ya existe"
-    } else {
-        Write-Host "Creando grupo reprobados..."
-        New-LocalGroup -Name "reprobados" -Description "Grupo FTP Reprobados"
-    }
-
-    if (Get-LocalGroup -Name "recursadores" -ErrorAction SilentlyContinue) {
-        Write-Host "El grupo recursadores ya existe"
-    } else {
-        Write-Host "Creando grupo recursadores..."
-        New-LocalGroup -Name "recursadores" -Description "Grupo FTP Recursadores"
-    }
-
-    if (-not (Get-LocalGroup -Name "ftpusuarios" -ErrorAction SilentlyContinue)) {
-        Write-Host "Creando grupo ftpusuarios..."
-        New-LocalGroup -Name "ftpusuarios" -Description "Grupo general de usuarios FTP"
-    } else {
-        Write-Host "El grupo ftpusuarios ya existe"
-    }
-
-    Write-Host "Verificacion de grupos finalizada :D"
+crear_estructura(){
+  local raiz="/ftp"
+  mkdir -p "$raiz"/{general,reprobados,recursadores}
+  echo "Estructura base creada"
 }
 
-function Crear-Estructura {
+asignar_permisos(){
 
-    $raiz = "C:\FTP"
+  chown root:root /ftp
+  chmod 755 /ftp
 
-    $directorios = @(
-        "$raiz",
-        "$raiz\general",
-        "$raiz\reprobados",
-        "$raiz\recursadores",
-        "$raiz\LocalUser"
-    )
+  chgrp reprobados /ftp/reprobados
+  chgrp recursadores /ftp/recursadores
 
-    foreach ($dir in $directorios) {
-        if (-not (Test-Path $dir)) {
-            New-Item -Path $dir -ItemType Directory -Force | Out-Null
-        }
-    }
+  chmod 2770 /ftp/reprobados
+  chmod 2770 /ftp/recursadores
 
-    Write-Host "Estructura base creada correctamente :D"
+  chown root:ftpusuarios /ftp/general
+  chmod 775 /ftp/general
 }
 
-function Asignar-Permisos {
+crear_usuarios(){
+  read -p "Ingrese el numero de usuarios a capturar: " usuarios
+  for (( i=1; i<=usuarios; i++ )); do
+    echo "Usuario $i"
+    read -p "Nombre de usuario: " nombre
 
-    $raiz = "C:\FTP"
+    if id "$nombre" &>/dev/null; then
+      echo "El usuario ya existe"
+      continue
+    fi
 
-    Write-Host "Configurando permisos NTFS..."
+    read -p "Contraseña: " password
+    read -p "Grupo: " grupo
 
-    icacls $raiz /grant "Administrators:(OI)(CI)F" /T | Out-Null
-    icacls $raiz /grant "SYSTEM:(OI)(CI)F" /T | Out-Null
+    if [[ "$grupo" != "reprobados" && "$grupo" != "recursadores" ]]; then
+       echo "Grupo inválido"
+       continue
+    fi
 
-    $general = "$raiz\general"
+    useradd -d /ftp -s /bin/bash -g "$grupo" -G ftpusuarios "$nombre"
+    echo "$nombre:$password" | chpasswd
 
-    icacls $general /grant "ftpusuarios:(OI)(CI)M" | Out-Null
-
-    icacls $general /grant "IUSR:(OI)(CI)R" | Out-Null
-
-    $reprobados = "$raiz\reprobados"
-
-    icacls $reprobados /inheritance:r | Out-Null
-    icacls $reprobados /grant "Administrators:F" | Out-Null
-    icacls $reprobados /grant "SYSTEM:F" | Out-Null
-    icacls $reprobados /grant "reprobados:(OI)(CI)M" | Out-Null
-
-    $recursadores = "$raiz\recursadores"
-
-    icacls $recursadores /inheritance:r | Out-Null
-    icacls $recursadores /grant "Administrators:F" | Out-Null
-    icacls $recursadores /grant "SYSTEM:F" | Out-Null
-    icacls $recursadores /grant "recursadores:(OI)(CI)M" | Out-Null
-
-    Write-Host "Permisos configurados correctamente :D"
+    mkdir -p /ftp/"$nombre"
+    chown "$nombre":"$grupo" /ftp/"$nombre"
+    chmod 700 /ftp/"$nombre"
+  done
 }
 
-function Crear-Usuarios {
-
-    $cantidad = Read-Host "Ingrese el numero de usuarios a capturar"
-
-    for ($i = 1; $i -le [int]$cantidad; $i++) {
-
-        Write-Host ""
-        Write-Host "Usuario $i"
-
-        $nombre = Read-Host "Nombre de usuario"
-
-        # Verificar si ya existe
-        if (Get-LocalUser -Name $nombre -ErrorAction SilentlyContinue) {
-            Write-Host "El usuario ya existe"
-            continue
-        }
-
-        $passwordPlano = Read-Host "Contraseña" -AsSecureString
-        $grupo = Read-Host "Grupo (reprobados / recursadores)"
-
-        if ($grupo -ne "reprobados" -and $grupo -ne "recursadores") {
-            Write-Host "Grupo invalido"
-            continue
-        }
-
-        # Crear usuario
-        New-LocalUser -Name $nombre -Password $passwordPlano -FullName $nombre -Description "Usuario FTP"
-
-        Add-LocalGroupMember -Group $grupo -Member $nombre
-        Add-LocalGroupMember -Group "ftpusuarios" -Member $nombre
-        
-        $rutaUsuario = "C:\FTP\LocalUser\$nombre"
-
-        if (-not (Test-Path $rutaUsuario)) {
-            New-Item -Path $rutaUsuario -ItemType Directory | Out-Null
-        }
-
-        icacls $rutaUsuario /inheritance:r | Out-Null
-        
-        icacls $rutaUsuario /grant "${nombre}:(OI)(CI)F" | Out-Null
-        icacls $rutaUsuario /grant "Administrators:(OI)(CI)F" | Out-Null
-        icacls $rutaUsuario /grant "SYSTEM:(OI)(CI)F" | Out-Null
-        icacls $rutaUsuario /grant "IUSR:(OI)(CI)RX" | Out-Null
-        icacls $rutaUsuario /grant "IIS_IUSRS:(OI)(CI)RX" | Out-Null
-        Write-Host "Usuario $nombre creado correctamente :D"
-    }
+cambiar_grupo_usuario(){
+  echo ""
+  echo "***** Cambiar de grupo a usuario *****"
+  read -p "Ingrese el nombre del usario: " nombre
+  if ! id "$nombre" &>/dev/null; then
+    echo "El usuario no existe"
+    return
+  fi
+  read -p "Ingrese el nuevo grupo del usuario: " nuevo_grupo
+  if [[ "$nuevo_grupo" != "reprobados" && "$nuevo_grupo" != "recursadores" ]]; then
+    echo "Grupo inválido"
+    return
+  fi
+  usermod -g "$nuevo_grupo" "$nombre"
+  chown "$nombre":"$nuevo_grupo" /ftp/"$nombre"
+  echo "Grupo del usuario "$nombre" actualizado :D"
 }
 
-function Cambiar-GrupoUsuario {
-
-    Write-Host ""
-    Write-Host "***** Cambiar de grupo a usuario *****"
-
-    $nombre = Read-Host "Ingrese el nombre del usuario"
-
-    if (-not (Get-LocalUser -Name $nombre -ErrorAction SilentlyContinue)) {
-        Write-Host "El usuario no existe"
-        return
-    }
-
-    $nuevoGrupo = Read-Host "Ingrese el nuevo grupo (reprobados / recursadores)"
-
-    if ($nuevoGrupo -ne "reprobados" -and $nuevoGrupo -ne "recursadores") {
-        Write-Host "Grupo invalido"
-        return
-    }
-
-    $miembrosReprobados = Get-LocalGroupMember -Group "reprobados" -ErrorAction SilentlyContinue
-    $miembrosRecursadores = Get-LocalGroupMember -Group "recursadores" -ErrorAction SilentlyContinue
-
-    if ($miembrosReprobados.Name -contains $nombre) {
-        Remove-LocalGroupMember -Group "reprobados" -Member $nombre
-    }
-
-    if ($miembrosRecursadores.Name -contains $nombre) {
-        Remove-LocalGroupMember -Group "recursadores" -Member $nombre
-    }
-
-    Add-LocalGroupMember -Group $nuevoGrupo -Member $nombre
-
-    Write-Host "Grupo del usuario $nombre actualizado correctamente :D"
+configurar_selinux(){
+  if getenforce | grep -q Enforcing; then
+     setsebool -P ftpd_full_access 1
+     echo "SELinux configurado para FTP"
+  fi
 }
 
-function Configurar-SeguridadFTP {
-
-    Write-Host "Verificando configuracion de seguridad FTP..."
-
-    $servicio = Get-Service -Name FTPSVC -ErrorAction SilentlyContinue
-
-    if ($servicio -and $servicio.Status -eq "Running") {
-        Write-Host "Servicio FTP activo y listo."
-    } else {
-        Write-Host "Advertencia: El servicio FTP no esta en ejecucion."
-    }
-
-    Write-Host "En Windows la seguridad se controla mediante permisos NTFS e IIS."
+menu(){
+  echo ""
+  while true; do  
+    echo "***** Menu FTP *****"
+    echo "1) instalar servicio FTP"
+    echo "2) Configurar vsftpd"
+    echo "3) Crear grupos"
+    echo "4) Crear estructura base"
+    echo "5) Asignar permisos base"
+    echo "6) Crear usuarios"
+    echo "7) Cambiar grupo usuario"
+    echo "0) Salir"
+    read -p "Seleccione una opcion: " opcion
+    case $opcion in
+      1)instalar_ftp ;;
+      2)configurarftp ;;
+      3)crear_grupo ;;
+      4)crear_estructura ;;
+      5)asignar_permisos ;;
+      6)crear_usuarios ;;
+      7)cambiar_grupo_usuario ;;
+      0)exit 0;;
+      *) echo "opcion invalida"; sleep 1;;
+    esac
+  done
 }
 
-function Mostrar-Menu {
-
-    while ($true) {
-        Write-Host ""
-        Write-Host "***** Menu FTP *****"
-        Write-Host "1) Instalar servicio FTP"
-        Write-Host "2) Configurar FTP (IIS)"
-        Write-Host "3) Crear grupos"
-        Write-Host "4) Crear estructura base"
-        Write-Host "5) Asignar permisos base"
-        Write-Host "6) Crear usuarios"
-        Write-Host "7) Cambiar grupo usuario"
-        Write-Host "0) Salir"
-        Write-Host ""
-
-        $opcion = Read-Host "Seleccione una opcion"
-
-        switch ($opcion) {
-
-            "1" { Instalar-FTP }
-            "2" { Configurar-FTP }
-            "3" { Crear-Grupos }
-            "4" { Crear-Estructura }
-            "5" { Asignar-Permisos }
-            "6" { Crear-Usuarios }
-            "7" { Cambiar-GrupoUsuario }
-            "0" { 
-                Write-Host "Saliendo..."
-                break 
-            }
-            default {
-                Write-Host "Opcion invalida"
-                Start-Sleep -Seconds 1
-            }
-        }
-
-        if ($opcion -ne "0") {
-            Write-Host ""
-            Read-Host "Presione ENTER para continuar..."
-        }
-    }
-}
-
-Mostrar-Menu
+menu
