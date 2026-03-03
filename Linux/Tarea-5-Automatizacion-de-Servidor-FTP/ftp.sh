@@ -174,15 +174,12 @@ crear_usuarios(){
        continue
     fi
 
-    useradd -d /ftp/"$nombre" -s /bin/bash -g "$grupo" "$nombre"
-
+    useradd -d /ftp -s /bin/bash -g "$grupo" "$nombre"
     echo "$nombre:$password" | chpasswd
 
     mkdir -p /ftp/"$nombre"
-
     chown "$nombre":"$grupo" /ftp/"$nombre"
     chmod 700 /ftp/"$nombre"
-
   done
 }
 
