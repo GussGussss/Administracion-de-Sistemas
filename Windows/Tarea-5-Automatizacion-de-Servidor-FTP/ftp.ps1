@@ -117,14 +117,10 @@ function Configurar-FTP {
     Write-Host "Aislamiento configurado en modo None."
 
     Clear-WebConfiguration -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization"
-    
+
     Add-WebConfiguration -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization" -PSPath IIS:\ -Value @{accessType="Allow"; users="IUSR"; permissions="Read"}
 
-    $equipo = $env:COMPUTERNAME
-    
-    Add-WebConfiguration -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization" -PSPath IIS:\ -Value @{accessType="Allow"; roles="$equipo\reprobados,$equipo\recursadores"; permissions="Read,Write"}
-
-    Add-WebConfiguration -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization" -PSPath IIS:\ -Value @{accessType="Allow"; roles="$equipo\ftpusuarios"; permissions="Read,Write"}
+    Add-WebConfiguration -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization" -PSPath IIS:\ -Value @{accessType="Allow"; users="*"; permissions="Read,Write"}
     
     Write-Host "Reglas de autorizacion configuradas."
     Set-WebConfigurationProperty -Filter "system.applicationHost/ftpServer/firewallSupport" -Name passivePortRange -Value "40000-40100"
