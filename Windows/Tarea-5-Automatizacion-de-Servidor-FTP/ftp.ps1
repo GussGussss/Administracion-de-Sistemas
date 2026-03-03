@@ -246,6 +246,8 @@ function Crear-Usuarios {
         icacls $rutaUsuario /grant "${nombre}:(OI)(CI)F" | Out-Null
         icacls $rutaUsuario /grant "Administrators:(OI)(CI)F" | Out-Null
         icacls $rutaUsuario /grant "SYSTEM:(OI)(CI)F" | Out-Null
+        icacls $rutaUsuario /grant "IUSR:(OI)(CI)RX" | Out-Null
+        icacls $rutaUsuario /grant "IIS_IUSRS:(OI)(CI)RX" | Out-Null
         Write-Host "Usuario $nombre creado correctamente :D"
     }
 }
