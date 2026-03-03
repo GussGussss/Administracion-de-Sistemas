@@ -78,3 +78,29 @@ function Configurar-FTP {
     Restart-Service W3SVC
     Write-Host "Servidor FTP configurado correctamente." -ForegroundColor Green
 }
+
+function Crear-GruposYEstructura {
+    $raiz = "C:\ftp"
+
+    # 1. Gestión de Grupos Locales
+    $grupos = @("reprobados", "recursadores", "ftpusuarios")
+    foreach ($grupo in $grupos) {
+        if (-not (Get-LocalGroup -Name $grupo -ErrorAction SilentlyContinue)) {
+            Write-Host "Creando grupo: $grupo" -ForegroundColor Cyan
+            New-LocalGroup -Name $grupo
+        } else {
+            Write-Host "El grupo $grupo ya existe."
+        }
+    }
+
+    # 2. Creación de Estructura de Directorios
+    # Equivalente a mkdir -p /ftp/{general,reprobados,recursadores}
+    $carpetas = @("general", "reprobados", "recursadores")
+    foreach ($carpeta in $carpetas) {
+        $path = Join-Path $raiz $carpeta
+        if (-not (Test-Path $path)) {
+            New-Item -Path $path -ItemType Directory | Out-Null
+            Write-Host "Creada carpeta: $path"
+        }
+    }
+}
