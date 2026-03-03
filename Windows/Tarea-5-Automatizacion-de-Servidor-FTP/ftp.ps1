@@ -101,22 +101,13 @@ function Configurar-FTP {
     if (-not (Get-Website | Where-Object { $_.Name -eq $siteName })) {
         New-WebFtpSite -Name $siteName -Port 21 -PhysicalPath $ftpRoot -Force
     }
+    Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/userIsolation" -Name mode -Value "IsolateAllDirectories"
 
-    # Configuración de Aislamiento de Usuarios FTP
-    # Usamos el modo UserHomeDirectory y aplicamos el cambio al sitio específico
-    Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/userIsolation" -Name mode -Value "UserHomeDirectory"
-    
-    # Limpieza de reglas previas
     Clear-WebConfiguration -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization"
 
-    # Permisos FTP (Anonymous Read, Roles Write)
-    Add-WebConfiguration -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization" -Value @{accessType="Allow"; users="anonymous"; permissions="Read"}
-    Add-WebConfiguration -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization" -Value @{accessType="Allow"; roles="reprobados,recursadores"; permissions="Read,Write"}
+    Add-WebConfiguration -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization" -PSPath IIS:\ -Value @{accessType="Allow"; users="anonymous"; permissions="Read"}
+    Add-WebConfiguration -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization" -PSPath IIS:\ -Value @{accessType="Allow"; roles="reprobados,recursadores"; permissions="Read,Write"}
 
-    # Firewall Pasivo
-    Set-WebConfigurationProperty -Filter "system.applicationHost/ftpServer/firewallSupport" -Name passivePortRange -Value "40000-40100"
-
-    # SSL
     Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/ssl" -Name controlChannelPolicy -Value "SslAllow"
     Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/ssl" -Name dataChannelPolicy -Value "SslAllow"
 
