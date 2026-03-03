@@ -139,6 +139,21 @@ function Configurar-FTP {
     Write-Host "Configuracion FTP aplicada correctamente :D"
 }
 
+function Permitir-AccesoRedFTP {
+
+    Write-Host "Asignando derecho 'Acceder a este equipo desde la red'..."
+
+    secedit /export /cfg C:\temp.cfg | Out-Null
+
+    (Get-Content C:\temp.cfg) -replace "SeNetworkLogonRight = (.*)", "SeNetworkLogonRight = `$1,ftpusuarios" | Set-Content C:\temp.cfg
+
+    secedit /configure /db C:\Windows\Security\Database\secedit.sdb /cfg C:\temp.cfg /areas USER_RIGHTS | Out-Null
+
+    Remove-Item C:\temp.cfg
+
+    Write-Host "Derecho asignado correctamente."
+}
+
 function Crear-Grupos {
 
     if (Get-LocalGroup -Name "reprobados" -ErrorAction SilentlyContinue) {
@@ -161,7 +176,8 @@ function Crear-Grupos {
     } else {
         Write-Host "El grupo ftpusuarios ya existe"
     }
-
+    
+    Permitir-AccesoRedFTP
     Write-Host "Verificacion de grupos finalizada :D"
 }
 
