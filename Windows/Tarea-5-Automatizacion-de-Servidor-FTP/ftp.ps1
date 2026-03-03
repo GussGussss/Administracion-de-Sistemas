@@ -89,39 +89,38 @@ function Instalar-FTP {
 }
 
 function Configurar-FTP {
-
     Import-Module WebAdministration
-
-    $ftpRoot = "C:\FTP"
     $siteName = "FTPSite"
-
-    if (-not (Test-Path $ftpRoot)) {
-        New-Item -Path $ftpRoot -ItemType Directory | Out-Null
+    $ftpRoot = "C:\FTP"
+    $localUserFolder = "$ftpRoot\LocalUser"
+    
+    if (-not (Test-Path $localUserFolder)) {
+        New-Item -Path $localUserFolder -ItemType Directory | Out-Null
     }
 
     if (-not (Get-Website | Where-Object { $_.Name -eq $siteName })) {
         New-WebFtpSite -Name $siteName -Port 21 -PhysicalPath $ftpRoot -Force
     }
 
-    Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authentication/anonymousAuthentication" -Name enabled -Value True
-    Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authentication/basicAuthentication" -Name enabled -Value True
-
+    # UNIFICADO
+    Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/userIsolation" -Name mode -Value "UserHomeDirectory"
+    Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/userIsolation" -Name rootaliaspath -Value "C:\FTP\LocalUser"
+    
+    # Limpieza de reglas previas
     Clear-WebConfiguration -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization"
 
+    # Permisos FTP
     Add-WebConfiguration -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization" -Value @{accessType="Allow"; users="anonymous"; permissions="Read"}
-        
     Add-WebConfiguration -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization" -Value @{accessType="Allow"; roles="reprobados,recursadores"; permissions="Read,Write"}
 
+    # Firewall Pasivo
     Set-WebConfigurationProperty -Filter "system.applicationHost/ftpServer/firewallSupport" -Name passivePortRange -Value "40000-40100"
 
-    Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/userIsolation" -Name mode -Value "IsolateAllDirectories"
-
+    # SSL
     Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/ssl" -Name controlChannelPolicy -Value "SslAllow"
-
     Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/ssl" -Name dataChannelPolicy -Value "SslAllow"
 
     Restart-Service FTPSVC
-
     Write-Host "Configuracion FTP aplicada correctamente :D"
 }
 
@@ -201,6 +200,8 @@ function Asignar-Permisos {
     icacls $recursadores /grant "SYSTEM:F" | Out-Null
     icacls $recursadores /grant "recursadores:(OI)(CI)M" | Out-Null
 
+    icacls $raiz /grant "Users:(OI)(CI)RX" | Out-Null
+    
     Write-Host "Permisos configurados correctamente :D"
 }
 
