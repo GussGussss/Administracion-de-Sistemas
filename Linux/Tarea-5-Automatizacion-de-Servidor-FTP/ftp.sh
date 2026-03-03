@@ -121,6 +121,14 @@ configurarftp(){
   if ! grep -q "^pasv_max_port" "$CONF"; then
     echo "pasv_max_port=40100" >> "$CONF"
   fi
+
+  if ! grep -q "^anon_upload_enable" "$CONF"; then
+    echo "anon_upload_enable=NO" >> "$CONF"
+  fi
+  
+  if ! grep -q "^anon_mkdir_write_enable" "$CONF"; then
+    echo "anon_mkdir_write_enable=NO" >> "$CONF"
+  fi
   systemctl restart vsftpd
 }
 
@@ -137,10 +145,6 @@ crear_grupo(){
   else
     echo "Creando grupo recursadores...."
     groupadd recursadores
-  fi
-
-  if ! getent group ftpusers > /dev/null; then
-    groupadd ftpusers
   fi
 }
 
@@ -162,7 +166,7 @@ asignar_permisos(){
   chmod 2770 /ftp/recursadores
 
   chown root:root /ftp/general
-  chmod 777 /ftp/general
+  chmod 755 /ftp/general
 }
 
 crear_usuarios(){
@@ -184,7 +188,7 @@ crear_usuarios(){
        continue
     fi
 
-    useradd -d /ftp -s /bin/bash -g "$grupo" -G ftpusers "$nombre"
+    useradd -d /ftp -s /bin/bash -g "$grupo" "$nombre"
     echo "$nombre:$password" | chpasswd
 
     mkdir -p /ftp/"$nombre"
