@@ -44,8 +44,7 @@ function Instalar-FTP {
                     Write-Host "Reinstalando el servicio FTP..."
 
                     Remove-WindowsFeature -Name Web-Ftp-Server -ErrorAction SilentlyContinue
-                    Install-WindowsFeature -Name Web-Server,Web-Ftp-Server -IncludeManagementTools
-
+                    Install-WindowsFeature -Name Web-Server,Web-Ftp-Server,Web-Ftp-Service,Web-Ftp-Ext -IncludeManagementTools
                     Write-Host ""
                     Write-Host "Reinstalacion completada :D"
                     break
@@ -66,8 +65,7 @@ function Instalar-FTP {
         Write-Host ""
         Write-Host "Instalando..."
 
-        $resultado = Install-WindowsFeature -Name Web-Server,Web-Ftp-Server -IncludeManagementTools
-
+        $resultado = Install-WindowsFeature -Name Web-Server,Web-Ftp-Server,Web-Ftp-Service,Web-Ftp-Ext -IncludeManagementTools
         if ($resultado.Success) {
             Write-Host "Instalacion completada :D"
         } else {
