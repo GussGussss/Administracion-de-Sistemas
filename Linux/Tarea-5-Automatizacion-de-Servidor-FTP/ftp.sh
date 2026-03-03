@@ -146,6 +146,10 @@ crear_grupo(){
     echo "Creando grupo recursadores...."
     groupadd recursadores
   fi
+
+  if ! getent group ftpusuarios > /dev/null; then
+    groupadd ftpusuarios
+  fi     
 }
 
 crear_estructura(){
@@ -165,8 +169,8 @@ asignar_permisos(){
   chmod 2770 /ftp/reprobados
   chmod 2770 /ftp/recursadores
 
-  chown root:root /ftp/general
-  chmod 755 /ftp/general
+  chown root:ftpusuarios /ftp/general
+  chmod 775 /ftp/general
 }
 
 crear_usuarios(){
@@ -188,7 +192,7 @@ crear_usuarios(){
        continue
     fi
 
-    useradd -d /ftp -s /bin/bash -g "$grupo" "$nombre"
+    useradd -d /ftp -s /bin/bash -g "$grupo" -G ftpusuarios "$nombre"
     echo "$nombre:$password" | chpasswd
 
     mkdir -p /ftp/"$nombre"
