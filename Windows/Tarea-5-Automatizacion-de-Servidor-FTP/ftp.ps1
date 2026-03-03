@@ -1,3 +1,11 @@
+$usuarioActual = [Security.Principal.WindowsIdentity]::GetCurrent()
+$principal = New-Object Security.Principal.WindowsPrincipal($usuarioActual)
+
+if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Write-Host "El script debe ejecutarse como Administrador :D"
+    exit 1
+}
+
 function Configurar-Firewall {
 
     Write-Host "Configurando Firewall para FTP..."
