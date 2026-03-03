@@ -192,3 +192,23 @@ function Crear-Grupos {
 
     Write-Host "Verificacion de grupos finalizada :D"
 }
+
+function Crear-Estructura {
+
+    $raiz = "C:\FTP"
+
+    $directorios = @(
+        "$raiz",
+        "$raiz\general",
+        "$raiz\reprobados",
+        "$raiz\recursadores"
+    )
+
+    foreach ($dir in $directorios) {
+        if (-not (Test-Path $dir)) {
+            New-Item -Path $dir -ItemType Directory -Force | Out-Null
+        }
+    }
+
+    Write-Host "Estructura base creada correctamente :D"
+}
