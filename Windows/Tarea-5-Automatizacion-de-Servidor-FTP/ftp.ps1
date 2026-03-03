@@ -98,34 +98,34 @@ function Configurar-FTP {
     $siteName = "FTPSite"
 
     if (-not (Test-Path $ftpRoot)) {
-        New-Item -Path $ftpRoot -ItemType Directory
+        New-Item -Path $ftpRoot -ItemType Directory | Out-Null
     }
 
-    if (-not (Get-WebSite | Where-Object { $_.Name -eq $siteName })) {
+    # Crear sitio FTP si no existe
+    if (-not (Get-Website | Where-Object { $_.Name -eq $siteName })) {
         New-WebFtpSite -Name $siteName -Port 21 -PhysicalPath $ftpRoot -Force
     }
 
-    Set-WebConfigurationProperty -Filter "/system.ftpServer/security/authentication/anonymousAuthentication" -PSPath "IIS:\Sites\$siteName" -Name enabled -Value $true
+    # 🔓 DESBLOQUEAR SECCIONES NECESARIAS
+    & $env:SystemRoot\System32\inetsrv\appcmd unlock config -section:system.ftpServer/security/authentication/anonymousAuthentication
+    & $env:SystemRoot\System32\inetsrv\appcmd unlock config -section:system.ftpServer/security/authentication/basicAuthentication
+    & $env:SystemRoot\System32\inetsrv\appcmd unlock config -section:system.ftpServer/security/authorization
+    & $env:SystemRoot\System32\inetsrv\appcmd unlock config -section:system.ftpServer/userIsolation
 
-    Set-WebConfigurationProperty -Filter "/system.ftpServer/security/authentication/basicAuthentication" -PSPath "IIS:\Sites\$siteName" -Name enabled -Value $true
+    # Habilitar autenticación
+    Set-WebConfigurationProperty -Filter "system.ftpServer/security/authentication/anonymousAuthentication" -PSPath "IIS:\Sites\$siteName" -Name enabled -Value True
 
-    Clear-WebConfiguration -Filter "/system.ftpServer/security/authorization" -PSPath "IIS:\Sites\$siteName"
+    Set-WebConfigurationProperty -Filter "system.ftpServer/security/authentication/basicAuthentication" -PSPath "IIS:\Sites\$siteName" -Name enabled -Value True
 
-    Add-WebConfiguration -Filter "/system.ftpServer/security/authorization" -PSPath "IIS:\Sites\$siteName" -Value @{
-            accessType="Allow";
-            users="anonymous";
-            permissions="Read"
-        }
+    Remove-WebConfigurationProperty -Filter "system.ftpServer/security/authorization" -PSPath "IIS:\Sites\$siteName" -Name "." -ErrorAction SilentlyContinue
 
-    Add-WebConfiguration -Filter "/system.ftpServer/security/authorization" -PSPath "IIS:\Sites\$siteName" -Value @{
-            accessType="Allow";
-            roles="reprobados,recursadores";
-            permissions="Read,Write"
-        }
+    Add-WebConfiguration -Filter "system.ftpServer/security/authorization" -PSPath "IIS:\Sites\$siteName" -Value @{accessType="Allow"; users="anonymous"; permissions="Read"}
 
-    Set-ItemProperty "IIS:\Sites\$siteName" -Name ftpServer.firewallSupport.passivePortRange -Value "40000-40100"
+    Add-WebConfiguration -Filter "system.ftpServer/security/authorization" -PSPath "IIS:\Sites\$siteName" -Value @{accessType="Allow"; roles="reprobados,recursadores"; permissions="Read,Write"}
 
-    Set-WebConfigurationProperty -Filter "/system.ftpServer/userIsolation" -PSPath "IIS:\Sites\$siteName" -Name mode -Value "IsolateUsers"
+    Set-WebConfigurationProperty -Filter "system.ftpServer/firewallSupport" -PSPath "IIS:\" -Name passivePortRange -Value "40000-40100"
+
+    Set-WebConfigurationProperty -Filter "system.ftpServer/userIsolation" -PSPath "IIS:\Sites\$siteName" -Name mode -Value "IsolateUsers"
 
     Restart-Service FTPSVC
 
