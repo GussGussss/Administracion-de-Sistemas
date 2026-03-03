@@ -109,9 +109,9 @@ configurarftp(){
     echo "pasv_enable=YES" >> "$CONF"
   fi
   if grep -q "^anon_root" "$CONF"; then
-    sed -i "s|^anon_root=.*|anon_root=/ftp/general|" "$CONF"
+    sed -i "s|^anon_root=.*|anon_root=/ftp|" "$CONF"
   else
-    echo "anon_root=/ftp/general" >> "$CONF"
+    echo "anon_root=/ftp" >> "$CONF"
   fi
 
   if ! grep -q "^pasv_min_port" "$CONF"; then
