@@ -153,7 +153,7 @@ crear_estructura(){
 asignar_permisos(){
 
   chown root:ftpusers /ftp
-  chmod 710 /ftp
+  chmod 750 /ftp
 
   chgrp reprobados /ftp/reprobados
   chgrp recursadores /ftp/recursadores
