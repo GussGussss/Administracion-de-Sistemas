@@ -103,28 +103,22 @@ function Configurar-FTP {
         New-WebFtpSite -Name $siteName -Port 21 -PhysicalPath $ftpRoot -Force
     }
 
-    & $env:SystemRoot\System32\inetsrv\appcmd unlock config -section:system.ftpServer/security/authentication/anonymousAuthentication
-    & $env:SystemRoot\System32\inetsrv\appcmd unlock config -section:system.ftpServer/security/authentication/basicAuthentication
-    & $env:SystemRoot\System32\inetsrv\appcmd unlock config -section:system.ftpServer/security/authorization
-    & $env:SystemRoot\System32\inetsrv\appcmd unlock config -section:system.ftpServer/userIsolation
-    & $env:SystemRoot\System32\inetsrv\appcmd unlock config -section:system.ftpServer/security/ssl
+    Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authentication/anonymousAuthentication" -Name enabled -Value True
+    Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authentication/basicAuthentication" -Name enabled -Value True
 
-    Set-WebConfigurationProperty -Filter "system.ftpServer/security/authentication/anonymousAuthentication" -PSPath "MACHINE/WEBROOT/APPHOST/$siteName" -Name enabled -Value True
+    Clear-WebConfiguration -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization"
 
-    Set-WebConfigurationProperty -Filter "system.ftpServer/security/authentication/basicAuthentication" -PSPath "MACHINE/WEBROOT/APPHOST/$siteName" -Name enabled -Value True
+    Add-WebConfiguration -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization" -Value @{accessType="Allow"; users="anonymous"; permissions="Read"}
+        
+    Add-WebConfiguration -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization" -Value @{accessType="Allow"; roles="reprobados,recursadores"; permissions="Read,Write"}
 
-    Remove-WebConfigurationProperty -Filter "system.ftpServer/security/authorization" -PSPath "MACHINE/WEBROOT/APPHOST/$siteName" -Name "." -ErrorAction SilentlyContinue
+    Set-WebConfigurationProperty -Filter "system.applicationHost/ftpServer/firewallSupport" -Name passivePortRange -Value "40000-40100"
 
-    Add-WebConfiguration -Filter "system.ftpServer/security/authorization" -PSPath "MACHINE/WEBROOT/APPHOST/$siteName" -Value @{accessType="Allow"; users="anonymous"; permissions="Read"}
+    Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/userIsolation" -Name mode -Value "IsolateUsers"
 
-    Add-WebConfiguration -Filter "system.ftpServer/security/authorization" -PSPath "MACHINE/WEBROOT/APPHOST/$siteName" -Value @{accessType="Allow"; roles="reprobados,recursadores"; permissions="Read,Write"}
+    Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/ssl" -Name controlChannelPolicy -Value "SslAllow"
 
-    Set-WebConfigurationProperty -Filter "system.ftpServer/firewallSupport" -PSPath "MACHINE/WEBROOT/APPHOST" -Name passivePortRange -Value "40000-40100"
-
-    Set-WebConfigurationProperty -Filter "system.ftpServer/userIsolation" -PSPath "MACHINE/WEBROOT/APPHOST/$siteName" -Name mode -Value "IsolateUsers"
-
-    Set-WebConfigurationProperty -Filter "system.ftpServer/security/ssl" -PSPath "MACHINE/WEBROOT/APPHOST/$siteName" -Name controlChannelPolicy -Value "SslAllow"
-    Set-WebConfigurationProperty -Filter "system.ftpServer/security/ssl" -PSPath "MACHINE/WEBROOT/APPHOST/$siteName" -Name dataChannelPolicy -Value "SslAllow"
+    Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/ssl" -Name dataChannelPolicy -Value "SslAllow"
 
     Restart-Service FTPSVC
 
