@@ -97,37 +97,86 @@ function Configurar-FTP {
 
     Write-Host "Configurando sitio FTP en IIS..."
 
+    # Crear carpeta raíz si no existe
     if (-not (Test-Path $ftpRoot)) {
         New-Item -Path $ftpRoot -ItemType Directory | Out-Null
     }
 
+    # Crear sitio FTP si no existe
     if (-not (Get-Website | Where-Object { $_.Name -eq $siteName })) {
         New-WebFtpSite -Name $siteName -Port 21 -PhysicalPath $ftpRoot -Force
         Write-Host "Sitio FTP creado."
     }
 
-    Set-WebConfigurationProperty -Filter "system.ftpServer/security/authentication/basicAuthentication" -Name enabled -Value True -PSPath "IIS:\Sites\$siteName"
+    # -------------------------
+    # AUTENTICACIÓN
+    # -------------------------
 
-    Set-WebConfigurationProperty -Filter "system.ftpServer/security/authentication/anonymousAuthentication" -Name enabled -Value True -PSPath "IIS:\Sites\$siteName"
+    Set-WebConfigurationProperty `
+        -Filter "system.ftpServer/security/authentication/basicAuthentication" `
+        -Name enabled -Value True `
+        -PSPath "IIS:\Sites\$siteName"
+
+    Set-WebConfigurationProperty `
+        -Filter "system.ftpServer/security/authentication/anonymousAuthentication" `
+        -Name enabled -Value True `
+        -PSPath "IIS:\Sites\$siteName"
 
     Write-Host "Autenticacion basica y anonima habilitadas."
 
-    Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/userIsolation" -Name mode -Value "None"
+    # -------------------------
+    # AISLAMIENTO CORRECTO PARA SERVER CORE
+    # -------------------------
 
-    Write-Host "Aislamiento configurado en modo None."
+    Set-WebConfigurationProperty `
+        -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/userIsolation" `
+        -Name mode -Value "StartInUsersDirectory"
 
-    Clear-WebConfiguration -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization"
+    Write-Host "Aislamiento configurado en modo StartInUsersDirectory."
 
-    Add-WebConfiguration -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization" -PSPath IIS:\ -Value @{accessType="Allow"; users="IUSR"; permissions="Read"}
+    # Dominio local por defecto
+    Set-ItemProperty `
+        -Path "IIS:\Sites\$siteName" `
+        -Name ftpServer.defaultLogonDomain `
+        -Value $env:COMPUTERNAME
 
-    Add-WebConfiguration -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization" -PSPath IIS:\ -Value @{accessType="Allow"; users="*"; permissions="Read,Write"}
-    
+    # -------------------------
+    # AUTORIZACIÓN
+    # -------------------------
+
+    Clear-WebConfiguration `
+        -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization"
+
+    # Anónimo solo lectura
+    Add-WebConfiguration `
+        -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization" `
+        -PSPath IIS:\ `
+        -Value @{accessType="Allow"; users="IUSR"; permissions="Read"}
+
+    # Usuarios autenticados
+    Add-WebConfiguration `
+        -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization" `
+        -PSPath IIS:\ `
+        -Value @{accessType="Allow"; users="*"; permissions="Read,Write"}
+
     Write-Host "Reglas de autorizacion configuradas."
-    Set-WebConfigurationProperty -Filter "system.applicationHost/ftpServer/firewallSupport" -Name passivePortRange -Value "40000-40100"
-        
-    Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/ssl" -Name controlChannelPolicy -Value "SslAllow"
 
-    Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/ssl" -Name dataChannelPolicy -Value "SslAllow"
+    # -------------------------
+    # PUERTOS PASIVOS
+    # -------------------------
+
+    Set-WebConfigurationProperty `
+        -Filter "system.applicationHost/ftpServer/firewallSupport" `
+        -Name passivePortRange -Value "40000-40100"
+
+    # SSL opcional
+    Set-WebConfigurationProperty `
+        -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/ssl" `
+        -Name controlChannelPolicy -Value "SslAllow"
+
+    Set-WebConfigurationProperty `
+        -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/ssl" `
+        -Name dataChannelPolicy -Value "SslAllow"
 
     Restart-Service FTPSVC
 
