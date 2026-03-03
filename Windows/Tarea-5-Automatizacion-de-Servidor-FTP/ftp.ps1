@@ -144,22 +144,18 @@ function Crear-Estructura {
 }
 
 function Asignar-Permisos {
-    $raiz = "C:\ftp"
     
-    # 1. Permisos para la raíz (Root): Control total a Administradores/SYSTEM, Lectura a todos
+    $raiz = "C:\ftp"
     icacls "$raiz" /inheritance:r /grant:r "Administrators:(OI)(CI)F" /grant:r "SYSTEM:(OI)(CI)F" /grant:r "Users:(OI)(CI)R"
     
-    # 2. Permisos para Carpetas de Grupo: Solo el grupo correspondiente y Administradores
-    # Se usa (OI)(CI) para que los permisos se hereden a Objetos y Contenedores (recursivo)
-    $grupos = @{
-        "reprobados"   = "reprobados"
-        "recursadores" = "recursadores"
-    }
+    $grupos = @{ "reprobados" = "reprobados"; "recursadores" = "recursadores" }
 
     foreach ($nombre in $grupos.Keys) {
         $path = "$raiz\$nombre"
-        icacls "$path" /inheritance:r /grant:r "Administrators:(OI)(CI)F" /grant:r "SYSTEM:(OI)(CI)F" /grant:r "$($grupos[$nombre]):(OI)(CI)M"
+        $g = $grupos[$nombre]
+        icacls "$path" /inheritance:r /grant:r "Administrators:(OI)(CI)F" /grant:r "SYSTEM:(OI)(CI)F" /grant:r "${g}:(OI)(CI)M"
     }
+    icacls "$raiz\general" /inheritance:r /grant:r "Administrators:(OI)(CI)F" /grant:r "SYSTEM:(OI)(CI)F" /grant:r "ftpusuarios:(OI)(CI)M"
 
     # 3. Permisos para carpeta general: ftpusuarios con permisos de modificación (M)
     icacls "$raiz\general" /inheritance:r /grant:r "Administrators:(OI)(CI)F" /grant:r "SYSTEM:(OI)(CI)F" /grant:r "ftpusuarios:(OI)(CI)M"
@@ -197,7 +193,7 @@ function Crear-Usuarios {
         New-Item -Path $userPath -ItemType Directory | Out-Null
         
         # Permisos: Solo el dueño (usuario) tiene acceso total
-        icacls $userPath /inheritance:r /grant:r "$nombre:(OI)(CI)F" /grant:r "Administrators:(OI)(CI)F"
+        icacls $userPath /inheritance:r /grant:r "${nombre}:(OI)(CI)F" /grant:r "Administrators:(OI)(CI)F"
         
         Write-Host "Usuario $nombre creado y carpeta personal configurada."
     }
