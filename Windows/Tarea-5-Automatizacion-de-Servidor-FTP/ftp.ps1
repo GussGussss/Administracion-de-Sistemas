@@ -248,11 +248,10 @@ function Crear-Usuarios {
         }
 
         icacls $rutaUsuario /inheritance:r | Out-Null
-
-        icacls $rutaUsuario /grant "$nombre:(OI)(CI)F" | Out-Null
+        
+        icacls $rutaUsuario /grant "${nombre}:(OI)(CI)F" | Out-Null
         icacls $rutaUsuario /grant "Administrators:(OI)(CI)F" | Out-Null
         icacls $rutaUsuario /grant "SYSTEM:(OI)(CI)F" | Out-Null
-
         Write-Host "Usuario $nombre creado correctamente :D"
     }
 }
