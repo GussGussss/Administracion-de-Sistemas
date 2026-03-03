@@ -152,8 +152,8 @@ crear_estructura(){
 
 asignar_permisos(){
 
-  chown root:ftpusers /ftp
-  chmod 750 /ftp
+  chown root:root /ftp
+  chmod 755 /ftp
 
   chgrp reprobados /ftp/reprobados
   chgrp recursadores /ftp/recursadores
@@ -161,8 +161,8 @@ asignar_permisos(){
   chmod 2770 /ftp/reprobados
   chmod 2770 /ftp/recursadores
 
-  chgrp ftpusers /ftp/general
-  chmod 775 /ftp/general
+  chown root:root /ftp/general
+  chmod 777 /ftp/general
 }
 
 crear_usuarios(){
