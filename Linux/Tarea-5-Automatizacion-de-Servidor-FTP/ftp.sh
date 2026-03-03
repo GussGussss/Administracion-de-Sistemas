@@ -140,8 +140,8 @@ crear_grupo(){
   fi
 
   if ! getent group ftpusers > /dev/null; then
-   groupadd ftpusers
-fi
+    groupadd ftpusers
+  fi
 }
 
 crear_estructura(){
