@@ -1,106 +1,348 @@
-configurar_firewall(){
-  if systemctl is-active --quiet firewalld; then
-     firewall-cmd --permanent --add-service=ftp
-     firewall-cmd --permanent --add-port=40000-40100/tcp
-     firewall-cmd --reload
-     echo "Firewall configurado para FTP"
-  fi
+$usuarioActual = [Security.Principal.WindowsIdentity]::GetCurrent()
+$principal = New-Object Security.Principal.WindowsPrincipal($usuarioActual)
+
+if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Write-Host "El script debe ejecutarse como Administrador :D"
+    exit 1
 }
 
-function Instalar-ServicioFTP {
-    Write-Host "`nVerificando si IIS y FTP están instalados..." -ForegroundColor Cyan
+function Configurar-Firewall {
 
-    # 1. Verificar si FTP para IIS está instalado
+    Write-Host "Configurando Firewall para FTP..."
+    
+    if (-not (Get-NetFirewallRule -DisplayName "FTP Puerto 21" -ErrorAction SilentlyContinue)) {
+        New-NetFirewallRule -DisplayName "FTP Puerto 21" -Direction Inbound -Protocol TCP -LocalPort 21 -Action Allow
+    }
+
+    if (-not (Get-NetFirewallRule -DisplayName "FTP Pasivo 40000-40100" -ErrorAction SilentlyContinue)) {
+        New-NetFirewallRule -DisplayName "FTP Pasivo 40000-40100" -Direction Inbound -Protocol TCP -LocalPort 40000-40100 -Action Allow
+    }
+
+    Write-Host "Firewall configurado correctamente para FTP."
+}
+
+Write-Host "****** Tarea 5: Automatizacion de Servidor FTP ********"
+
+function Instalar-FTP {
+
+    Write-Host ""
+    Write-Host "Verificando si el servicio FTP (IIS) esta instalado..."
+    Write-Host ""
+
     $ftpFeature = Get-WindowsFeature -Name Web-Ftp-Server
-    
+
     if ($ftpFeature.Installed) {
-        Write-Host "El servicio FTP ya está instalado." -ForegroundColor Green
-        $opcion = Read-Host "Desea reinstalarlo? (s/n)"
-        if ($opcion -eq 's') {
-            Write-Host "Reinstalando..."
-            Uninstall-WindowsFeature -Name Web-Ftp-Server -Remove
-            Install-WindowsFeature -Name Web-Ftp-Server -IncludeManagementTools
-            Write-Host "Reinstalación completada." -ForegroundColor Green
+
+        Write-Host "El servicio FTP ya esta instalado :D"
+
+        while ($true) {
+            $opcion = Read-Host "Desea reinstalarlo (s/n)?"
+            Write-Host ""
+
+            switch ($opcion.ToLower()) {
+                "s" {
+                    Write-Host "Reinstalando el servicio FTP..."
+
+                    Remove-WindowsFeature -Name Web-Ftp-Server -ErrorAction SilentlyContinue
+                    Install-WindowsFeature -Name Web-Server,Web-Ftp-Server,Web-Ftp-Service,Web-Ftp-Ext -IncludeManagementTools
+                    Write-Host ""
+                    Write-Host "Reinstalacion completada :D"
+                    break
+                }
+                "n" {
+                    Write-Host "No se realizara ninguna accion"
+                    break
+                }
+                default {
+                    Write-Host "Opcion invalida... ingrese s o n"
+                }
+            }
         }
+
     } else {
-        Write-Host "Instalando IIS con soporte FTP..."
-        # Instala IIS y el módulo de FTP
-        Install-WindowsFeature -Name Web-Server, Web-Ftp-Server -IncludeManagementTools
-        
-        if (Get-WindowsFeature -Name Web-Ftp-Server | Where-Object { $_.Installed }) {
-            Write-Host "Instalación completada exitosamente." -ForegroundColor Green
+
+        Write-Host "El servicio FTP no esta instalado"
+        Write-Host ""
+        Write-Host "Instalando..."
+
+        $resultado = Install-WindowsFeature -Name Web-Server,Web-Ftp-Server,Web-Ftp-Service,Web-Ftp-Ext -IncludeManagementTools
+        if ($resultado.Success) {
+            Write-Host "Instalacion completada :D"
         } else {
-            Write-Host "Hubo un error en la instalación." -ForegroundColor Red
-            return
+            Write-Host "Hubo un error en la instalacion."
         }
     }
 
-    # 2. Asegurar que el servicio de gestión de IIS esté corriendo
-    # En Windows, el servicio W3SVC gestiona el sitio y el FTP
-    if ((Get-Service W3SVC).Status -ne 'Running') {
-        Write-Host "Iniciando servicio IIS/FTP..."
-        Start-Service W3SVC
-        Set-Service W3SVC -StartupType Automatic
+    if ((Get-Service FTPSVC).StartType -ne "Automatic") {
+        Write-Host "Habilitando servicio..."
+        Set-Service -Name FTPSVC -StartupType Automatic
     }
 
-    # Llamamos a las funciones siguientes (Firewall y SELinux/ACLs)
-    Configurar-FirewallFTP
-    # Configurar-SELinux (En Windows, esto se manejará con políticas NTFS/ACLs)
-    
+    if ((Get-Service FTPSVC).Status -ne "Running") {
+        Write-Host "Iniciando servicio..."
+        Start-Service FTPSVC
+    }
+
+    Configurar-Firewall
+
     Read-Host "Presione ENTER para continuar..."
 }
 
 function Configurar-FTP {
-    Write-Host "Configurando el servicio FTP en IIS..." -ForegroundColor Cyan
 
-    # 1. Crear la estructura base (root)
-    $ftpRoot = "C:\ftp"
-    if (!(Test-Path $ftpRoot)) { New-Item -Path $ftpRoot -ItemType Directory }
+    Import-Module WebAdministration
 
-    # 2. Configurar Aislamiento de Usuario (User Name Directory)
-    # Esto equivale a chroot_local_user=YES
-    Set-WebConfigurationProperty -Filter /system.ftpServer/serverRuntime -Name "userIsolationMode" -Value "UserName" -PSPath "IIS:\"
+    $ftpRoot = "C:\FTP"
+    $siteName = "FTPSite"
 
-    # 3. Configurar el rango de puertos pasivos
-    # Necesario para el firewall (equivalente a pasv_min/max_port)
-    Set-WebConfigurationProperty -Filter /system.ftpServer/firewallSupport -Name "lowTcpPort" -Value 40000 -PSPath "IIS:\"
-    Set-WebConfigurationProperty -Filter /system.ftpServer/firewallSupport -Name "highTcpPort" -Value 40100 -PSPath "IIS:\"
+    if (-not (Test-Path $ftpRoot)) {
+        New-Item -Path $ftpRoot -ItemType Directory | Out-Null
+    }
 
-    # 4. Habilitar autenticación anónima y básica
-    Set-WebConfigurationProperty -Filter /system.ftpServer/security/authentication/anonymousAuthentication -Name "enabled" -Value $true -PSPath "IIS:\Sites\Default FTP Site"
-    Set-WebConfigurationProperty -Filter /system.ftpServer/security/authentication/basicAuthentication -Name "enabled" -Value $true -PSPath "IIS:\Sites\Default FTP Site"
+    if (-not (Get-Website | Where-Object { $_.Name -eq $siteName })) {
+        New-WebFtpSite -Name $siteName -Port 21 -PhysicalPath $ftpRoot -Force
+    }
 
-    # 5. Configurar permisos globales
-    # Permitir escritura (write_enable=YES)
-    Set-WebConfigurationProperty -Filter /system.ftpServer/security/authorization -Name "." -Value @{accessType="Allow"; users="*"; permissions="Read, Write"} -PSPath "IIS:\Sites\Default FTP Site"
+    Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authentication/anonymousAuthentication" -Name enabled -Value True
+    Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authentication/basicAuthentication" -Name enabled -Value True
 
-    # 6. Reiniciar el servicio FTP
-    Restart-Service W3SVC
-    Write-Host "Servidor FTP configurado correctamente." -ForegroundColor Green
+    Clear-WebConfiguration -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization"
+
+    Add-WebConfiguration -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization" -Value @{accessType="Allow"; users="anonymous"; permissions="Read"}
+        
+    Add-WebConfiguration -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization" -Value @{accessType="Allow"; roles="reprobados,recursadores"; permissions="Read,Write"}
+
+    Set-WebConfigurationProperty -Filter "system.applicationHost/ftpServer/firewallSupport" -Name passivePortRange -Value "40000-40100"
+
+    Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/userIsolation" -Name mode -Value "IsolateAllDirectories"
+
+    Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/ssl" -Name controlChannelPolicy -Value "SslAllow"
+
+    Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/ssl" -Name dataChannelPolicy -Value "SslAllow"
+
+    Restart-Service FTPSVC
+
+    Write-Host "Configuracion FTP aplicada correctamente :D"
 }
 
-function Crear-GruposYEstructura {
-    $raiz = "C:\ftp"
+function Crear-Grupos {
 
-    # 1. Gestión de Grupos Locales
-    $grupos = @("reprobados", "recursadores", "ftpusuarios")
-    foreach ($grupo in $grupos) {
-        if (-not (Get-LocalGroup -Name $grupo -ErrorAction SilentlyContinue)) {
-            Write-Host "Creando grupo: $grupo" -ForegroundColor Cyan
-            New-LocalGroup -Name $grupo
-        } else {
-            Write-Host "El grupo $grupo ya existe."
+    if (Get-LocalGroup -Name "reprobados" -ErrorAction SilentlyContinue) {
+        Write-Host "El grupo reprobados ya existe"
+    } else {
+        Write-Host "Creando grupo reprobados..."
+        New-LocalGroup -Name "reprobados" -Description "Grupo FTP Reprobados"
+    }
+
+    if (Get-LocalGroup -Name "recursadores" -ErrorAction SilentlyContinue) {
+        Write-Host "El grupo recursadores ya existe"
+    } else {
+        Write-Host "Creando grupo recursadores..."
+        New-LocalGroup -Name "recursadores" -Description "Grupo FTP Recursadores"
+    }
+
+    if (-not (Get-LocalGroup -Name "ftpusuarios" -ErrorAction SilentlyContinue)) {
+        Write-Host "Creando grupo ftpusuarios..."
+        New-LocalGroup -Name "ftpusuarios" -Description "Grupo general de usuarios FTP"
+    } else {
+        Write-Host "El grupo ftpusuarios ya existe"
+    }
+
+    Write-Host "Verificacion de grupos finalizada :D"
+}
+
+function Crear-Estructura {
+
+    $raiz = "C:\FTP"
+
+    $directorios = @(
+        "$raiz",
+        "$raiz\general",
+        "$raiz\reprobados",
+        "$raiz\recursadores",
+        "$raiz\LocalUser"
+    )
+
+    foreach ($dir in $directorios) {
+        if (-not (Test-Path $dir)) {
+            New-Item -Path $dir -ItemType Directory -Force | Out-Null
         }
     }
 
-    # 2. Creación de Estructura de Directorios
-    # Equivalente a mkdir -p /ftp/{general,reprobados,recursadores}
-    $carpetas = @("general", "reprobados", "recursadores")
-    foreach ($carpeta in $carpetas) {
-        $path = Join-Path $raiz $carpeta
-        if (-not (Test-Path $path)) {
-            New-Item -Path $path -ItemType Directory | Out-Null
-            Write-Host "Creada carpeta: $path"
+    Write-Host "Estructura base creada correctamente :D"
+}
+
+function Asignar-Permisos {
+
+    $raiz = "C:\FTP"
+
+    Write-Host "Configurando permisos NTFS..."
+
+    icacls $raiz /grant "Administrators:(OI)(CI)F" /T | Out-Null
+    icacls $raiz /grant "SYSTEM:(OI)(CI)F" /T | Out-Null
+
+    $general = "$raiz\general"
+
+    icacls $general /grant "ftpusuarios:(OI)(CI)M" | Out-Null
+
+    icacls $general /grant "IUSR:(OI)(CI)R" | Out-Null
+
+    $reprobados = "$raiz\reprobados"
+
+    icacls $reprobados /inheritance:r | Out-Null
+    icacls $reprobados /grant "Administrators:F" | Out-Null
+    icacls $reprobados /grant "SYSTEM:F" | Out-Null
+    icacls $reprobados /grant "reprobados:(OI)(CI)M" | Out-Null
+
+    $recursadores = "$raiz\recursadores"
+
+    icacls $recursadores /inheritance:r | Out-Null
+    icacls $recursadores /grant "Administrators:F" | Out-Null
+    icacls $recursadores /grant "SYSTEM:F" | Out-Null
+    icacls $recursadores /grant "recursadores:(OI)(CI)M" | Out-Null
+
+    Write-Host "Permisos configurados correctamente :D"
+}
+
+function Crear-Usuarios {
+
+    $cantidad = Read-Host "Ingrese el numero de usuarios a capturar"
+
+    for ($i = 1; $i -le [int]$cantidad; $i++) {
+
+        Write-Host ""
+        Write-Host "Usuario $i"
+
+        $nombre = Read-Host "Nombre de usuario"
+
+        # Verificar si ya existe
+        if (Get-LocalUser -Name $nombre -ErrorAction SilentlyContinue) {
+            Write-Host "El usuario ya existe"
+            continue
+        }
+
+        $passwordPlano = Read-Host "Contraseña" -AsSecureString
+        $grupo = Read-Host "Grupo (reprobados / recursadores)"
+
+        if ($grupo -ne "reprobados" -and $grupo -ne "recursadores") {
+            Write-Host "Grupo invalido"
+            continue
+        }
+
+        # Crear usuario
+        New-LocalUser -Name $nombre -Password $passwordPlano -FullName $nombre -Description "Usuario FTP"
+
+        Add-LocalGroupMember -Group $grupo -Member $nombre
+        Add-LocalGroupMember -Group "ftpusuarios" -Member $nombre
+        
+        $rutaUsuario = "C:\FTP\LocalUser\$nombre"
+
+        if (-not (Test-Path $rutaUsuario)) {
+            New-Item -Path $rutaUsuario -ItemType Directory | Out-Null
+        }
+
+        icacls $rutaUsuario /inheritance:r | Out-Null
+        
+        icacls $rutaUsuario /grant "${nombre}:(OI)(CI)F" | Out-Null
+        icacls $rutaUsuario /grant "Administrators:(OI)(CI)F" | Out-Null
+        icacls $rutaUsuario /grant "SYSTEM:(OI)(CI)F" | Out-Null
+        icacls $rutaUsuario /grant "IUSR:(OI)(CI)RX" | Out-Null
+        icacls $rutaUsuario /grant "IIS_IUSRS:(OI)(CI)RX" | Out-Null
+        Write-Host "Usuario $nombre creado correctamente :D"
+    }
+}
+
+function Cambiar-GrupoUsuario {
+
+    Write-Host ""
+    Write-Host "***** Cambiar de grupo a usuario *****"
+
+    $nombre = Read-Host "Ingrese el nombre del usuario"
+
+    if (-not (Get-LocalUser -Name $nombre -ErrorAction SilentlyContinue)) {
+        Write-Host "El usuario no existe"
+        return
+    }
+
+    $nuevoGrupo = Read-Host "Ingrese el nuevo grupo (reprobados / recursadores)"
+
+    if ($nuevoGrupo -ne "reprobados" -and $nuevoGrupo -ne "recursadores") {
+        Write-Host "Grupo invalido"
+        return
+    }
+
+    $miembrosReprobados = Get-LocalGroupMember -Group "reprobados" -ErrorAction SilentlyContinue
+    $miembrosRecursadores = Get-LocalGroupMember -Group "recursadores" -ErrorAction SilentlyContinue
+
+    if ($miembrosReprobados.Name -contains $nombre) {
+        Remove-LocalGroupMember -Group "reprobados" -Member $nombre
+    }
+
+    if ($miembrosRecursadores.Name -contains $nombre) {
+        Remove-LocalGroupMember -Group "recursadores" -Member $nombre
+    }
+
+    Add-LocalGroupMember -Group $nuevoGrupo -Member $nombre
+
+    Write-Host "Grupo del usuario $nombre actualizado correctamente :D"
+}
+
+function Configurar-SeguridadFTP {
+
+    Write-Host "Verificando configuracion de seguridad FTP..."
+
+    $servicio = Get-Service -Name FTPSVC -ErrorAction SilentlyContinue
+
+    if ($servicio -and $servicio.Status -eq "Running") {
+        Write-Host "Servicio FTP activo y listo."
+    } else {
+        Write-Host "Advertencia: El servicio FTP no esta en ejecucion."
+    }
+
+    Write-Host "En Windows la seguridad se controla mediante permisos NTFS e IIS."
+}
+
+function Mostrar-Menu {
+
+    while ($true) {
+        Write-Host ""
+        Write-Host "***** Menu FTP *****"
+        Write-Host "1) Instalar servicio FTP"
+        Write-Host "2) Configurar FTP (IIS)"
+        Write-Host "3) Crear grupos"
+        Write-Host "4) Crear estructura base"
+        Write-Host "5) Asignar permisos base"
+        Write-Host "6) Crear usuarios"
+        Write-Host "7) Cambiar grupo usuario"
+        Write-Host "0) Salir"
+        Write-Host ""
+
+        $opcion = Read-Host "Seleccione una opcion"
+
+        switch ($opcion) {
+
+            "1" { Instalar-FTP }
+            "2" { Configurar-FTP }
+            "3" { Crear-Grupos }
+            "4" { Crear-Estructura }
+            "5" { Asignar-Permisos }
+            "6" { Crear-Usuarios }
+            "7" { Cambiar-GrupoUsuario }
+            "0" { 
+                Write-Host "Saliendo..."
+                break 
+            }
+            default {
+                Write-Host "Opcion invalida"
+                Start-Sleep -Seconds 1
+            }
+        }
+
+        if ($opcion -ne "0") {
+            Write-Host ""
+            Read-Host "Presione ENTER para continuar..."
         }
     }
 }
+
+Mostrar-Menu
