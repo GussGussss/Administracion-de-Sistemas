@@ -162,9 +162,33 @@ function Configurar-FTP {
         -Name mode `
         -Value "IsolateUsers"
 
-    # Reiniciar servicio FTP
     Restart-Service FTPSVC
 
     Write-Host "Configuracion FTP aplicada correctamente :D"
 }
 
+function Crear-Grupos {
+
+    if (Get-LocalGroup -Name "reprobados" -ErrorAction SilentlyContinue) {
+        Write-Host "El grupo reprobados ya existe"
+    } else {
+        Write-Host "Creando grupo reprobados..."
+        New-LocalGroup -Name "reprobados" -Description "Grupo FTP Reprobados"
+    }
+
+    if (Get-LocalGroup -Name "recursadores" -ErrorAction SilentlyContinue) {
+        Write-Host "El grupo recursadores ya existe"
+    } else {
+        Write-Host "Creando grupo recursadores..."
+        New-LocalGroup -Name "recursadores" -Description "Grupo FTP Recursadores"
+    }
+
+    if (-not (Get-LocalGroup -Name "ftpusuarios" -ErrorAction SilentlyContinue)) {
+        Write-Host "Creando grupo ftpusuarios..."
+        New-LocalGroup -Name "ftpusuarios" -Description "Grupo general de usuarios FTP"
+    } else {
+        Write-Host "El grupo ftpusuarios ya existe"
+    }
+
+    Write-Host "Verificacion de grupos finalizada :D"
+}
