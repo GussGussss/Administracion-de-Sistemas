@@ -89,37 +89,50 @@ function Instalar-FTP {
 }
 
 function Configurar-FTP {
+
     Import-Module WebAdministration
+
     $siteName = "FTPSite"
     $ftpRoot = "C:\FTP"
-    $localUserFolder = "$ftpRoot\LocalUser"
-    
-    if (-not (Test-Path $localUserFolder)) {
-        New-Item -Path $localUserFolder -ItemType Directory | Out-Null
+
+    Write-Host "Configurando sitio FTP en IIS..."
+
+    if (-not (Test-Path $ftpRoot)) {
+        New-Item -Path $ftpRoot -ItemType Directory | Out-Null
     }
 
     if (-not (Get-Website | Where-Object { $_.Name -eq $siteName })) {
         New-WebFtpSite -Name $siteName -Port 21 -PhysicalPath $ftpRoot -Force
+        Write-Host "Sitio FTP creado."
     }
 
-    # 1. Habilitar Autenticación Básica (CRUCIAL para usuarios locales)
     Set-WebConfigurationProperty -Filter "system.ftpServer/security/authentication/basicAuthentication" -Name enabled -Value True -PSPath "IIS:\Sites\$siteName"
-    
-    # 2. Habilitar Aislamiento de Usuarios
-    Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/userIsolation" -Name mode -Value "IsolateAllDirectories"
-    
-    # 3. Limpieza y reglas de autorización
+
+    Set-WebConfigurationProperty -Filter "system.ftpServer/security/authentication/anonymousAuthentication" -Name enabled -Value True -PSPath "IIS:\Sites\$siteName"
+
+    Write-Host "Autenticacion basica y anonima habilitadas."
+
+    Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/userIsolation" -Name mode -Value "None"
+
+    Write-Host "Aislamiento configurado en modo None."
+
     Clear-WebConfiguration -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization"
-    Add-WebConfiguration -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization" -PSPath IIS:\ -Value @{accessType="Allow"; users="anonymous"; permissions="Read"}
+    
+    Add-WebConfiguration -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization" -PSPath IIS:\ -Value @{accessType="Allow"; users="IUSR"; permissions="Read"}
+
     Add-WebConfiguration -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/authorization" -PSPath IIS:\ -Value @{accessType="Allow"; roles="reprobados,recursadores"; permissions="Read,Write"}
 
-    # 4. Firewall y SSL
+    Write-Host "Reglas de autorizacion configuradas."
     Set-WebConfigurationProperty -Filter "system.applicationHost/ftpServer/firewallSupport" -Name passivePortRange -Value "40000-40100"
+        
     Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/ssl" -Name controlChannelPolicy -Value "SslAllow"
+
     Set-WebConfigurationProperty -Filter "system.applicationHost/sites/site[@name='$siteName']/ftpServer/security/ssl" -Name dataChannelPolicy -Value "SslAllow"
 
     Restart-Service FTPSVC
-    Write-Host "Configuracion FTP aplicada correctamente y Autenticacion Basica habilitada :D"
+
+    Write-Host ""
+    Write-Host "Configuracion FTP aplicada correctamente :D"
 }
 
 function Crear-Grupos {
