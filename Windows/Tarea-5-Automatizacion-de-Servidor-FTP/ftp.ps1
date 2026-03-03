@@ -101,18 +101,15 @@ function Configurar-FTP {
         New-Item -Path $ftpRoot -ItemType Directory | Out-Null
     }
 
-    # Crear sitio FTP si no existe
     if (-not (Get-Website | Where-Object { $_.Name -eq $siteName })) {
         New-WebFtpSite -Name $siteName -Port 21 -PhysicalPath $ftpRoot -Force
     }
-
-    # 🔓 DESBLOQUEAR SECCIONES NECESARIAS
+    
     & $env:SystemRoot\System32\inetsrv\appcmd unlock config -section:system.ftpServer/security/authentication/anonymousAuthentication
     & $env:SystemRoot\System32\inetsrv\appcmd unlock config -section:system.ftpServer/security/authentication/basicAuthentication
     & $env:SystemRoot\System32\inetsrv\appcmd unlock config -section:system.ftpServer/security/authorization
     & $env:SystemRoot\System32\inetsrv\appcmd unlock config -section:system.ftpServer/userIsolation
 
-    # Habilitar autenticación
     Set-WebConfigurationProperty -Filter "system.ftpServer/security/authentication/anonymousAuthentication" -PSPath "IIS:\Sites\$siteName" -Name enabled -Value True
 
     Set-WebConfigurationProperty -Filter "system.ftpServer/security/authentication/basicAuthentication" -PSPath "IIS:\Sites\$siteName" -Name enabled -Value True
@@ -127,6 +124,10 @@ function Configurar-FTP {
 
     Set-WebConfigurationProperty -Filter "system.ftpServer/userIsolation" -PSPath "IIS:\Sites\$siteName" -Name mode -Value "IsolateUsers"
 
+    Set-WebConfigurationProperty -Filter "system.ftpServer/security/ssl" -PSPath "IIS:\Sites\$siteName" -Name controlChannelPolicy -Value "SslAllow"
+    
+    Set-WebConfigurationProperty -Filter "system.ftpServer/security/ssl" -PSPath "IIS:\Sites\$siteName" -Name dataChannelPolicy -Value "SslAllow"
+        
     Restart-Service FTPSVC
 
     Write-Host "Configuracion FTP aplicada correctamente :D"
