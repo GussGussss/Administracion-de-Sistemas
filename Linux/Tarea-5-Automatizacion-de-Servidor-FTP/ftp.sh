@@ -174,7 +174,7 @@ crear_usuarios(){
        continue
     fi
 
-    useradd -d /ftp/"$nombre" -s /sbin/nologin -g "$grupo" "$nombre"
+    useradd -d /ftp/"$nombre" -s /bin/bash -g "$grupo" "$nombre"
 
     echo "$nombre:$password" | chpasswd
 
