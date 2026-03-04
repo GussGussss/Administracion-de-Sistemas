@@ -66,6 +66,9 @@ function Configurar-FTP {
         Start-Sleep -Seconds 3
     }
 
+    Write-Host "Configurando aislamiento de usuarios..."
+    Set-WebConfigurationProperty -PSPath "MACHINE/WEBROOT/APPHOST" -Location $ftpSiteName -Filter "system.ftpServer/userIsolation" -Name mode -Value 1
+    
     Write-Host "Configurando autenticación..."
 
     Set-WebConfigurationProperty -PSPath "MACHINE/WEBROOT/APPHOST" -Location $ftpSiteName -Filter "system.ftpServer/security/authentication/anonymousAuthentication" -Name enabled -Value True
