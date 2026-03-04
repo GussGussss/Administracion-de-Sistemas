@@ -116,7 +116,7 @@ function Crear-Grupos {
 
 function Crear-Estructura {
     $raiz = "C:\ftp"
-    $subcarpetas = @("general", "reprobados", "recursadores")
+    $subcarpetas = @("general","reprobados","recursadores","LocalUser")
 
     if (-not (Test-Path $raiz)) {
         New-Item -Path $raiz -ItemType Directory | Out-Null
@@ -178,7 +178,7 @@ function Crear-Usuarios {
         Add-LocalGroupMember -Group "ftpusuarios" -Member $nombre
 
         # 2. Crear carpeta personal y aplicar ACLs
-        $userPath = "C:\ftp\$nombre"
+        $userPath = "C:\ftp\LocalUser\$nombre"
         New-Item -Path $userPath -ItemType Directory | Out-Null
         
         # Permisos: Solo el dueño (usuario) tiene acceso total
