@@ -118,7 +118,7 @@ function Crear-Grupos {
 
 function Crear-Estructura {
     $raiz = "C:\ftp"
-    $subcarpetas = @("general","reprobados","recursadores","anonymous")
+    $subcarpetas = @("general","reprobados","recursadores")
 
     if (-not (Test-Path $raiz)) {
         New-Item -Path $raiz -ItemType Directory | Out-Null
