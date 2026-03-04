@@ -76,7 +76,7 @@ function Configurar-FTP {
     
     Write-Host "Configurando aislamiento de usuarios..."
     
-    Set-ItemProperty "IIS:\Sites\$ftpSiteName" -Name ftpServer.userIsolation.mode -Value 3
+    Set-ItemProperty "IIS:\Sites\$ftpSiteName" -Name ftpServer.userIsolation.mode -Value 0
     
     Write-Host "Configurando puertos pasivos..."
     
@@ -136,7 +136,7 @@ function Crear-Estructura {
 function Asignar-Permisos {
     
     $raiz = "C:\ftp"
-    icacls "$raiz" /inheritance:r /grant:r "Administrators:(OI)(CI)F" /grant:r "SYSTEM:(OI)(CI)F" /grant:r "Users:(OI)(CI)R"
+    icacls "$raiz" /inheritance:r /grant:r "Administrators:(OI)(CI)F" /grant:r "SYSTEM:(OI)(CI)F" /grant:r "ftpusuarios:(OI)(CI)RX"
     
     $grupos = @{ "reprobados" = "reprobados"; "recursadores" = "recursadores" }
 
@@ -145,9 +145,6 @@ function Asignar-Permisos {
         $g = $grupos[$nombre]
         icacls "$path" /inheritance:r /grant:r "Administrators:(OI)(CI)F" /grant:r "SYSTEM:(OI)(CI)F" /grant:r "${g}:(OI)(CI)M"
     }
-    icacls "$raiz\general" /inheritance:r /grant:r "Administrators:(OI)(CI)F" /grant:r "SYSTEM:(OI)(CI)F" /grant:r "ftpusuarios:(OI)(CI)M"
-
-    # 3. Permisos para carpeta general: ftpusuarios con permisos de modificación (M)
     icacls "$raiz\general" /inheritance:r /grant:r "Administrators:(OI)(CI)F" /grant:r "SYSTEM:(OI)(CI)F" /grant:r "ftpusuarios:(OI)(CI)M"
 
     Write-Host "Permisos NTFS aplicados correctamente."
@@ -182,13 +179,10 @@ function Crear-Usuarios {
         $userPath = "C:\ftp\$nombre"
         
         New-Item -Path $userPath -ItemType Directory -Force | Out-Null
-        New-Item -Path "$userPath\general" -ItemType Directory -Force | Out-Null
-        New-Item -Path "$userPath\$grupo" -ItemType Directory -Force | Out-Null
-        New-Item -Path "$userPath\$nombre" -ItemType Directory -Force | Out-Null
         
         # Permisos
-        icacls $userPath /inheritance:r /grant:r "${nombre}:(OI)(CI)F" /grant:r "Administrators:(OI)(CI)F"
-        
+        icacls $userPath /inheritance:r /grant:r "${nombre}:(OI)(CI)M" /grant:r "Administrators:(OI)(CI)F"
+        icacls "C:\ftp\$grupo" /grant:r "${nombre}:(OI)(CI)M"
         Write-Host "Usuario $nombre creado y carpeta personal configurada."
     }
 }
@@ -215,17 +209,19 @@ function Cambiar-Grupo-Usuario {
     foreach ($g in $grupos) {
         if (Get-LocalGroupMember -Group $g | Where-Object { $_.Name -eq $nombre }) {
             Remove-LocalGroupMember -Group $g -Member $nombre -Confirm:$false
+            icacls "C:\ftp\$g" /remove "$nombre" 2>$null
         }
     }
-
+    
     # 3. Añadir al nuevo grupo
     Add-LocalGroupMember -Group $nuevo_grupo -Member $nombre
 
     # 4. Actualizar permisos de la carpeta personal (NTFS)
     # Otorgamos acceso al nuevo grupo a la carpeta del usuario
-    $userPath = "C:\ftp\LocalUser\$nombre"
-    icacls $userPath /grant:r "${nuevo_grupo}:(OI)(CI)M"
-
+    $userPath = "C:\ftp\$nombre"
+    icacls $userPath /grant:r "${nombre}:(OI)(CI)M"
+    icacls "C:\ftp\$nuevo_grupo" /grant:r "${nombre}:(OI)(CI)M"
+    
     Write-Host "Grupo del usuario $nombre actualizado a $nuevo_grupo y permisos ajustados."
 }
 
