@@ -76,7 +76,7 @@ function Configurar-FTP {
     
     Write-Host "Configurando aislamiento de usuarios..."
     
-    Set-ItemProperty "IIS:\Sites\$ftpSiteName" -Name ftpServer.userIsolation.mode -Value 0
+    Set-ItemProperty "IIS:\Sites\$ftpSiteName" -Name ftpServer.userIsolation.mode -Value 3
     
     Write-Host "Configurando puertos pasivos..."
     
