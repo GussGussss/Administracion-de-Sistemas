@@ -137,7 +137,7 @@ function Asignar-Permisos {
 
     $raiz = "C:\ftp"
 
-    icacls "$raiz" /inheritance:r /grant:r "Administrators:(OI)(CI)F" /grant:r "SYSTEM:(OI)(CI)F" /grant:r "ftpusuarios:(OI)(CI)M" /grant:r "IUSR:(OI)(CI)RX"
+    icacls "$raiz" /inheritance:r /grant:r "Administrators:(OI)(CI)F" /grant:r "SYSTEM:(OI)(CI)F" /grant:r "ftpusuarios:(OI)(CI)M" /grant:r "IUSR:(OI)(CI)RX" /grant:r "IIS_IUSRS:(OI)(CI)RX"
 
     $grupos = @{
         "reprobados" = "reprobados"
@@ -152,10 +152,11 @@ function Asignar-Permisos {
         icacls "$path" /inheritance:r /grant:r "Administrators:(OI)(CI)F" /grant:r "SYSTEM:(OI)(CI)F" /grant:r "${g}:(OI)(CI)M"
     }
 
-    icacls "$raiz\general" /inheritance:r /grant:r "Administrators:(OI)(CI)F" /grant:r "SYSTEM:(OI)(CI)F" /grant:r "ftpusuarios:(OI)(CI)M" /grant:r "IUSR:(OI)(CI)RX"
+    icacls "$raiz\general" /inheritance:r /grant:r "Administrators:(OI)(CI)F" /grant:r "SYSTEM:(OI)(CI)F" /grant:r "ftpusuarios:(OI)(CI)M" /grant:r "IUSR:(OI)(CI)RX" /grant:r "IIS_IUSRS:(OI)(CI)RX"
 
     Write-Host "Permisos NTFS aplicados correctamente."
 }
+
 function Crear-Usuarios {
     $num = Read-Host "Ingrese el número de usuarios a crear"
     for ($i = 1; $i -le $num; $i++) {
