@@ -69,9 +69,10 @@ function Configurar-FTP {
 
     New-WebFtpSite -Name $ftpSiteName -Port 21 -PhysicalPath $ftpRoot -Force
 
-   Write-Host "Configurando autenticación..."
+    Write-Host "Configurando autenticación..."
 
     Set-ItemProperty "IIS:\Sites\$ftpSiteName" -Name ftpServer.security.authentication.anonymousAuthentication.enabled -Value $true
+    Set-ItemProperty "IIS:\Sites\$ftpSiteName" -Name ftpServer.security.authentication.anonymousAuthentication.userName -Value "IUSR"
     Set-ItemProperty "IIS:\Sites\$ftpSiteName" -Name ftpServer.security.authentication.basicAuthentication.enabled -Value $true
     
     Write-Host "Configurando aislamiento de usuarios..."
