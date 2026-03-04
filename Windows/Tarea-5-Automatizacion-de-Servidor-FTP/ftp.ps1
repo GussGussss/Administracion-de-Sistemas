@@ -50,9 +50,7 @@ function Instalar-FTP {
 }
 
 function Configurar-FTP {
-
     Import-Module WebAdministration
-
     $ftpSiteName = "FTP_Servidor"
     $ftpRoot = "C:\ftp"
 
@@ -60,51 +58,40 @@ function Configurar-FTP {
         New-Item -Path $ftpRoot -ItemType Directory | Out-Null
     }
 
-    # Eliminar sitio si existe (evita errores de configuración)
     if (Get-WebSite -Name $ftpSiteName -ErrorAction SilentlyContinue) {
         Remove-WebSite $ftpSiteName
     }
 
     Write-Host "Creando sitio FTP..."
-
     New-WebFtpSite -Name $ftpSiteName -Port 21 -PhysicalPath $ftpRoot -Force
 
     Write-Host "Configurando autenticación..."
-
+    # Habilitar anónimo y dejar el usuario por defecto del sistema
     Set-ItemProperty "IIS:\Sites\$ftpSiteName" -Name ftpServer.security.authentication.anonymousAuthentication.enabled -Value $true
-    Set-ItemProperty "IIS:\Sites\$ftpSiteName" -Name ftpServer.security.authentication.anonymousAuthentication.userName -Value "IUSR"
+    Set-ItemProperty "IIS:\Sites\$ftpSiteName" -Name ftpServer.security.authentication.anonymousAuthentication.userName -Value ""
     Set-ItemProperty "IIS:\Sites\$ftpSiteName" -Name ftpServer.security.authentication.basicAuthentication.enabled -Value $true
     
     Write-Host "Configurando aislamiento de usuarios..."
-    
     Set-ItemProperty "IIS:\Sites\$ftpSiteName" -Name ftpServer.userIsolation.mode -Value 0
     
     Write-Host "Configurando puertos pasivos..."
-    
     C:\Windows\System32\inetsrv\appcmd.exe set config -section:system.ftpServer/firewallSupport /lowDataChannelPort:40000 /highDataChannelPort:40100 /commit:apphost
 
     Write-Host "Desactivando SSL obligatorio..."
-
     Set-ItemProperty "IIS:\Sites\$ftpSiteName" -Name ftpServer.security.ssl.controlChannelPolicy -Value 0
-
     Set-ItemProperty "IIS:\Sites\$ftpSiteName" -Name ftpServer.security.ssl.dataChannelPolicy -Value 0
 
-
     Write-Host "Configurando reglas de acceso..."
-
     Clear-WebConfiguration -Filter system.ftpServer/security/authorization -PSPath IIS:\ -Location $ftpSiteName
 
-    Add-WebConfiguration -Filter system.ftpServer/security/authorization -PSPath IIS:\ -Location $ftpSiteName -Value @{accessType="Allow";users="anonymous";permissions="Read"}
-
+    # REGLA PARA ANÓNIMOS USANDO EL COMODÍN '?'
+    Add-WebConfiguration -Filter system.ftpServer/security/authorization -PSPath IIS:\ -Location $ftpSiteName -Value @{accessType="Allow";users="?";permissions="Read"}
     Add-WebConfiguration -Filter system.ftpServer/security/authorization -PSPath IIS:\ -Location $ftpSiteName -Value @{accessType="Allow";roles="ftpusuarios";permissions="Read,Write"}
-    Add-WebConfiguration -Filter system.ftpServer/security/authorization -PSPath IIS:\ -Location $ftpSiteName -Value @{accessType="Allow";roles="reprobados";permissions="Read,Write"}
-
-    Add-WebConfiguration -Filter system.ftpServer/security/authorization -PSPath IIS:\ -Location $ftpSiteName -Value @{accessType="Allow";roles="recursadores";permissions="Read,Write"}
 
     Restart-Service ftpsvc
-
     Write-Host "FTP configurado correctamente."
 }
+
 
 function Crear-Grupos {
     $grupos = @("reprobados", "recursadores", "ftpusuarios")
@@ -138,14 +125,12 @@ function Crear-Estructura {
 }
 
 function Asignar-Permisos {
-
     $raiz = "C:\ftp"
-
+    # Permisos NTFS: 'Everyone' o 'Todos' con lectura es vital para el acceso anónimo sin complicaciones
     icacls "$raiz" /grant:r "Administrators:(OI)(CI)F"
     icacls "$raiz" /grant:r "SYSTEM:(OI)(CI)F"
     icacls "$raiz" /grant:r "ftpusuarios:(OI)(CI)M"
-    icacls "$raiz" /grant "IUSR:(OI)(CI)RX"
-    icacls "$raiz" /grant "IIS_IUSRS:(OI)(CI)RX"
+    icacls "$raiz" /grant "Everyone:(OI)(CI)RX"
 
     $grupos = @{
         "reprobados" = "reprobados"
