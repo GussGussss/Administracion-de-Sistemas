@@ -53,43 +53,46 @@ function Configurar-FTP {
     Import-Module WebAdministration
 
     if (-not (Test-Path $ftpRoot)) {
-        New-Item -Path $ftpRoot -ItemType Directory | Out-Null
-        Write-Host "Carpeta raíz $ftpRoot creada automáticamente."
+        New-Item -ItemType Directory -Path $ftpRoot | Out-Null
     }
 
     if (-not (Get-WebSite -Name $ftpSiteName -ErrorAction SilentlyContinue)) {
         Write-Host "Creando sitio FTP..."
         New-WebFtpSite -Name $ftpSiteName -Port 21 -PhysicalPath $ftpRoot
-        Start-Sleep -Seconds 3
+        Start-Sleep 2
     }
 
-    try {
+    Write-Host "Configurando autenticación FTP..."
 
-        Set-WebConfigurationProperty -Filter "/system.ftpServer/security/authentication/anonymousAuthentication" -Name enabled -Value True -PSPath "IIS:\Sites\$ftpSiteName"
+    Set-WebConfigurationProperty -Filter "/system.ftpServer/security/authentication/anonymousAuthentication" -Name enabled -Value True -PSPath "IIS:\Sites\$ftpSiteName"
 
-        Set-WebConfigurationProperty -Filter "/system.ftpServer/security/authentication/basicAuthentication" -Name enabled -Value True -PSPath "IIS:\Sites\$ftpSiteName"
+    Set-WebConfigurationProperty -Filter "/system.ftpServer/security/authentication/basicAuthentication" -Name enabled -Value True -PSPath "IIS:\Sites\$ftpSiteName"
 
-        Set-WebConfigurationProperty -Filter "/system.ftpServer/firewallSupport" -Name passiveEnabled -Value True -PSPath "IIS:\Sites\$ftpSiteName"
+    Write-Host "Configurando modo pasivo..."
 
-        Set-WebConfigurationProperty -Filter "/system.ftpServer/firewallSupport" -Name dataChannelPortRange -Value "40000-40100" -PSPath "IIS:\Sites\$ftpSiteName"
+    Set-WebConfigurationProperty -Filter "/system.ftpServer/firewallSupport" -Name passiveEnabled -Value True -PSPath "IIS:\Sites\$ftpSiteName"
 
-        Add-WebConfigurationProperty -Filter "/system.ftpServer/security/authorization" -PSPath "IIS:\Sites\$ftpSiteName" -Name "." -Value @{accessType="Allow";users="*";permissions="Read"}
+    Set-WebConfigurationProperty -Filter "/system.ftpServer/firewallSupport" -Name dataChannelPortRange -Value "40000-40100" -PSPath "IIS:\Sites\$ftpSiteName"
 
-        Set-WebConfigurationProperty -Filter "/system.ftpServer/security/ssl" -Name controlChannelPolicy -Value 0 -PSPath "IIS:\Sites\$ftpSiteName"
-        
-        Set-WebConfigurationProperty -Filter "/system.ftpServer/security/ssl" -Name dataChannelPolicy -Value 0 -PSPath "IIS:\Sites\$ftpSiteName"
-         
-        Write-Host "Configuración FTP aplicada correctamente."
+    Write-Host "Desactivando SSL obligatorio..."
 
-    } catch {
-        Write-Host "Aviso: Algunas propiedades ya estaban configuradas."
-    }
+    Set-WebConfigurationProperty -Filter "/system.ftpServer/security/ssl" -Name controlChannelPolicy -Value 0 -PSPath "IIS:\Sites\$ftpSiteName"
 
-    Stop-WebSite -Name $ftpSiteName -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 2
-    Start-WebSite -Name $ftpSiteName -ErrorAction SilentlyContinue
+    Set-WebConfigurationProperty -Filter "/system.ftpServer/security/ssl" -Name dataChannelPolicy -Value 0 -PSPath "IIS:\Sites\$ftpSiteName"
 
-    Write-Host "Sitio FTP reiniciado correctamente."
+    Write-Host "Configurando reglas de autorización..."
+
+    Clear-WebConfiguration -Filter "/system.ftpServer/security/authorization" -PSPath "IIS:\Sites\$ftpSiteName"
+
+    Add-WebConfiguration -Filter "/system.ftpServer/security/authorization" -PSPath "IIS:\Sites\$ftpSiteName" -Value @{accessType="Allow";users="anonymous";permissions="Read"}
+
+    Add-WebConfiguration -Filter "/system.ftpServer/security/authorization" -PSPath "IIS:\Sites\$ftpSiteName" -Value @{accessType="Allow";roles="ftpusuarios";permissions="Read,Write"}
+
+    Stop-WebSite $ftpSiteName
+    Start-Sleep 2
+    Start-WebSite $ftpSiteName
+
+    Write-Host "FTP configurado correctamente."
 }
 
 function Crear-Grupos {
