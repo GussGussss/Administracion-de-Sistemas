@@ -45,20 +45,6 @@ function Instalar-FTP {
     Read-Host "Presione ENTER para continuar..."
 }
 
-    # Habilitar e iniciar el servicio FTP (en Windows es parte de IIS / servicio 'ftpsvc')
-    $service = Get-Service -Name ftpsvc
-    if ($service.Status -ne 'Running') {
-        Write-Host "Iniciando servicio FTP..."
-        Start-Service -Name ftpsvc
-        Set-Service -Name ftpsvc -StartupType Automatic
-    }
-
-    Configurar-Firewall
-    # Configurar-SELinux no aplica en Windows, 
-    # pero se podría considerar configurar las directivas de grupo si fuera necesario.
-    Read-Host "Presione ENTER para continuar..."
-}
-
 function Configurar-FTP {
     $ftpSiteName = "FTP_Servidor"
     $ftpRoot = "C:\ftp"
