@@ -46,37 +46,53 @@ function Instalar-FTP {
 }
 
 function Configurar-FTP {
+
     $ftpSiteName = "FTP_Servidor"
     $ftpRoot = "C:\ftp"
+
     Import-Module WebAdministration
 
+    # Crear carpeta raíz si no existe
     if (-not (Test-Path $ftpRoot)) {
         New-Item -Path $ftpRoot -ItemType Directory | Out-Null
         Write-Host "Carpeta raíz $ftpRoot creada automáticamente."
     }
 
-    # 1. Crear el sitio si no existe
+    # Crear el sitio FTP si no existe
     if (-not (Get-WebSite -Name $ftpSiteName -ErrorAction SilentlyContinue)) {
         Write-Host "Creando sitio FTP..."
         New-WebFtpSite -Name $ftpSiteName -Port 21 -PhysicalPath $ftpRoot
-        Start-Sleep -Seconds 2 
+        Start-Sleep -Seconds 5
     }
+
     try {
-        Set-WebConfigurationProperty -Filter /system.ftpServer/security/authentication/anonymousAuthentication -Name enabled -Value True -PSPath "IIS:\Sites\$ftpSiteName"
-        Set-WebConfigurationProperty -Filter /system.ftpServer/security/authentication/basicAuthentication -Name enabled -Value True -PSPath "IIS:\Sites\$ftpSiteName"
-        Set-WebConfigurationProperty -Filter /system.ftpServer/firewallSupport -Name passiveEnabled -Value True -PSPath "IIS:\Sites\$ftpSiteName"
-        Set-WebConfigurationProperty -Filter /system.ftpServer/firewallSupport -Name dataChannelPortRange -Value "40000-40100" -PSPath "IIS:\Sites\$ftpSiteName"
-        Add-WebConfiguration -Filter /system.ftpServer/security/authorization -PSPath "IIS:\Sites\$ftpSiteName" -Value @{accessType="Allow"; users="*"; permissions="Read"} -ErrorAction SilentlyContinue
+
+        # Autenticación anónima
+        Set-WebConfigurationProperty -Filter "system.ftpServer/security/authentication/anonymousAuthentication" -Name enabled -Value True -PSPath "MACHINE/WEBROOT/APPHOST" -Location $ftpSiteName
+
+        # Autenticación básica
+        Set-WebConfigurationProperty -Filter "system.ftpServer/security/authentication/basicAuthentication" -Name enabled -Value True -PSPath "MACHINE/WEBROOT/APPHOST" -Location $ftpSiteName
+
+        # Configuración de firewall pasivo
+        Set-WebConfigurationProperty -Filter "system.ftpServer/firewallSupport" -Name passiveEnabled `-Value True -PSPath "MACHINE/WEBROOT/APPHOST" -Location $ftpSiteName
+
+        Set-WebConfigurationProperty -Filter "system.ftpServer/firewallSupport" -Name dataChannelPortRange -Value "40000-40100" -PSPath "MACHINE/WEBROOT/APPHOST" -Location $ftpSiteName
+
+        # Regla de autorización
+        Add-WebConfiguration -Filter "system.ftpServer/security/authorization" -PSPath "MACHINE/WEBROOT/APPHOST" -Location $ftpSiteName -Value @{accessType="Allow"; users="*"; permissions="Read"} -ErrorAction SilentlyContinue
 
         Write-Host "Configuración FTP aplicada correctamente."
+
     } catch {
         Write-Host "Aviso: Algunas propiedades ya estaban configuradas o hubo un detalle: $($_.Exception.Message)"
     }
 
-    # Reiniciar sitio de forma segura
+    # Reiniciar el sitio FTP
     Stop-WebSite -Name $ftpSiteName -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 1
+    Start-Sleep -Seconds 2
     Start-WebSite -Name $ftpSiteName -ErrorAction SilentlyContinue
+
+    Write-Host "Sitio FTP reiniciado correctamente."
 }
 
 function Crear-Grupos {
