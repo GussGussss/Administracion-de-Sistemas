@@ -77,10 +77,8 @@ function Configurar-FTP {
         Set-WebConfigurationProperty -Filter "system.ftpServer/firewallSupport" -Name passiveEnabled `-Value True -PSPath "MACHINE/WEBROOT/APPHOST" -Location $ftpSiteName
 
         Set-WebConfigurationProperty -Filter "system.ftpServer/firewallSupport" -Name dataChannelPortRange -Value "40000-40100" -PSPath "MACHINE/WEBROOT/APPHOST" -Location $ftpSiteName
-
-        # Regla de autorización
-        Add-WebConfiguration -Filter "system.ftpServer/security/authorization" -PSPath "MACHINE/WEBROOT/APPHOST" -Location $ftpSiteName -Value @{accessType="Allow"; users="*"; permissions="Read"} -ErrorAction SilentlyContinue
-
+    
+        Add-WebConfigurationProperty -PSPath "MACHINE/WEBROOT/APPHOST" -Filter "system.ftpServer/security/authorization" -Name "." -Location $ftpSiteName -Value @{accessType="Allow";users="*";permissions="Read"}
         Write-Host "Configuración FTP aplicada correctamente."
 
     } catch {
@@ -89,7 +87,9 @@ function Configurar-FTP {
 
     # Reiniciar el sitio FTP
     Stop-WebSite -Name $ftpSiteName -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 2
+    Start-Sleep -Seconds 5
+    iisreset /noforce
+    Start-Sleep -Seconds 5
     Start-WebSite -Name $ftpSiteName -ErrorAction SilentlyContinue
 
     Write-Host "Sitio FTP reiniciado correctamente."
