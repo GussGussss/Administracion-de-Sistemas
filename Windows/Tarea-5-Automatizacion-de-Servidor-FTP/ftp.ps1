@@ -48,33 +48,37 @@ function Instalar-FTP {
 function Configurar-FTP {
     $ftpSiteName = "FTP_Servidor"
     $ftpRoot = "C:\ftp"
+    Import-Module WebAdministration
 
-    # Forzar la carga del módulo
-    if (-not (Get-Module -Name WebAdministration)) { Import-Module WebAdministration }
-
-    # 1. Crear el sitio si no existe
-    if (-not (Test-Path "IIS:\Sites\$ftpSiteName")) {
-        Write-Host "Creando sitio FTP..."
-        New-WebFtpSite -Name $ftpSiteName -Port 21 -PhysicalPath $ftpRoot
-        Start-Sleep -Seconds 3 # Aumentamos el tiempo de espera
+    if (-not (Test-Path $ftpRoot)) {
+        New-Item -Path $ftpRoot -ItemType Directory | Out-Null
+        Write-Host "Carpeta raíz $ftpRoot creada automáticamente."
     }
 
-    # 2. Configurar mediante una lógica más robusta
+    # 1. Crear el sitio si no existe
+    if (-not (Get-WebSite -Name $ftpSiteName -ErrorAction SilentlyContinue)) {
+        Write-Host "Creando sitio FTP..."
+        New-WebFtpSite -Name $ftpSiteName -Port 21 -PhysicalPath $ftpRoot
+        Start-Sleep -Seconds 2 
+    }
     try {
-        Write-Host "Configurando propiedades de autenticación y firewall..."
-        
-        # Usamos Set-WebConfiguration directamente sobre el archivo de configuración si el proveedor falla
         Set-WebConfigurationProperty -Filter /system.ftpServer/security/authentication/anonymousAuthentication -Name enabled -Value True -PSPath "IIS:\Sites\$ftpSiteName"
         Set-WebConfigurationProperty -Filter /system.ftpServer/security/authentication/basicAuthentication -Name enabled -Value True -PSPath "IIS:\Sites\$ftpSiteName"
         Set-WebConfigurationProperty -Filter /system.ftpServer/firewallSupport -Name passiveEnabled -Value True -PSPath "IIS:\Sites\$ftpSiteName"
         Set-WebConfigurationProperty -Filter /system.ftpServer/firewallSupport -Name dataChannelPortRange -Value "40000-40100" -PSPath "IIS:\Sites\$ftpSiteName"
-        
+        Add-WebConfiguration -Filter /system.ftpServer/security/authorization -PSPath "IIS:\Sites\$ftpSiteName" -Value @{accessType="Allow"; users="*"; permissions="Read"} -ErrorAction SilentlyContinue
+
         Write-Host "Configuración FTP aplicada correctamente."
     } catch {
-        Write-Host "Error detectado: $($_.Exception.Message)"
-        Write-Host "Nota: Si IIS ya tiene el sitio, puedes ignorar este error de configuración."
+        Write-Host "Aviso: Algunas propiedades ya estaban configuradas o hubo un detalle: $($_.Exception.Message)"
     }
+
+    # Reiniciar sitio de forma segura
+    Stop-WebSite -Name $ftpSiteName -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 1
+    Start-WebSite -Name $ftpSiteName -ErrorAction SilentlyContinue
 }
+
 function Crear-Grupos {
     $grupos = @("reprobados", "recursadores", "ftpusuarios")
 
