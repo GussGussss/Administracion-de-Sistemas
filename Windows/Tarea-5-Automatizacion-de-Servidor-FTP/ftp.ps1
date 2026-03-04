@@ -218,7 +218,7 @@ function Cambiar-Grupo-Usuario {
 
     # 4. Actualizar permisos de la carpeta personal (NTFS)
     # Otorgamos acceso al nuevo grupo a la carpeta del usuario
-    $userPath = "C:\ftp\$nombre"
+    $userPath = "C:\ftp\LocalUser\$nombre"
     icacls $userPath /grant:r "${nuevo_grupo}:(OI)(CI)M"
 
     Write-Host "Grupo del usuario $nombre actualizado a $nuevo_grupo y permisos ajustados."
