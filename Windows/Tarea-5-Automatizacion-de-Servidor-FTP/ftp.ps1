@@ -181,8 +181,7 @@ function Crear-Usuarios {
         New-Item -Path $userPath -ItemType Directory -Force | Out-Null
         
         # Permisos
-        icacls $userPath /inheritance:r /grant:r "${nombre}:(OI)(CI)M" /grant:r "Administrators:(OI)(CI)F"
-        icacls "C:\ftp\$grupo" /grant:r "${nombre}:(OI)(CI)M"
+        icacls $userPath /inheritance:r /grant:r "${nombre}:(OI)(CI)M" /grant:r "Administrators:(OI)(CI)F" /grant:r "SYSTEM:(OI)(CI)F"
         Write-Host "Usuario $nombre creado y carpeta personal configurada."
     }
 }
@@ -220,7 +219,6 @@ function Cambiar-Grupo-Usuario {
     # Otorgamos acceso al nuevo grupo a la carpeta del usuario
     $userPath = "C:\ftp\$nombre"
     icacls $userPath /grant:r "${nombre}:(OI)(CI)M"
-    icacls "C:\ftp\$nuevo_grupo" /grant:r "${nombre}:(OI)(CI)M"
     
     Write-Host "Grupo del usuario $nombre actualizado a $nuevo_grupo y permisos ajustados."
 }
