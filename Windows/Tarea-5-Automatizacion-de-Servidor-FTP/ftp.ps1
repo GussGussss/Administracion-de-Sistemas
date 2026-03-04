@@ -145,7 +145,7 @@ function Asignar-Permisos {
         $g = $grupos[$nombre]
         icacls "$path" /inheritance:r /grant:r "Administrators:(OI)(CI)F" /grant:r "SYSTEM:(OI)(CI)F" /grant:r "${g}:(OI)(CI)M"
     }
-    icacls "$raiz\general" /inheritance:r /grant:r "Administrators:(OI)(CI)F" /grant:r "SYSTEM:(OI)(CI)F" /grant:r "ftpusuarios:(OI)(CI)M"
+    icacls "$raiz\general" /inheritance:r /grant:r "Administrators:(OI)(CI)F" /grant:r "SYSTEM:(OI)(CI)F" /grant:r "ftpusuarios:(OI)(CI)M" /grant:r "IUSR:(OI)(CI)RX"
 
     Write-Host "Permisos NTFS aplicados correctamente."
 }
