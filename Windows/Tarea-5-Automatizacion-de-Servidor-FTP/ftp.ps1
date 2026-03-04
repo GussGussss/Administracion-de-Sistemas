@@ -69,21 +69,18 @@ function Configurar-FTP {
 
     New-WebFtpSite -Name $ftpSiteName -Port 21 -PhysicalPath $ftpRoot -Force
 
-    Write-Host "Configurando autenticación..."
-    C:\Windows\System32\inetsrv\appcmd.exe set config -section:system.ftpServer/firewallSupport /lowDataChannelPort:40000 /highDataChannelPort:40100 /commit:apphost
+   Write-Host "Configurando autenticación..."
 
-
+    Set-ItemProperty "IIS:\Sites\$ftpSiteName" -Name ftpServer.security.authentication.anonymousAuthentication.enabled -Value $true
+    Set-ItemProperty "IIS:\Sites\$ftpSiteName" -Name ftpServer.security.authentication.basicAuthentication.enabled -Value $true
+    
     Write-Host "Configurando aislamiento de usuarios..."
-
+    
     Set-ItemProperty "IIS:\Sites\$ftpSiteName" -Name ftpServer.userIsolation.mode -Value 1
-
-
+    
     Write-Host "Configurando puertos pasivos..."
-
-    Set-ItemProperty "IIS:\Sites\$ftpSiteName" -Name ftpServer.firewallSupport.passiveEnabled -Value $true
-
-    Set-ItemProperty "IIS:\Sites\$ftpSiteName" -Name ftpServer.firewallSupport.dataChannelPortRange -Value "40000-40100"
-
+    
+    C:\Windows\System32\inetsrv\appcmd.exe set config -section:system.ftpServer/firewallSupport /lowDataChannelPort:40000 /highDataChannelPort:40100 /commit:apphost
 
     Write-Host "Desactivando SSL obligatorio..."
 
