@@ -75,6 +75,10 @@ function Configurar-FTP {
 
         Add-WebConfigurationProperty -Filter "/system.ftpServer/security/authorization" -PSPath "IIS:\Sites\$ftpSiteName" -Name "." -Value @{accessType="Allow";users="*";permissions="Read"}
 
+        Set-WebConfigurationProperty -Filter "/system.ftpServer/security/ssl" -Name controlChannelPolicy -Value 0 -PSPath "IIS:\Sites\$ftpSiteName"
+        
+        Set-WebConfigurationProperty -Filter "/system.ftpServer/security/ssl" -Name dataChannelPolicy -Value 0 -PSPath "IIS:\Sites\$ftpSiteName"
+         
         Write-Host "Configuración FTP aplicada correctamente."
 
     } catch {
