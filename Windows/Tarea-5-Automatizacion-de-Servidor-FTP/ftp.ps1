@@ -178,11 +178,15 @@ function Crear-Usuarios {
         Add-LocalGroupMember -Group $grupo -Member $nombre
         Add-LocalGroupMember -Group "ftpusuarios" -Member $nombre
 
-        # 2. Crear carpeta personal y aplicar ACLs
-        $userPath = "C:\ftp\LocalUser\$nombre"
-        New-Item -Path $userPath -ItemType Directory | Out-Null
+       # 2. Crear carpeta personal y estructura requerida
+        $userPath = "C:\ftp\$nombre"
         
-        # Permisos: Solo el dueño (usuario) tiene acceso total
+        New-Item -Path $userPath -ItemType Directory -Force | Out-Null
+        New-Item -Path "$userPath\general" -ItemType Directory -Force | Out-Null
+        New-Item -Path "$userPath\$grupo" -ItemType Directory -Force | Out-Null
+        New-Item -Path "$userPath\$nombre" -ItemType Directory -Force | Out-Null
+        
+        # Permisos
         icacls $userPath /inheritance:r /grant:r "${nombre}:(OI)(CI)F" /grant:r "Administrators:(OI)(CI)F"
         
         Write-Host "Usuario $nombre creado y carpeta personal configurada."
