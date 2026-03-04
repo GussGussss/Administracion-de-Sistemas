@@ -14,35 +14,39 @@ function Configurar-Firewall {
 
 function Instalar-FTP {
 
-    Write-Host "`nVerificando si el servicio FTP de IIS está instalado.....`n"
+    Write-Host "`nVerificando si IIS + FTP están instalados...`n"
 
-    $ftpFeature = Get-WindowsFeature -Name Web-FTP-Server
+    $features = @(
+        "Web-Server",
+        "Web-FTP-Server",
+        "Web-FTP-Service",
+        "Web-FTP-Ext"
+    )
 
-    if ($ftpFeature.Installed) {
-        Write-Host "El servicio FTP ya está instalado."
-    }
-    else {
-        Write-Host "Instalando servicio FTP..."
-        Install-WindowsFeature -Name Web-FTP-Server, Web-Mgmt-Console
+    foreach ($feature in $features) {
 
-        if ((Get-WindowsFeature -Name Web-FTP-Server).Installed) {
-            Write-Host "Instalación completada."
+        $estado = Get-WindowsFeature $feature
+
+        if (-not $estado.Installed) {
+            Write-Host "Instalando $feature ..."
+            Install-WindowsFeature $feature -IncludeManagementTools
         }
         else {
-            Write-Host "Hubo un error en la instalación."
-            return
+            Write-Host "$feature ya está instalado."
         }
     }
 
-    $service = Get-Service -Name ftpsvc
-    if ($service.Status -ne 'Running') {
-        Write-Host "Iniciando servicio FTP..."
-        Start-Service -Name ftpsvc
-        Set-Service -Name ftpsvc -StartupType Automatic
-    }
+    Write-Host "`nIniciando servicios..."
+
+    Start-Service ftpsvc -ErrorAction SilentlyContinue
+    Set-Service ftpsvc -StartupType Automatic
+
+    Start-Service W3SVC -ErrorAction SilentlyContinue
+    Set-Service W3SVC -StartupType Automatic
 
     Configurar-Firewall
-    Read-Host "Presione ENTER para continuar..."
+
+    Write-Host "`nInstalación de IIS + FTP completada."
 }
 
 function Configurar-FTP {
