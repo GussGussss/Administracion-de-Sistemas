@@ -159,7 +159,6 @@ function Asignar-Permisos {
 
     icacls "$raiz\general" /inheritance:r /grant:r "Administrators:(OI)(CI)F" /grant:r "SYSTEM:(OI)(CI)F" /grant:r "ftpusuarios:(OI)(CI)M" /grant:r "IUSR:(OI)(CI)RX" /grant:r "IIS_IUSRS:(OI)(CI)RX"
 
-    icacls "$raiz\anonymous" /inheritance:r /grant:r "Administrators:(OI)(CI)F" /grant:r "SYSTEM:(OI)(CI)F" /grant:r "IUSR:(OI)(CI)RX" /grant:r "IIS_IUSRS:(OI)(CI)RX"
     Write-Host "Permisos NTFS aplicados correctamente."
 }
 
