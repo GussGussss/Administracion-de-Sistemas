@@ -187,40 +187,43 @@ function Crear-Usuarios {
 }
 
 function Cambiar-Grupo-Usuario {
+
     Write-Host "`n***** Cambiar de grupo a usuario *****"
     $nombre = Read-Host "Ingrese el nombre del usuario"
-    
-    # 1. Verificar si el usuario existe
+
     $usuario = Get-LocalUser -Name $nombre -ErrorAction SilentlyContinue
     if (-not $usuario) {
         Write-Host "El usuario no existe."
         return
     }
 
-    $nuevo_grupo = Read-Host "Ingrese el nuevo grupo del usuario (reprobados/recursadores)"
+    $nuevo_grupo = Read-Host "Ingrese el nuevo grupo (reprobados/recursadores)"
+
     if ($nuevo_grupo -ne "reprobados" -and $nuevo_grupo -ne "recursadores") {
         Write-Host "Grupo inválido."
         return
     }
 
-    # 2. Identificar y remover del grupo anterior (reprobados o recursadores)
-    $grupos = @("reprobados", "recursadores")
+    $grupos = @("reprobados","recursadores")
+
     foreach ($g in $grupos) {
-        if (Get-LocalGroupMember -Group $g | Where-Object { $_.Name -eq $nombre }) {
+
+        if (Get-LocalGroupMember -Group $g -ErrorAction SilentlyContinue | Where {$_.Name -like "*$nombre"}) {
+
             Remove-LocalGroupMember -Group $g -Member $nombre -Confirm:$false
+
+            # Quitar permisos NTFS antiguos
             icacls "C:\ftp\$g" /remove "$nombre" 2>$null
         }
     }
-    
-    # 3. Añadir al nuevo grupo
+
     Add-LocalGroupMember -Group $nuevo_grupo -Member $nombre
 
-    # 4. Actualizar permisos de la carpeta personal (NTFS)
-    # Otorgamos acceso al nuevo grupo a la carpeta del usuario
-    $userPath = "C:\ftp\$nombre"
-    icacls $userPath /grant:r "${nombre}:(OI)(CI)M"
-    
-    Write-Host "Grupo del usuario $nombre actualizado a $nuevo_grupo y permisos ajustados."
+    Write-Host "Reiniciando servicio FTP..."
+
+    Restart-Service ftpsvc -Force
+
+    Write-Host "Grupo del usuario $nombre actualizado correctamente."
 }
 
 function Configurar-Seguridad {
