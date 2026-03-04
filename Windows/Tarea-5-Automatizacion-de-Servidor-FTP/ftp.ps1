@@ -118,7 +118,7 @@ function Crear-Grupos {
 
 function Crear-Estructura {
     $raiz = "C:\ftp"
-    $subcarpetas = @("general","reprobados","recursadores")
+    $subcarpetas = @("general","reprobados","recursadores","anonymous")
 
     if (-not (Test-Path $raiz)) {
         New-Item -Path $raiz -ItemType Directory | Out-Null
@@ -155,6 +155,7 @@ function Asignar-Permisos {
 
     icacls "$raiz\general" /inheritance:r /grant:r "Administrators:(OI)(CI)F" /grant:r "SYSTEM:(OI)(CI)F" /grant:r "ftpusuarios:(OI)(CI)M" /grant:r "IUSR:(OI)(CI)RX" /grant:r "IIS_IUSRS:(OI)(CI)RX"
 
+    icacls "$raiz\anonymous" /inheritance:r /grant:r "Administrators:(OI)(CI)F" /grant:r "SYSTEM:(OI)(CI)F" /grant:r "IUSR:(OI)(CI)RX" /grant:r "IIS_IUSRS:(OI)(CI)RX"
     Write-Host "Permisos NTFS aplicados correctamente."
 }
 
