@@ -13,62 +13,36 @@ function Configurar-Firewall {
 }
 
 function Instalar-FTP {
-    Write-Host "`nVerificando si el servicio FTP de IIS está instalado..."
 
-    $feature = Get-WindowsFeature -Name Web-FTP-Server
-    
-    if ($feature.Installed) {
-        Write-Host "El servicio FTP ya está instalado."
-        $opcion = Read-Host "Desea reinstalarlo (s/n)?"
-        
-        if ($opcion -eq 's' -or $opcion -eq 'S') {
-            Write-Host "Reinstalando servicio FTP..."
-            # En Windows Server, reinstalar implica quitar y volver a poner la característica
-            Uninstall-WindowsFeature -Name Web-FTP-Server -Remove
-            Install-WindowsFeature -Name Web-FTP-Server -IncludeManagementTools
-            Write-Host "Reinstalación completada."
-        } else {
-            Write-Host "No se realizará ninguna acción."
-        }
-    } else {
-        Write-Host "El servicio FTP no está instalado. Instalando..."
-        # Instalamos IIS Web Server y FTP Service
-        Install-WindowsFeature -Name Web-Server, Web-FTP-Server -IncludeManagementTools
-        
-        if ((Get-WindowsFeature -Name Web-FTP-Server).Installed) {
-            Write-Host "Instalación completada."
-        } else {
-            Write-Host "Hubo un error en la instalación."
-        }
-    }
-}
-
-function Instalar-FTP {
     Write-Host "`nVerificando si el servicio FTP de IIS está instalado.....`n"
 
-    # Verificar si el rol de FTP Server está instalado
     $ftpFeature = Get-WindowsFeature -Name Web-FTP-Server
 
     if ($ftpFeature.Installed) {
         Write-Host "El servicio FTP ya está instalado."
-        $opcion = Read-Host "Desea reinstalarlo? (s/n)"
-        if ($opcion -eq 's' -or $opcion -eq 'S') {
-            Write-Host "Reinstalando..."
-            Uninstall-WindowsFeature -Name Web-FTP-Server
-            Install-WindowsFeature -Name Web-FTP-Server, Web-Mgmt-Console
-            Write-Host "Reinstalación completada."
-        }
-    } else {
+    }
+    else {
         Write-Host "Instalando servicio FTP..."
-        # Instala el servicio FTP y la consola de administración básica
         Install-WindowsFeature -Name Web-FTP-Server, Web-Mgmt-Console
-        if (Get-WindowsFeature -Name Web-FTP-Server).Installed {
+
+        if ((Get-WindowsFeature -Name Web-FTP-Server).Installed) {
             Write-Host "Instalación completada."
-        } else {
+        }
+        else {
             Write-Host "Hubo un error en la instalación."
             return
         }
     }
+
+    $service = Get-Service -Name ftpsvc
+    if ($service.Status -ne 'Running') {
+        Write-Host "Iniciando servicio FTP..."
+        Start-Service -Name ftpsvc
+        Set-Service -Name ftpsvc -StartupType Automatic
+    }
+
+    Configurar-Firewall
+    Read-Host "Presione ENTER para continuar..."
 }
 
     # Habilitar e iniciar el servicio FTP (en Windows es parte de IIS / servicio 'ftpsvc')
