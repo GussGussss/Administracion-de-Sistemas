@@ -134,18 +134,26 @@ function Crear-Estructura {
 }
 
 function Asignar-Permisos {
-    
+
     $raiz = "C:\ftp"
-    icacls "$raiz" /inheritance:r /grant:r "Administrators:(OI)(CI)F" /grant:r "SYSTEM:(OI)(CI)F" /grant:r "ftpusuarios:(OI)(CI)RX"
-    
-    $grupos = @{ "reprobados" = "reprobados"; "recursadores" = "recursadores" }
+
+    icacls "$raiz" /inheritance:r /grant:r "Administrators:(OI)(CI)F" /grant:r "SYSTEM:(OI)(CI)F" /grant:r "ftpusuarios:(OI)(CI)M" /grant:r "IUSR:(OI)(CI)RX"
+
+    $grupos = @{
+        "reprobados" = "reprobados"
+        "recursadores" = "recursadores"
+    }
 
     foreach ($nombre in $grupos.Keys) {
+
         $path = "$raiz\$nombre"
         $g = $grupos[$nombre]
+
         icacls "$path" /inheritance:r /grant:r "Administrators:(OI)(CI)F" /grant:r "SYSTEM:(OI)(CI)F" /grant:r "${g}:(OI)(CI)M"
     }
-    icacls "$raiz" /inheritance:r /grant:r "Administrators:(OI)(CI)F" /grant:r "SYSTEM:(OI)(CI)F" /grant:r "ftpusuarios:(OI)(CI)RX"
+
+    icacls "$raiz\general" /inheritance:r /grant:r "Administrators:(OI)(CI)F" /grant:r "SYSTEM:(OI)(CI)F" /grant:r "ftpusuarios:(OI)(CI)M" /grant:r "IUSR:(OI)(CI)RX"
+
     Write-Host "Permisos NTFS aplicados correctamente."
 }
 
