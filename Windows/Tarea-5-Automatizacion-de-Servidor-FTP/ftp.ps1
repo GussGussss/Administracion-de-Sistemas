@@ -69,6 +69,7 @@ function Instalar-FTP {
             return
         }
     }
+}
 
     # Habilitar e iniciar el servicio FTP (en Windows es parte de IIS / servicio 'ftpsvc')
     $service = Get-Service -Name ftpsvc
@@ -230,7 +231,7 @@ function Cambiar-Grupo-Usuario {
     # 4. Actualizar permisos de la carpeta personal (NTFS)
     # Otorgamos acceso al nuevo grupo a la carpeta del usuario
     $userPath = "C:\ftp\$nombre"
-    icacls $userPath /grant:r "$nuevo_grupo:(OI)(CI)M"
+    icacls $userPath /grant:r "${nuevo_grupo}:(OI)(CI)M"
 
     Write-Host "Grupo del usuario $nombre actualizado a $nuevo_grupo y permisos ajustados."
 }
