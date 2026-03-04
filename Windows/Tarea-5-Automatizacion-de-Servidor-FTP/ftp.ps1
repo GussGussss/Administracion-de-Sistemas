@@ -97,6 +97,9 @@ function Configurar-FTP {
     Add-WebConfiguration -Filter system.ftpServer/security/authorization -PSPath IIS:\ -Location $ftpSiteName -Value @{accessType="Allow";users="anonymous";permissions="Read"}
 
     Add-WebConfiguration -Filter system.ftpServer/security/authorization -PSPath IIS:\ -Location $ftpSiteName -Value @{accessType="Allow";roles="ftpusuarios";permissions="Read,Write"}
+    Add-WebConfiguration -Filter system.ftpServer/security/authorization -PSPath IIS:\ -Location $ftpSiteName -Value @{accessType="Allow";roles="reprobados";permissions="Read,Write"}
+
+    Add-WebConfiguration -Filter system.ftpServer/security/authorization -PSPath IIS:\ -Location $ftpSiteName -Value @{accessType="Allow";roles="recursadores";permissions="Read,Write"}
 
     Restart-Service ftpsvc
 
@@ -138,11 +141,11 @@ function Asignar-Permisos {
 
     $raiz = "C:\ftp"
 
-    icacls "$raiz" /grant "IUSR:(RX)"
-    icacls "$raiz" /grant "IIS_IUSRS:(RX)"
     icacls "$raiz" /grant:r "Administrators:(OI)(CI)F"
     icacls "$raiz" /grant:r "SYSTEM:(OI)(CI)F"
     icacls "$raiz" /grant:r "ftpusuarios:(OI)(CI)M"
+    icacls "$raiz" /grant "IUSR:(OI)(CI)RX"
+    icacls "$raiz" /grant "IIS_IUSRS:(OI)(CI)RX"
 
     $grupos = @{
         "reprobados" = "reprobados"
