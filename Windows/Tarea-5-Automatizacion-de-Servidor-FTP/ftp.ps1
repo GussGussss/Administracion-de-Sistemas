@@ -138,7 +138,11 @@ function Asignar-Permisos {
 
     $raiz = "C:\ftp"
 
-    icacls "$raiz" /inheritance:r /grant:r "Administrators:(OI)(CI)F" /grant:r "SYSTEM:(OI)(CI)F" /grant:r "ftpusuarios:(OI)(CI)M" /grant:r "IUSR:(OI)(CI)RX" /grant:r "IIS_IUSRS:(OI)(CI)RX"
+    icacls "$raiz" /grant "IUSR:(RX)"
+    icacls "$raiz" /grant "IIS_IUSRS:(RX)"
+    icacls "$raiz" /grant:r "Administrators:(OI)(CI)F"
+    icacls "$raiz" /grant:r "SYSTEM:(OI)(CI)F"
+    icacls "$raiz" /grant:r "ftpusuarios:(OI)(CI)M"
 
     $grupos = @{
         "reprobados" = "reprobados"
