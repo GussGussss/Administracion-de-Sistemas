@@ -156,7 +156,6 @@ function Asignar-Permisos {
 
     Write-Host "Permisos NTFS aplicados correctamente."
 }
-
 function Crear-Usuarios {
     $num = Read-Host "Ingrese el número de usuarios a crear"
     for ($i = 1; $i -le $num; $i++) {
