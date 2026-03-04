@@ -49,28 +49,36 @@ function Configurar-FTP {
     $ftpSiteName = "FTP_Servidor"
     $ftpRoot = "C:\ftp"
 
+    # Verificar si el módulo IIS está cargado
+    Import-Module WebAdministration
+
     # 1. Crear el sitio si no existe
     if (-not (Get-WebSite -Name $ftpSiteName -ErrorAction SilentlyContinue)) {
+        Write-Host "Creando sitio FTP..."
         New-WebFtpSite -Name $ftpSiteName -Port 21 -PhysicalPath $ftpRoot
+        Start-Sleep -Seconds 2 # Pausa para que IIS procese la creación
     }
 
-    # 2. Configurar acceso anónimo y usuarios locales
-    Set-WebConfigurationProperty -Filter /system.ftpServer/security/authentication/anonymousAuthentication -Name enabled -Value True -PSPath "IIS:\Sites\$ftpSiteName"
-    Set-WebConfigurationProperty -Filter /system.ftpServer/security/authentication/basicAuthentication -Name enabled -Value True -PSPath "IIS:\Sites\$ftpSiteName"
+    # 2. Configuración de seguridad (Usa Try/Catch para evitar errores si ya existen)
+    try {
+        Set-WebConfigurationProperty -Filter /system.ftpServer/security/authentication/anonymousAuthentication -Name enabled -Value True -PSPath "IIS:\Sites\$ftpSiteName"
+        Set-WebConfigurationProperty -Filter /system.ftpServer/security/authentication/basicAuthentication -Name enabled -Value True -PSPath "IIS:\Sites\$ftpSiteName"
+        
+        Set-WebConfigurationProperty -Filter /system.ftpServer/firewallSupport -Name passiveEnabled -Value True -PSPath "IIS:\Sites\$ftpSiteName"
+        Set-WebConfigurationProperty -Filter /system.ftpServer/firewallSupport -Name externalIp4Address -Value "0.0.0.0" -PSPath "IIS:\Sites\$ftpSiteName"
+        Set-WebConfigurationProperty -Filter /system.ftpServer/firewallSupport -Name dataChannelPortRange -Value "40000-40100" -PSPath "IIS:\Sites\$ftpSiteName"
+        
+        # Autorización
+        Add-WebConfiguration -Filter /system.ftpServer/security/authorization -PSPath "IIS:\Sites\$ftpSiteName" -Value @{accessType="Allow"; users="*"; permissions="Read"}
+        
+        Write-Host "Configuración FTP aplicada correctamente."
+    } catch {
+        Write-Host "Error al configurar propiedades de IIS: $_"
+    }
 
-    # 3. Configurar puertos pasivos (rango 40000-40100)
-    # En IIS esto se configura mediante el proveedor ftpServer/firewallSupport
-    Set-WebConfigurationProperty -Filter /system.ftpServer/firewallSupport -Name passiveEnabled -Value True -PSPath "IIS:\Sites\$ftpSiteName"
-    Set-WebConfigurationProperty -Filter /system.ftpServer/firewallSupport -Name externalIp4Address -Value "0.0.0.0" -PSPath "IIS:\Sites\$ftpSiteName"
-    Set-WebConfigurationProperty -Filter /system.ftpServer/firewallSupport -Name dataChannelPortRange -Value "40000-40100" -PSPath "IIS:\Sites\$ftpSiteName"
-
-    # 4. Autorización base: permitir lectura anónima y escritura a usuarios autenticados
-    # Esto se gestiona mejor a nivel de reglas de autorización en el nodo de seguridad
-    Add-WebConfiguration -Filter /system.ftpServer/security/authorization -PSPath "IIS:\Sites\$ftpSiteName" -Value @{accessType="Allow"; users="*"; permissions="Read"}
-    
-    # Reiniciar el sitio para aplicar cambios
-    Restart-WebSite -Name $ftpSiteName
-    Write-Host "Configuración FTP aplicada correctamente."
+    # Reiniciar sitio
+    Stop-WebSite -Name $ftpSiteName
+    Start-WebSite -Name $ftpSiteName
 }
 
 function Crear-Grupos {
