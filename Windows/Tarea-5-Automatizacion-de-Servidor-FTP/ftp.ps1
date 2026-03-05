@@ -59,8 +59,8 @@ function Configurar-FTP {
     # Modo 3 = IsolateRootDirectoryOnly
     # Cada usuario cae en C:\ftp\LocalUser\<nombre>
     # El anonimo cae en C:\ftp\LocalUser\Public
-    Set-ItemProperty "IIS:\Sites\$ftpSiteName" -Name ftpServer.userIsolation.mode -Value 3
-
+    C:\Windows\System32\inetsrv\appcmd.exe set site "$ftpSiteName" /ftpServer.userIsolation.mode:IsolateRootDirectoryOnly
+    
     Write-Host "Configurando puertos pasivos..."
     C:\Windows\System32\inetsrv\appcmd.exe set config -section:system.ftpServer/firewallSupport /lowDataChannelPort:40000 /highDataChannelPort:40100 /commit:apphost
 
@@ -166,13 +166,6 @@ function Asignar-Permisos {
         /grant:r "SYSTEM:(OI)(CI)F" `
         /grant:r "IUSR:(OI)(CI)RX" `
         /grant:r "IIS_IUSRS:(OI)(CI)RX"
-
-    # Directorio virtual en home anonimo que apunta a /general (solo lectura anonima)
-    # Primero limpiar si existe
-    if (Get-WebVirtualDirectory -Site $ftpSiteName -Application "/" -Name "general" -ErrorAction SilentlyContinue) {
-        Remove-WebVirtualDirectory -Site $ftpSiteName -Application "/" -Name "general"
-    }
-    New-WebVirtualDirectory -Site $ftpSiteName -Application "/" -Name "general" -PhysicalPath "$raiz\general" | Out-Null
 
     Write-Host "Permisos NTFS aplicados correctamente."
 }
