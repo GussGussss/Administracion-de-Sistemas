@@ -43,6 +43,7 @@ instalar_ftp(){
     echo ""
     echo "Instalado....."
     dnf install -y vsftpd > /dev/null 2>&1
+    dnf install -y acl > /dev/null 2>&1
       if rpm -q vsftpd &>/dev/null; then
   			echo "Instalación completada :D"
   		else
@@ -109,9 +110,9 @@ configurarftp(){
     echo "pasv_enable=YES" >> "$CONF"
   fi
   if grep -q "^anon_root" "$CONF"; then
-    sed -i "s|^anon_root=.*|anon_root=/ftp|" "$CONF"
+    sed -i "s|^anon_root=.*|anon_root=/ftp/general|" "$CONF"
   else
-    echo "anon_root=/ftp" >> "$CONF"
+    echo "anon_root=/ftp/general" >> "$CONF"
   fi
 
   if ! grep -q "^pasv_min_port" "$CONF"; then
@@ -129,6 +130,19 @@ configurarftp(){
   if ! grep -q "^anon_mkdir_write_enable" "$CONF"; then
     echo "anon_mkdir_write_enable=NO" >> "$CONF"
   fi
+
+  if ! grep -q "^hide_ids" "$CONF"; then
+    echo "hide_ids=YES" >> "$CONF"
+  fi
+
+  if ! grep -q "^local_umask" "$CONF"; then
+    echo "local_umask=002" >> "$CONF"
+  fi
+
+  if ! grep -q "^anon_world_readable_only" "$CONF"; then
+    echo "anon_world_readable_only=YES" >> "$CONF"
+  fi
+  
   systemctl restart vsftpd
 }
 
@@ -155,6 +169,9 @@ crear_grupo(){
 crear_estructura(){
   local raiz="/ftp"
   mkdir -p "$raiz"/{general,reprobados,recursadores}
+
+  chmod 755 /ftp
+
   echo "Estructura base creada"
 }
 
@@ -163,8 +180,8 @@ asignar_permisos(){
   chown root:root /ftp
   chmod 755 /ftp
 
-  chgrp reprobados /ftp/reprobados
-  chgrp recursadores /ftp/recursadores
+  chown root:reprobados /ftp/reprobados
+  chown root:recursadores /ftp/recursadores
 
   chmod 2770 /ftp/reprobados
   chmod 2770 /ftp/recursadores
@@ -192,12 +209,14 @@ crear_usuarios(){
        continue
     fi
 
-    useradd -d /ftp -s /bin/bash -g "$grupo" -G ftpusuarios "$nombre"
+    useradd -d /ftp/"$nombre" -s /sbin/nologin -g "$grupo" -G ftpusuarios "$nombre"
     echo "$nombre:$password" | chpasswd
 
     mkdir -p /ftp/"$nombre"
     chown "$nombre":"$grupo" /ftp/"$nombre"
-    chmod 700 /ftp/"$nombre"
+    chmod 750 /ftp/"$nombre"
+    setfacl -m g:reprobados:rx /ftp
+    setfacl -m g:recursadores:rx /ftp
   done
 }
 
