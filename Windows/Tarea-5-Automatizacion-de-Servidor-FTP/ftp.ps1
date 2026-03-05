@@ -77,7 +77,7 @@ function Configurar-FTP {
     # Modo 0 = sin aislamiento (todos ven C:\ftp completo) — NO usar
     Write-Host "Configurando aislamiento de usuarios..."
     Set-ItemProperty "IIS:\Sites\$ftpSiteName" `
-        -Name ftpServer.userIsolation.mode -Value 3
+        -Name ftpServer.userIsolation.mode -Value 1
 
     # ── Puertos pasivos ───────────────────────────────────────────────────────
     Write-Host "Configurando puertos pasivos..."
@@ -272,16 +272,19 @@ function Crear-Usuarios {
         }
 
         # Permisos NTFS sobre el home del usuario
-        icacls $userHome /inheritance:r `
-            /grant:r "${nombre}:(OI)(CI)M" `
-            /grant:r "Administrators:(OI)(CI)F" `
-            /grant:r "SYSTEM:(OI)(CI)F"  2>&1 | Out-Null
+        # IMPORTANTE: primero /grant, luego /inheritance:r
+        # Si se rompe herencia antes de dar acceso, IIS no puede abrir el directorio (error 530)
+        icacls $userHome /grant:r "${nombre}:(OI)(CI)M"      2>&1 | Out-Null
+        icacls $userHome /grant:r "Administrators:(OI)(CI)F" 2>&1 | Out-Null
+        icacls $userHome /grant:r "SYSTEM:(OI)(CI)F"         2>&1 | Out-Null
+        icacls $userHome /grant:r "IIS_IUSRS:(OI)(CI)RX"     2>&1 | Out-Null
+        icacls $userHome /inheritance:r                       2>&1 | Out-Null
 
         # Permisos sobre la carpeta personal
-        icacls $userPersonal /inheritance:r `
-            /grant:r "${nombre}:(OI)(CI)M" `
-            /grant:r "Administrators:(OI)(CI)F" `
-            /grant:r "SYSTEM:(OI)(CI)F"  2>&1 | Out-Null
+        icacls $userPersonal /grant:r "${nombre}:(OI)(CI)M"      2>&1 | Out-Null
+        icacls $userPersonal /grant:r "Administrators:(OI)(CI)F" 2>&1 | Out-Null
+        icacls $userPersonal /grant:r "SYSTEM:(OI)(CI)F"         2>&1 | Out-Null
+        icacls $userPersonal /inheritance:r                       2>&1 | Out-Null
 
         Write-Host "Usuario '$nombre' creado. Estructura:" -ForegroundColor Green
         Write-Host "  $userHome\"
@@ -354,6 +357,70 @@ function Configurar-Seguridad {
     }
 }
 
+function Reparar-Usuarios {
+    # Recorre todos los usuarios locales que pertenezcan a ftpusuarios
+    # y recrea su estructura de carpetas + junctions si faltan
+    Write-Host "`nReparando estructura de carpetas para todos los usuarios FTP..." -ForegroundColor Cyan
+
+    $miembros = Get-LocalGroupMember -Group "ftpusuarios" -ErrorAction SilentlyContinue
+    if (-not $miembros) {
+        Write-Host "No hay usuarios en el grupo ftpusuarios." -ForegroundColor Yellow
+        return
+    }
+
+    foreach ($m in $miembros) {
+        # El nombre puede venir como "SERVIDOR\usuario" — extraer solo el nombre
+        $nombre = $m.Name -replace ".*\\"
+
+        # Determinar el grupo (reprobados o recursadores)
+        $grupo = $null
+        foreach ($g in @("reprobados","recursadores")) {
+            $enGrupo = Get-LocalGroupMember -Group $g -ErrorAction SilentlyContinue |
+                       Where-Object { $_.Name -replace ".*\\" -eq $nombre }
+            if ($enGrupo) { $grupo = $g; break }
+        }
+
+        if (-not $grupo) {
+            Write-Host "  [!] $nombre - sin grupo asignado, saltando." -ForegroundColor Yellow
+            continue
+        }
+
+        $userHome     = "C:\ftp\LocalUser\$nombre"
+        $userPersonal = "$userHome\$nombre"
+        $userGenJunc  = "$userHome\general"
+        $userGrpJunc  = "$userHome\$grupo"
+
+        # Crear directorios si faltan
+        if (-not (Test-Path $userHome))     { New-Item -Path $userHome     -ItemType Directory -Force | Out-Null }
+        if (-not (Test-Path $userPersonal)) { New-Item -Path $userPersonal -ItemType Directory -Force | Out-Null }
+
+        # Crear junctions si faltan
+        if (-not (Test-Path $userGenJunc)) {
+            New-Item -Path $userGenJunc -ItemType Junction -Value "C:\ftp\general" | Out-Null
+        }
+        if (-not (Test-Path $userGrpJunc)) {
+            New-Item -Path $userGrpJunc -ItemType Junction -Value "C:\ftp\$grupo" | Out-Null
+        }
+
+        # Reasignar permisos NTFS (grant primero, inheritance:r al final)
+        icacls $userHome /grant:r "${nombre}:(OI)(CI)M"      2>&1 | Out-Null
+        icacls $userHome /grant:r "Administrators:(OI)(CI)F" 2>&1 | Out-Null
+        icacls $userHome /grant:r "SYSTEM:(OI)(CI)F"         2>&1 | Out-Null
+        icacls $userHome /grant:r "IIS_IUSRS:(OI)(CI)RX"     2>&1 | Out-Null
+        icacls $userHome /inheritance:r                       2>&1 | Out-Null
+
+        icacls $userPersonal /grant:r "${nombre}:(OI)(CI)M"      2>&1 | Out-Null
+        icacls $userPersonal /grant:r "Administrators:(OI)(CI)F" 2>&1 | Out-Null
+        icacls $userPersonal /grant:r "SYSTEM:(OI)(CI)F"         2>&1 | Out-Null
+        icacls $userPersonal /inheritance:r                       2>&1 | Out-Null
+
+        Write-Host "  [OK] $nombre ($grupo) - estructura reparada." -ForegroundColor Green
+    }
+
+    Restart-Service ftpsvc -Force
+    Write-Host "Reparacion completada." -ForegroundColor Green
+}
+
 function Mostrar-Menu {
     while ($true) {
         Write-Host "`n======================================" -ForegroundColor Cyan
@@ -367,6 +434,7 @@ function Mostrar-Menu {
         Write-Host " 6) Crear usuarios"
         Write-Host " 7) Cambiar grupo de usuario"
         Write-Host " 8) Verificar seguridad"
+        Write-Host " 9) Reparar estructura de usuarios existentes"
         Write-Host " 0) Salir"
         Write-Host "--------------------------------------"
 
@@ -381,6 +449,7 @@ function Mostrar-Menu {
             "6" { Crear-Usuarios }
             "7" { Cambiar-Grupo-Usuario }
             "8" { Configurar-Seguridad }
+            "9" { Reparar-Usuarios }
             "0" { Write-Host "Saliendo..."; break }
             Default { Write-Host "Opcion invalida." -ForegroundColor Red; Start-Sleep -Seconds 1 }
         }
