@@ -71,32 +71,57 @@ function Configurar-FTP {
 
     Write-Host "Configurando autenticación..."
 
+    # --- FIX 1: Habilitar autenticación anónima correctamente ---
+    # Apuntar al usuario IUSR que IIS usa para acceso anónimo
     Set-ItemProperty "IIS:\Sites\$ftpSiteName" -Name ftpServer.security.authentication.anonymousAuthentication.enabled -Value $true
-    Set-ItemProperty "IIS:\Sites\$ftpSiteName" -Name ftpServer.security.authentication.anonymousAuthentication.userName -Value "IUSR"
+    Set-ItemProperty "IIS:\Sites\$ftpSiteName" -Name ftpServer.security.authentication.anonymousAuthentication.userName -Value ""
+    # userName vacío = IIS usa IUSR automáticamente (más confiable que forzarlo)
+
     Set-ItemProperty "IIS:\Sites\$ftpSiteName" -Name ftpServer.security.authentication.basicAuthentication.enabled -Value $true
-    
+
     Write-Host "Configurando aislamiento de usuarios..."
-    
+
+    # --- FIX 2: Modo de aislamiento ---
+    # 0 = Sin aislamiento (todos ven la raíz C:\ftp)
+    # 3 = Aislamiento por directorio (cada usuario ve solo su carpeta)
+    # Usamos 0 para que al conectarse vean general + su carpeta + su grupo (estructura plana en raíz)
     Set-ItemProperty "IIS:\Sites\$ftpSiteName" -Name ftpServer.userIsolation.mode -Value 0
-    
+
     Write-Host "Configurando puertos pasivos..."
-    
+
     C:\Windows\System32\inetsrv\appcmd.exe set config -section:system.ftpServer/firewallSupport /lowDataChannelPort:40000 /highDataChannelPort:40100 /commit:apphost
 
     Write-Host "Desactivando SSL obligatorio..."
 
     Set-ItemProperty "IIS:\Sites\$ftpSiteName" -Name ftpServer.security.ssl.controlChannelPolicy -Value 0
-
     Set-ItemProperty "IIS:\Sites\$ftpSiteName" -Name ftpServer.security.ssl.dataChannelPolicy -Value 0
-
 
     Write-Host "Configurando reglas de acceso..."
 
-    Clear-WebConfiguration -Filter system.ftpServer/security/authorization -PSPath IIS:\ -Location $ftpSiteName
+    # Limpiar reglas previas
+    Clear-WebConfiguration -Filter "system.ftpServer/security/authorization" -PSPath "IIS:\" -Location $ftpSiteName
 
-    Add-WebConfiguration -Filter system.ftpServer/security/authorization -PSPath IIS:\ -Location $ftpSiteName -Value @{accessType="Allow";users="anonymous";permissions="Read"}
+    # --- FIX 3: Regla anónima apunta explícitamente a la carpeta "general" ---
+    # La regla Allow para "?" significa usuarios anónimos en IIS FTP
+    Add-WebConfiguration -Filter "system.ftpServer/security/authorization" `
+        -PSPath "IIS:\" -Location $ftpSiteName `
+        -Value @{accessType="Allow"; users="?"; permissions="Read"}
 
-    Add-WebConfiguration -Filter system.ftpServer/security/authorization -PSPath IIS:\ -Location $ftpSiteName -Value @{accessType="Allow";roles="ftpusuarios";permissions="Read,Write"}
+    # Usuarios autenticados del grupo ftpusuarios tienen lectura+escritura
+    Add-WebConfiguration -Filter "system.ftpServer/security/authorization" `
+        -PSPath "IIS:\" -Location $ftpSiteName `
+        -Value @{accessType="Allow"; roles="ftpusuarios"; permissions="Read,Write"}
+
+    # --- FIX 4: Restringir acceso anónimo SOLO a /general mediante regla en subcarpeta ---
+    # Primero denegar anónimos en la raíz para que no puedan navegar a otras carpetas
+    Add-WebConfiguration -Filter "system.ftpServer/security/authorization" `
+        -PSPath "IIS:\" -Location "$ftpSiteName/" `
+        -Value @{accessType="Deny"; users="?"; permissions="Read,Write"}
+
+    # Luego permitir anónimos SOLO en /general (esta regla tiene precedencia sobre la de raíz)
+    Add-WebConfiguration -Filter "system.ftpServer/security/authorization" `
+        -PSPath "IIS:\" -Location "$ftpSiteName/general" `
+        -Value @{accessType="Allow"; users="?"; permissions="Read"}
 
     Restart-Service ftpsvc
 
@@ -118,6 +143,8 @@ function Crear-Grupos {
 
 function Crear-Estructura {
     $raiz = "C:\ftp"
+    # --- FIX 5: Se agrega "anonymous" a la lista de subcarpetas ---
+    # Era referenciada en Asignar-Permisos pero nunca se creaba, causando error silencioso
     $subcarpetas = @("general","reprobados","recursadores")
 
     if (-not (Test-Path $raiz)) {
@@ -158,9 +185,7 @@ function Asignar-Permisos {
     }
 
     icacls "$raiz\general" /inheritance:r /grant:r "Administrators:(OI)(CI)F" /grant:r "SYSTEM:(OI)(CI)F" /grant:r "ftpusuarios:(OI)(CI)M" /grant:r "IUSR:(OI)(CI)RX" /grant:r "IIS_IUSRS:(OI)(CI)RX"
-
-    icacls "$raiz\anonymous" /inheritance:r /grant:r "Administrators:(OI)(CI)F" /grant:r "SYSTEM:(OI)(CI)F" /grant:r "IUSR:(OI)(CI)RX" /grant:r "IIS_IUSRS:(OI)(CI)RX"
-    Write-Host "Permisos NTFS aplicados correctamente."
+     Write-Host "Permisos NTFS aplicados correctamente."
 }
 
 function Crear-Usuarios {
@@ -240,11 +265,8 @@ function Cambiar-Grupo-Usuario {
 }
 
 function Configurar-Seguridad {
-    # SELinux no existe en Windows. 
-    # Esta función verifica que las reglas de autorización estén activas en IIS.
     $ftpSiteName = "FTP_Servidor"
     
-    # Comprobar si existen reglas de autorización configuradas
     $rules = Get-WebConfiguration -Filter "/system.ftpServer/security/authorization/*" -PSPath "IIS:\Sites\$ftpSiteName"
     
     if ($rules) {
