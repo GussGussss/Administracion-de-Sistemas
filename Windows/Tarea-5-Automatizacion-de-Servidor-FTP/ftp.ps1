@@ -127,7 +127,10 @@ function Crear-Estructura {
 
 function Asignar-Permisos {
     $raiz = "C:\ftp"
-
+    # Establecer home de IUSR apuntando a C:\ftp
+    $iusr = [ADSI]"WinNT://./IUSR,user"
+    $iusr.HomeDirectory = "C:\ftp"
+    $iusr.SetInfo()
     # Raiz: solo admins y system, IUSR e IIS_IUSRS solo para traversal
     icacls "$raiz" /inheritance:r `
         /grant:r "Administrators:(OI)(CI)F" `
@@ -174,23 +177,25 @@ function Agregar-VirtualDirs-Usuario {
     )
 
     $raiz = "C:\ftp"
-
-    # Con modo None, el home es C:\ftp y el usuario ve lo que NTFS permite
-    # Creamos la carpeta personal del usuario directamente en C:\ftp
     $userHome = "$raiz\$nombre"
 
+    # Crear carpeta primero
     if (-not (Test-Path $userHome)) {
         New-Item -Path $userHome -ItemType Directory -Force | Out-Null
     }
 
-    # Solo el usuario tiene acceso a su carpeta personal
+    # Establecer home directory del usuario (ya existe porque New-LocalUser se llamó antes)
+    $userObj = [ADSI]"WinNT://./$nombre,user"
+    $userObj.HomeDirectory = $userHome
+    $userObj.SetInfo()
+
+    # Permisos
     icacls $userHome /inheritance:r `
         /grant:r "${nombre}:(OI)(CI)M" `
         /grant:r "Administrators:(OI)(CI)F" `
         /grant:r "SYSTEM:(OI)(CI)F"
 
-    # Junction a carpeta de grupo dentro de su carpeta personal
-    # Asi el usuario ve su grupo desde su carpeta
+    # Junction a carpeta de grupo
     $jGrupo = "$userHome\$grupo"
     if (Test-Path $jGrupo) {
         cmd /c "rmdir `"$jGrupo`"" | Out-Null
