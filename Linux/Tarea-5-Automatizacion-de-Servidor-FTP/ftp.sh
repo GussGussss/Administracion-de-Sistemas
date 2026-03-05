@@ -146,6 +146,10 @@ EOF
   # En Oracle Linux / RHEL el vsftpd sigue symlinks por defecto dentro del chroot
   # siempre que ftpd_full_access este activo en SELinux
 
+  # Crear directorio requerido por secure_chroot_dir
+  mkdir -p /var/run/vsftpd/empty
+  chmod 755 /var/run/vsftpd/empty
+
   systemctl restart vsftpd
   echo "vsftpd configurado y reiniciado :D"
   read -p "Presione ENTER para continuar..."
