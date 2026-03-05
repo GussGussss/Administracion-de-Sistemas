@@ -98,30 +98,20 @@ function Configurar-FTP {
 
     Write-Host "Configurando reglas de acceso..."
 
-    # Limpiar reglas previas
+    
+    # Limpiar reglas previas en TODAS las ubicaciones (evita duplicados en re-ejecuciones)
     Clear-WebConfiguration -Filter "system.ftpServer/security/authorization" -PSPath "IIS:\" -Location $ftpSiteName
+    Clear-WebConfiguration -Filter "system.ftpServer/security/authorization" -PSPath "IIS:\" -Location "$ftpSiteName/"
+    Clear-WebConfiguration -Filter "system.ftpServer/security/authorization" -PSPath "IIS:\" -Location "$ftpSiteName/general"
 
-    # --- FIX 3: Regla anónima apunta explícitamente a la carpeta "general" ---
-    # La regla Allow para "?" significa usuarios anónimos en IIS FTP
-    Add-WebConfiguration -Filter "system.ftpServer/security/authorization" `
-        -PSPath "IIS:\" -Location $ftpSiteName `
-        -Value @{accessType="Allow"; users="?"; permissions="Read"}
+    # Usuarios autenticados del grupo ftpusuarios tienen lectura+escritura en todo el sitio
+    Add-WebConfiguration -Filter "system.ftpServer/security/authorization" -PSPath "IIS:\" -Location $ftpSiteName -Value @{accessType="Allow"; roles="ftpusuarios"; permissions="Read,Write"}
 
-    # Usuarios autenticados del grupo ftpusuarios tienen lectura+escritura
-    Add-WebConfiguration -Filter "system.ftpServer/security/authorization" `
-        -PSPath "IIS:\" -Location $ftpSiteName `
-        -Value @{accessType="Allow"; roles="ftpusuarios"; permissions="Read,Write"}
+    # Denegar anónimos en la raíz
+    Add-WebConfiguration -Filter "system.ftpServer/security/authorization" -PSPath "IIS:\" -Location "$ftpSiteName/" -Value @{accessType="Deny"; users="?"; permissions="Read,Write"}
 
-    # --- FIX 4: Restringir acceso anónimo SOLO a /general mediante regla en subcarpeta ---
-    # Primero denegar anónimos en la raíz para que no puedan navegar a otras carpetas
-    Add-WebConfiguration -Filter "system.ftpServer/security/authorization" `
-        -PSPath "IIS:\" -Location "$ftpSiteName/" `
-        -Value @{accessType="Deny"; users="?"; permissions="Read,Write"}
-
-    # Luego permitir anónimos SOLO en /general (esta regla tiene precedencia sobre la de raíz)
-    Add-WebConfiguration -Filter "system.ftpServer/security/authorization" `
-        -PSPath "IIS:\" -Location "$ftpSiteName/general" `
-        -Value @{accessType="Allow"; users="?"; permissions="Read"}
+    # Permitir anónimos SOLO en /general con lectura
+    Add-WebConfiguration -Filter "system.ftpServer/security/authorization" -PSPath "IIS:\" -Location "$ftpSiteName/general" -Value @{accessType="Allow"; users="?"; permissions="Read"}
 
     Restart-Service ftpsvc
 
