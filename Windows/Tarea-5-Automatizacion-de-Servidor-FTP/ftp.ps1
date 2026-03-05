@@ -54,12 +54,9 @@ function Configurar-FTP {
     Set-ItemProperty "IIS:\Sites\$ftpSiteName" -Name ftpServer.security.authentication.anonymousAuthentication.enabled -Value $true
     Set-ItemProperty "IIS:\Sites\$ftpSiteName" -Name ftpServer.security.authentication.anonymousAuthentication.userName -Value "IUSR"
     Set-ItemProperty "IIS:\Sites\$ftpSiteName" -Name ftpServer.security.authentication.basicAuthentication.enabled -Value $true
-
+    
     Write-Host "Configurando aislamiento de usuarios..."
-    # Modo 3 = IsolateRootDirectoryOnly
-    # Cada usuario cae en C:\ftp\LocalUser\<nombre>
-    # El anonimo cae en C:\ftp\LocalUser\Public
-    C:\Windows\System32\inetsrv\appcmd.exe set site "$ftpSiteName" /ftpServer.userIsolation.mode:IsolateRootDirectoryOnly
+    C:\Windows\System32\inetsrv\appcmd.exe set site "$ftpSiteName" /ftpServer.userIsolation.mode:None
     
     Write-Host "Configurando puertos pasivos..."
     C:\Windows\System32\inetsrv\appcmd.exe set config -section:system.ftpServer/firewallSupport /lowDataChannelPort:40000 /highDataChannelPort:40100 /commit:apphost
@@ -129,18 +126,16 @@ function Crear-Estructura {
 }
 
 function Asignar-Permisos {
-    Import-Module WebAdministration
-
     $raiz = "C:\ftp"
-    $ftpSiteName = "FTP_Servidor"
 
-    # Permisos generales en la raiz
-    icacls "$raiz" /grant:r "Administrators:(OI)(CI)F"
-    icacls "$raiz" /grant:r "SYSTEM:(OI)(CI)F"
-    icacls "$raiz" /grant "IUSR:(RX)"
-    icacls "$raiz" /grant "IIS_IUSRS:(RX)"
+    # Raiz: solo admins y system, IUSR e IIS_IUSRS solo para traversal
+    icacls "$raiz" /inheritance:r `
+        /grant:r "Administrators:(OI)(CI)F" `
+        /grant:r "SYSTEM:(OI)(CI)F" `
+        /grant:r "IUSR:(RX)" `
+        /grant:r "IIS_IUSRS:(RX)"
 
-    # Carpeta general: todos los ftpusuarios escriben, IUSR solo lee
+    # General: ftpusuarios escribe, IUSR solo lee
     icacls "$raiz\general" /inheritance:r `
         /grant:r "Administrators:(OI)(CI)F" `
         /grant:r "SYSTEM:(OI)(CI)F" `
@@ -148,7 +143,7 @@ function Asignar-Permisos {
         /grant:r "IUSR:(OI)(CI)RX" `
         /grant:r "IIS_IUSRS:(OI)(CI)RX"
 
-    # Carpetas de grupo: solo el grupo correspondiente
+    # Carpetas de grupo: solo su grupo, sin herencia
     foreach ($g in @("reprobados","recursadores")) {
         icacls "$raiz\$g" /inheritance:r `
             /grant:r "Administrators:(OI)(CI)F" `
@@ -156,11 +151,13 @@ function Asignar-Permisos {
             /grant:r "${g}:(OI)(CI)M"
     }
 
-    icacls "$raiz\LocalUser" /grant:r "IUSR:(OI)(CI)RX"
-    icacls "$raiz\LocalUser" /grant:r "IIS_IUSRS:(OI)(CI)RX"
-    icacls "$raiz\LocalUser" /grant:r "Administrators:(OI)(CI)F"
-    icacls "$raiz\LocalUser" /grant:r "SYSTEM:(OI)(CI)F"
+    # LocalUser: solo admins, sin herencia hacia abajo
+    # Cada subcarpeta de usuario tiene sus propios permisos
+    icacls "$raiz\LocalUser" /inheritance:r `
+        /grant:r "Administrators:(OI)(CI)F" `
+        /grant:r "SYSTEM:(OI)(CI)F"
 
+    # Public para anonimo
     icacls "$raiz\LocalUser\Public" /inheritance:r `
         /grant:r "Administrators:(OI)(CI)F" `
         /grant:r "SYSTEM:(OI)(CI)F" `
@@ -175,68 +172,32 @@ function Agregar-VirtualDirs-Usuario {
         [string]$nombre,
         [string]$grupo
     )
-    Import-Module WebAdministration
 
     $raiz = "C:\ftp"
-    $ftpSiteName = "FTP_Servidor"
 
-    # En Windows Server 2019 modo 3, el home es C:\ftp\<nombre>
-    # CORRECTO para cuentas locales en modo 3
-    $userHome = "$raiz\LocalUser\$nombre"
+    # Con modo None, el home es C:\ftp y el usuario ve lo que NTFS permite
+    # Creamos la carpeta personal del usuario directamente en C:\ftp
+    $userHome = "$raiz\$nombre"
 
     if (-not (Test-Path $userHome)) {
         New-Item -Path $userHome -ItemType Directory -Force | Out-Null
     }
 
-    # Permisos en carpeta home del usuario
+    # Solo el usuario tiene acceso a su carpeta personal
     icacls $userHome /inheritance:r `
         /grant:r "${nombre}:(OI)(CI)M" `
         /grant:r "Administrators:(OI)(CI)F" `
-        /grant:r "SYSTEM:(OI)(CI)F" `
-        /grant:r "IUSR:(OI)(CI)RX" `
-        /grant:r "IIS_IUSRS:(OI)(CI)RX"
-    # Eliminar WebApplication mal creada si existe
-    if (Get-WebApplication -Site $ftpSiteName -Name $nombre -ErrorAction SilentlyContinue) {
-        Remove-WebApplication -Site $ftpSiteName -Name $nombre
-    }
+        /grant:r "SYSTEM:(OI)(CI)F"
 
-    # Limpiar virtual dirs previos del usuario colgados de la raiz "/"
-    foreach ($vd in @("general_$nombre", "${nombre}_personal", "grupo_$nombre")) {
-        if (Get-WebVirtualDirectory -Site $ftpSiteName -Application "/" -Name $vd -ErrorAction SilentlyContinue) {
-            Remove-WebVirtualDirectory -Site $ftpSiteName -Application "/" -Name $vd
-        }
-    }
-
-    # Los virtual dirs van DENTRO del home del usuario en IIS
-    # Se crean bajo la aplicacion raiz "/" pero apuntando a subcarpetas de $userHome
-    # Para modo 3: IIS sirve C:\ftp\<nombre> como raiz, los subdirectorios son virtualdirs
-
-    # Crear junction points (symlinks de carpetas) dentro del home del usuario
-    # Esto es mas confiable que virtual dirs en modo 3
-
-    # Carpeta general dentro del home (junction a C:\ftp\general)
-    $jGeneral = "$userHome\general"
-    if (-not (Test-Path $jGeneral)) {
-        cmd /c "mklink /J `"$jGeneral`" `"$raiz\general`"" | Out-Null
-    }
-
-    # Carpeta personal dentro del home (carpeta real)
-    $jPersonal = "$userHome\$nombre"
-    if (-not (Test-Path $jPersonal)) {
-        New-Item -Path $jPersonal -ItemType Directory -Force | Out-Null
-        icacls $jPersonal /inheritance:r `
-            /grant:r "${nombre}:(OI)(CI)M" `
-            /grant:r "Administrators:(OI)(CI)F" `
-            /grant:r "SYSTEM:(OI)(CI)F"
-    }
-
-    # Carpeta de grupo dentro del home (junction a C:\ftp\<grupo>)
+    # Junction a carpeta de grupo dentro de su carpeta personal
+    # Asi el usuario ve su grupo desde su carpeta
     $jGrupo = "$userHome\$grupo"
-    if (-not (Test-Path $jGrupo)) {
-        cmd /c "mklink /J `"$jGrupo`" `"$raiz\$grupo`"" | Out-Null
+    if (Test-Path $jGrupo) {
+        cmd /c "rmdir `"$jGrupo`"" | Out-Null
     }
+    cmd /c "mklink /J `"$jGrupo`" `"$raiz\$grupo`"" | Out-Null
 
-    Write-Host "Estructura de $nombre creada: home=$userHome, general, $nombre, $grupo"
+    Write-Host "Estructura de $nombre creada."
 }
 
 function Crear-Usuarios {
@@ -294,6 +255,14 @@ function Cambiar-Grupo-Usuario {
     # Agregar al nuevo grupo
     Add-LocalGroupMember -Group $nuevo_grupo -Member $nombre
 
+    # Antes de llamar Agregar-VirtualDirs-Usuario, limpiar junction de grupo anterior
+    foreach ($g in @("reprobados","recursadores")) {
+        $jVieja = "C:\ftp\$nombre\$g"
+        if (Test-Path $jVieja) {
+            cmd /c "rmdir `"$jVieja`"" | Out-Null
+        }
+    }
+    Agregar-VirtualDirs-Usuario -nombre $nombre -grupo $nuevo_grupo
     # Recrear directorios virtuales apuntando al nuevo grupo
     Agregar-VirtualDirs-Usuario -nombre $nombre -grupo $nuevo_grupo
 
