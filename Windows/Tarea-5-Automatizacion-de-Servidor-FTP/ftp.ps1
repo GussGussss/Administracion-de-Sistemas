@@ -156,6 +156,11 @@ function Asignar-Permisos {
             /grant:r "${g}:(OI)(CI)M"
     }
 
+    icacls "$raiz\LocalUser" /grant:r "IUSR:(OI)(CI)RX"
+    icacls "$raiz\LocalUser" /grant:r "IIS_IUSRS:(OI)(CI)RX"
+    icacls "$raiz\LocalUser" /grant:r "Administrators:(OI)(CI)F"
+    icacls "$raiz\LocalUser" /grant:r "SYSTEM:(OI)(CI)F"
+
     icacls "$raiz\LocalUser\Public" /inheritance:r `
         /grant:r "Administrators:(OI)(CI)F" `
         /grant:r "SYSTEM:(OI)(CI)F" `
@@ -194,8 +199,9 @@ function Agregar-VirtualDirs-Usuario {
     icacls $userHome /inheritance:r `
         /grant:r "${nombre}:(OI)(CI)M" `
         /grant:r "Administrators:(OI)(CI)F" `
-        /grant:r "SYSTEM:(OI)(CI)F"
-
+        /grant:r "SYSTEM:(OI)(CI)F" `
+        /grant:r "IUSR:(OI)(CI)RX" `
+        /grant:r "IIS_IUSRS:(OI)(CI)RX"
     # Eliminar WebApplication mal creada si existe
     if (Get-WebApplication -Site $ftpSiteName -Name $nombre -ErrorAction SilentlyContinue) {
         Remove-WebApplication -Site $ftpSiteName -Name $nombre
