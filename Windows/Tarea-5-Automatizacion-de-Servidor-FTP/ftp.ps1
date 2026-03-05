@@ -74,7 +74,7 @@ function Configurar-FTP {
     # --- FIX 1: Habilitar autenticación anónima correctamente ---
     # Apuntar al usuario IUSR que IIS usa para acceso anónimo
     Set-ItemProperty "IIS:\Sites\$ftpSiteName" -Name ftpServer.security.authentication.anonymousAuthentication.enabled -Value $true
-    Set-ItemProperty "IIS:\Sites\$ftpSiteName" -Name ftpServer.security.authentication.anonymousAuthentication.userName -Value ""
+    Set-ItemProperty "IIS:\Sites\$ftpSiteName" -Name ftpServer.security.authentication.anonymousAuthentication.userName -Value "IUSR"
     # userName vacío = IIS usa IUSR automáticamente (más confiable que forzarlo)
 
     Set-ItemProperty "IIS:\Sites\$ftpSiteName" -Name ftpServer.security.authentication.basicAuthentication.enabled -Value $true
@@ -153,8 +153,9 @@ function Crear-Estructura {
 
 function Asignar-Permisos {
 
-    $raiz = "C:\ftp"
+    $raiz = "C:\ftp"  # <-- $raiz se declara PRIMERO
 
+    icacls "$raiz" /grant "IUSR:(OI)(CI)RX" /T  # <-- ahora sí tiene valor
     icacls "$raiz" /grant "IUSR:(RX)"
     icacls "$raiz" /grant "IIS_IUSRS:(RX)"
     icacls "$raiz" /grant:r "Administrators:(OI)(CI)F"
@@ -167,17 +168,15 @@ function Asignar-Permisos {
     }
 
     foreach ($nombre in $grupos.Keys) {
-
         $path = "$raiz\$nombre"
         $g = $grupos[$nombre]
-
         icacls "$path" /inheritance:r /grant:r "Administrators:(OI)(CI)F" /grant:r "SYSTEM:(OI)(CI)F" /grant:r "${g}:(OI)(CI)M"
     }
 
     icacls "$raiz\general" /inheritance:r /grant:r "Administrators:(OI)(CI)F" /grant:r "SYSTEM:(OI)(CI)F" /grant:r "ftpusuarios:(OI)(CI)M" /grant:r "IUSR:(OI)(CI)RX" /grant:r "IIS_IUSRS:(OI)(CI)RX"
-     Write-Host "Permisos NTFS aplicados correctamente."
-}
 
+    Write-Host "Permisos NTFS aplicados correctamente."
+}
 function Crear-Usuarios {
     $num = Read-Host "Ingrese el número de usuarios a crear"
     for ($i = 1; $i -le $num; $i++) {
