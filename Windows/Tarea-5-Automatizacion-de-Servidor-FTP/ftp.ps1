@@ -114,7 +114,7 @@ function Crear-Estructura {
     }
 
     # Home del anonimo en modo 3 = C:\ftp\Public
-    $anonHome = "$raiz\Public"
+    $anonHome = "$raiz\LocalUser\Public"
     if (-not (Test-Path $anonHome)) {
         New-Item -Path $anonHome -ItemType Directory -Force | Out-Null
     }
@@ -156,8 +156,7 @@ function Asignar-Permisos {
             /grant:r "${g}:(OI)(CI)M"
     }
 
-    # Antes era LocalUser\Public, ahora es Public directamente
-    icacls "$raiz\Public" /inheritance:r `
+    icacls "$raiz\LocalUser\Public" /inheritance:r `
         /grant:r "Administrators:(OI)(CI)F" `
         /grant:r "SYSTEM:(OI)(CI)F" `
         /grant:r "IUSR:(OI)(CI)RX" `
@@ -184,7 +183,8 @@ function Agregar-VirtualDirs-Usuario {
     $ftpSiteName = "FTP_Servidor"
 
     # En Windows Server 2019 modo 3, el home es C:\ftp\<nombre>
-    $userHome = "$raiz\$nombre"
+    # CORRECTO para cuentas locales en modo 3
+    $userHome = "$raiz\LocalUser\$nombre"
 
     if (-not (Test-Path $userHome)) {
         New-Item -Path $userHome -ItemType Directory -Force | Out-Null
