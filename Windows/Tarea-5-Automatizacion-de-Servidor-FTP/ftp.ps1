@@ -262,7 +262,6 @@ function Cambiar-Grupo-Usuario {
             cmd /c "rmdir `"$jVieja`"" | Out-Null
         }
     }
-    Agregar-VirtualDirs-Usuario -nombre $nombre -grupo $nuevo_grupo
     # Recrear directorios virtuales apuntando al nuevo grupo
     Agregar-VirtualDirs-Usuario -nombre $nombre -grupo $nuevo_grupo
 
