@@ -1,7 +1,9 @@
 # ============================================================
-#  Script de Automatización FTP - Windows Server 2019 (No GUI)
-#  Autor: Tarea 5 - Servidor FTP con IIS
+#  Script de Automatizacion FTP - Windows Server 2019 (No GUI)
+#  Tarea 5 - Servidor FTP con IIS
 # ============================================================
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
 
 function Configurar-Firewall {
     if (-not (Get-NetFirewallRule -DisplayName "FTP Server Port 21" -ErrorAction SilentlyContinue)) {
@@ -126,8 +128,7 @@ function Configurar-FTP {
         New-Item -Path $generalReal -ItemType Directory | Out-Null
     }
     if (-not (Test-Path $generalEnAnon)) {
-        # Junction = enlace de directorio (no requiere privilegio de symlink)
-        cmd /c "mklink /J `"$generalEnAnon`" `"$generalReal`"" | Out-Null
+        New-Item -Path $generalEnAnon -ItemType Junction -Value $generalReal | Out-Null
         Write-Host "Junction creado: $generalEnAnon -> $generalReal"
     }
 
@@ -260,14 +261,14 @@ function Crear-Usuarios {
         New-Item -Path $userHome     -ItemType Directory -Force | Out-Null
         New-Item -Path $userPersonal -ItemType Directory -Force | Out-Null
 
-        # Junction a general (carpeta pública compartida)
+        # Junction a general (carpeta publica compartida)
         if (-not (Test-Path $userGenJunc)) {
-            cmd /c "mklink /J `"$userGenJunc`" `"C:\ftp\general`"" | Out-Null
+            New-Item -Path $userGenJunc -ItemType Junction -Value "C:\ftp\general" | Out-Null
         }
 
         # Junction a la carpeta del grupo
         if (-not (Test-Path $userGrpJunc)) {
-            cmd /c "mklink /J `"$userGrpJunc`" `"C:\ftp\$grupo`"" | Out-Null
+            New-Item -Path $userGrpJunc -ItemType Junction -Value "C:\ftp\$grupo" | Out-Null
         }
 
         # Permisos NTFS sobre el home del usuario
@@ -284,9 +285,9 @@ function Crear-Usuarios {
 
         Write-Host "Usuario '$nombre' creado. Estructura:" -ForegroundColor Green
         Write-Host "  $userHome\"
-        Write-Host "    ├── general       (junction -> C:\ftp\general)"
-        Write-Host "    ├── $grupo        (junction -> C:\ftp\$grupo)"
-        Write-Host "    └── $nombre       (carpeta personal)"
+        Write-Host "    [+] general      (junction -> C:\ftp\general)"
+        Write-Host "    [+] $grupo       (junction -> C:\ftp\$grupo)"
+        Write-Host "    [+] $nombre      (carpeta personal)"
     }
 }
 
@@ -319,8 +320,8 @@ function Cambiar-Grupo-Usuario {
             # Eliminar la junction del grupo anterior en el home del usuario
             $juncAntigua = "C:\ftp\LocalUser\$nombre\$g"
             if (Test-Path $juncAntigua) {
-                # Eliminar junction sin borrar el destino real
-                cmd /c "rmdir `"$juncAntigua`"" | Out-Null
+                # Remove-Item sobre una junction elimina el enlace, NO el destino real
+                Remove-Item -Path $juncAntigua -Force | Out-Null
                 Write-Host "Junction al grupo anterior eliminada."
             }
         }
@@ -332,7 +333,7 @@ function Cambiar-Grupo-Usuario {
     # Crear junction al nuevo grupo en el home del usuario
     $juncNueva = "C:\ftp\LocalUser\$nombre\$nuevo_grupo"
     if (-not (Test-Path $juncNueva)) {
-        cmd /c "mklink /J `"$juncNueva`" `"C:\ftp\$nuevo_grupo`"" | Out-Null
+        New-Item -Path $juncNueva -ItemType Junction -Value "C:\ftp\$nuevo_grupo" | Out-Null
         Write-Host "Junction al nuevo grupo creada: $juncNueva"
     }
 
