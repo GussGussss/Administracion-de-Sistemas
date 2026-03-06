@@ -195,7 +195,7 @@ asignar_permisos(){
   chown root:root /ftp
   chmod 755 /ftp
 
-  chmod 710 /ftp/users
+  chmod 755 /ftp/users
 
   chown root:reprobados /ftp/users/reprobados
   chown root:recursadores /ftp/users/recursadores
