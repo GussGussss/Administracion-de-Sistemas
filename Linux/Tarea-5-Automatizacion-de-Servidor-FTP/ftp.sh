@@ -172,6 +172,8 @@ crear_estructura(){
   mkdir -p /ftp/public/general
   mkdir -p /ftp/users/{reprobados,recursadores}
 
+  ln -s /ftp/public/general /ftp/general
+
   chmod 755 /ftp
   chmod 755 /ftp/public
   chmod 775 /ftp/public/general
@@ -192,6 +194,7 @@ asignar_permisos(){
   chown root:ftpusuarios /ftp/public/general
   chmod 775 /ftp/public/general
 
+  setfacl -m g:ftpusuarios:rwx /ftp/public/general
   # anonymous
   setfacl -m u:ftp:rx /ftp
   setfacl -m u:ftp:rx /ftp/public
@@ -219,14 +222,21 @@ crear_usuarios(){
       continue
     fi
 
-    useradd -d /ftp/users -s /bin/bash -g "$grupo" -G ftpusuarios "$nombre"
+    useradd -d /ftp -s /sbin/nologin -g "$grupo" -G ftpusuarios "$nombre"
     echo "$nombre:$password" | chpasswd
-
+  
   mkdir -p /ftp/users/$nombre
   chown "$nombre":"$grupo" /ftp/users/$nombre
   chmod 750 /ftp/users/$nombre
   
+  ln -s /ftp/users/$nombre /ftp/$nombre
+  
   setfacl -m u:$nombre:rwx /ftp/users/$nombre
+  setfacl -m u:$nombre:rx /ftp
+  setfacl -m u:$nombre:rx /ftp/public
+  setfacl -m u:$nombre:rx /ftp/users
+  setfacl -m u:$nombre:rwx /ftp/public/general
+  setfacl -m u:$nombre:rwx /ftp/users/$grupo
   done
 }
 
@@ -250,7 +260,7 @@ cambiar_grupo_usuario(){
   fi
 
   usermod -g "$nuevo_grupo" "$nombre"
-  chown "$nombre":"$nuevo_grupo" /ftp/"$nombre"
+  chown "$nombre":"$nuevo_grupo" /ftp/users/"$nombre"
 
   setfacl -x u:$nombre /ftp/users/reprobados
   setfacl -x u:$nombre /ftp/users/recursadores
