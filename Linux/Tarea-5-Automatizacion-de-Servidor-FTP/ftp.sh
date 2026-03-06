@@ -233,20 +233,27 @@ crear_usuarios(){
       continue
     fi
 
-    useradd -d /ftp -s /bin/bash -g "$grupo" -G ftpusuarios "$nombre"
+    useradd -m -d /ftp/users/$nombre -s /sbin/nologin -g "$grupo" "$nombre"
     echo "$nombre:$password" | chpasswd
   
-  mkdir -p /ftp/users/$nombre
-  chown "$nombre":"$grupo" /ftp/users/$nombre
-  chmod 750 /ftp/users/$nombre
+  mkdir -p /ftp/users/$nombre/{general,$grupo,$nombre}
+
+  # Montajes bind
+  if ! mountpoint -q /ftp/users/$nombre/general; then
+    mount --bind /ftp/public/general /ftp/users/$nombre/general
+  fi
   
-  ln -sfn /ftp/users/$nombre /ftp/$nombre
+  if ! mountpoint -q /ftp/users/$nombre/$grupo; then
+    mount --bind /ftp/users/$grupo /ftp/users/$nombre/$grupo
+  fi
   
-  setfacl -m u:$nombre:rwx /ftp/users/$nombre
-  setfacl -m u:$nombre:rx /ftp
-  setfacl -m u:$nombre:rx /ftp/public
-  setfacl -m u:$nombre:rwx /ftp/public/general
-  setfacl -m u:$nombre:rwx /ftp/users/$grupo
+  # Permisos
+  chown -R $nombre:$grupo /ftp/users/$nombre/$nombre
+  chmod 700 /ftp/users/$nombre/$nombre
+  
+  chown :$grupo /ftp/users/$nombre/$grupo
+  chmod 775 /ftp/users/$nombre/$grupo
+
   done
 }
 
