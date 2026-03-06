@@ -179,7 +179,7 @@ crear_estructura(){
 asignar_permisos(){
 
   chown root:root /ftp
-  chmod 750 /ftp
+  chmod 755 /ftp
 
   chown root:reprobados /ftp/reprobados
   chown root:recursadores /ftp/recursadores
@@ -189,12 +189,11 @@ asignar_permisos(){
 
   chown root:ftpusuarios /ftp/general
   chmod 775 /ftp/general
-  setfacl -m g:ftpusuarios:rwx /ftp/general
 
-  # Permitir a usuarios FTP listar la raíz
+  # usuarios ftp pueden ver /ftp
   setfacl -m g:ftpusuarios:rx /ftp
 
-  # Permisos para anonymous
+  # anonymous
   setfacl -m u:ftp:rx /ftp
   setfacl -m u:ftp:rx /ftp/general
 }
@@ -229,12 +228,7 @@ crear_usuarios(){
 
     # acceso a su carpeta
     setfacl -m u:$nombre:rwx /ftp/"$nombre"
-
-    # acceso a general
-    setfacl -m u:$nombre:rwx /ftp/general
-
-    # acceso SOLO a su grupo
-    setfacl -m u:$nombre:rwx /ftp/"$grupo"
+    
 
   done
 }
