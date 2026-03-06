@@ -4,11 +4,12 @@
 # ============================================================
 
 Import-Module ServerManager
-# Corrección: Carga módulos de IIS de forma segura
-if (Get-Module -ListAvailable -Name IISAdministration) {
-    Import-Module IISAdministration
-} else {
+
+# Silenciamos el error si no encuentra el módulo antiguo
+if (Get-Module -ListAvailable -Name WebAdministration) {
     Import-Module WebAdministration
+} else {
+    Write-Host "Módulo WebAdministration no encontrado, usando comandos nativos..." -ForegroundColor Gray
 }
 
 $ftpRoot="C:\FTP"
