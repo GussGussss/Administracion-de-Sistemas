@@ -194,7 +194,21 @@ function Permisos {
     icacls "$ftpRoot\recursadores" /grant "Administrators:(OI)(CI)F"
     icacls "$ftpRoot\recursadores" /grant "SYSTEM:(OI)(CI)F"
     icacls "$ftpRoot\recursadores" /grant "recursadores:(OI)(CI)M"
+
+    # PERMISOS LOCALUSER
+    icacls "$ftpRoot\LocalUser" /inheritance:r
+    icacls "$ftpRoot\LocalUser" /grant "Administrators:(OI)(CI)F"
+    icacls "$ftpRoot\LocalUser" /grant "SYSTEM:(OI)(CI)F"
+    icacls "$ftpRoot\LocalUser" /grant "IUSR:(OI)(CI)RX"
+    icacls "$ftpRoot\LocalUser" /grant "IIS_IUSRS:(OI)(CI)RX"
     
+    # PUBLIC PARA ANONIMO
+    icacls "$ftpRoot\LocalUser\Public" /inheritance:r
+    icacls "$ftpRoot\LocalUser\Public" /grant "Administrators:(OI)(CI)F"
+    icacls "$ftpRoot\LocalUser\Public" /grant "SYSTEM:(OI)(CI)F"
+    icacls "$ftpRoot\LocalUser\Public" /grant "IUSR:(OI)(CI)RX"
+    icacls "$ftpRoot\LocalUser\Public" /grant "IIS_IUSRS:(OI)(CI)RX"
+
     Write-Host "Permisos aplicados correctamente"
 
 }
