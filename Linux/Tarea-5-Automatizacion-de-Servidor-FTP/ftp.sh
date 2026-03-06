@@ -294,7 +294,7 @@ cambiar_grupo_usuario(){
   chown -R $nombre:$nuevo_grupo /ftp/users/$nombre
 
   if mountpoint -q /ftp/users/$nombre/$grupo_actual; then
-    umount /ftp/users/$nombre/$grupo_actual
+    umount -l /ftp/users/$nombre/$grupo_actual
     rm -rf /ftp/users/$nombre/$grupo_actual
   fi
 
