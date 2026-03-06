@@ -8,7 +8,9 @@ Import-Module ServerManager -ErrorAction SilentlyContinue
 $ftpRoot="C:\FTP"
 $ftpSite="FTP_SERVER"
 $logFile="C:\FTP\ftp_log.txt"
-
+if (!(Test-Path $ftpRoot)) {
+New-Item $ftpRoot -ItemType Directory -Force | Out-Null
+}
 # ------------------------------------------------------------
 # LOG
 # ------------------------------------------------------------
@@ -17,12 +19,21 @@ function Log {
 
 param($msg)
 
-$fecha=Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+$fecha = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+
+# Crear carpeta si no existe
+if (!(Test-Path $ftpRoot)) {
+    New-Item -Path $ftpRoot -ItemType Directory -Force | Out-Null
+}
+
+# Crear archivo log si no existe
+if (!(Test-Path $logFile)) {
+    New-Item -Path $logFile -ItemType File -Force | Out-Null
+}
 
 Add-Content $logFile "$fecha - $msg"
 
 }
-
 # ------------------------------------------------------------
 # INSTALAR FTP
 # ------------------------------------------------------------
