@@ -1,5 +1,4 @@
 Import-Module ServerManager
-Import-Module WebAdministration
 
 $ftpRoot="C:\FTP"
 $ftpSite="FTP_SERVER"
@@ -31,6 +30,8 @@ function Instalar-FTP {
 
 Write-Host "Instalando IIS + FTP..."
 
+Import-Module ServerManager
+
 $features=@(
 "Web-Server",
 "Web-FTP-Server",
@@ -40,20 +41,31 @@ $features=@(
 
 foreach($f in $features){
 
-if(!(Get-WindowsFeature $f).Installed){
+$estado = Get-WindowsFeature $f
 
+if(!$estado.Installed){
+
+Write-Host "Instalando $f ..."
 Install-WindowsFeature $f -IncludeManagementTools
 
 }
+else{
+
+Write-Host "$f ya está instalado."
 
 }
+
+}
+
+# Importar módulo IIS después de instalar
+Import-Module WebAdministration -ErrorAction SilentlyContinue
 
 Start-Service W3SVC -ErrorAction SilentlyContinue
 Start-Service ftpsvc -ErrorAction SilentlyContinue
 
 Set-Service ftpsvc -StartupType Automatic
 
-Write-Host "FTP instalado."
+Write-Host "FTP instalado correctamente."
 
 Log "FTP instalado"
 
