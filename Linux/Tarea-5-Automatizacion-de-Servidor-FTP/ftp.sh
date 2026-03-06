@@ -212,7 +212,9 @@ asignar_permisos(){
   setfacl -m u:ftp:rx /ftp/public
   setfacl -m u:ftp:rx /ftp/public/general
 }
+
 crear_usuarios(){
+
   read -p "Ingrese el numero de usuarios a capturar: " usuarios
 
   for (( i=1; i<=usuarios; i++ )); do
@@ -233,26 +235,32 @@ crear_usuarios(){
       continue
     fi
 
+    # crear usuario con su propio home
     useradd -m -d /ftp/users/$nombre -s /sbin/nologin -g "$grupo" "$nombre"
-    echo "$nombre:$password" | chpasswd
-  
-  mkdir -p /ftp/users/$nombre/{general,$grupo,$nombre}
 
-  # Montajes bind
-  if ! mountpoint -q /ftp/users/$nombre/general; then
-    mount --bind /ftp/public/general /ftp/users/$nombre/general
-  fi
-  
-  if ! mountpoint -q /ftp/users/$nombre/$grupo; then
-    mount --bind /ftp/users/$grupo /ftp/users/$nombre/$grupo
-  fi
-  
-  # Permisos
-  chown -R $nombre:$grupo /ftp/users/$nombre/$nombre
-  chmod 700 /ftp/users/$nombre/$nombre
-  
-  chown :$grupo /ftp/users/$nombre/$grupo
-  chmod 775 /ftp/users/$nombre/$grupo
+    echo "$nombre:$password" | chpasswd
+
+    # estructura interna
+    mkdir -p /ftp/users/$nombre/{general,$grupo,$nombre}
+
+    # montajes bind
+    if ! mountpoint -q /ftp/users/$nombre/general; then
+      mount --bind /ftp/public/general /ftp/users/$nombre/general
+    fi
+
+    if ! mountpoint -q /ftp/users/$nombre/$grupo; then
+      mount --bind /ftp/users/$grupo /ftp/users/$nombre/$grupo
+    fi
+
+    # permisos carpeta personal
+    chown -R $nombre:$grupo /ftp/users/$nombre/$nombre
+    chmod 700 /ftp/users/$nombre/$nombre
+
+    # permisos carpeta grupo
+    chown :$grupo /ftp/users/$nombre/$grupo
+    chmod 775 /ftp/users/$nombre/$grupo
+
+    echo "Usuario $nombre creado correctamente"
 
   done
 }
@@ -276,15 +284,31 @@ cambiar_grupo_usuario(){
     return
   fi
 
-  usermod -g "$nuevo_grupo" "$nombre"
-  chown "$nombre":"$nuevo_grupo" /ftp/users/"$nombre"
-  
-  setfacl -x u:$nombre /ftp/users/reprobados
-  setfacl -x u:$nombre /ftp/users/recursadores
-  setfacl -m u:$nombre:rx /ftp
-  setfacl -m u:$nombre:rwx /ftp/users/"$nuevo_grupo"
+  # grupo actual
+  grupo_actual=$(id -gn $nombre)
 
-  echo "Grupo del usuario $nombre actualizado :D"
+  if [[ "$grupo_actual" == "$nuevo_grupo" ]]; then
+    echo "El usuario ya pertenece a ese grupo"
+    return
+  fi
+
+  usermod -g "$nuevo_grupo" "$nombre"
+
+  # desmontar grupo anterior
+  if mountpoint -q /ftp/users/$nombre/$grupo_actual; then
+    umount /ftp/users/$nombre/$grupo_actual
+    rm -rf /ftp/users/$nombre/$grupo_actual
+  fi
+
+  # crear nuevo grupo
+  mkdir -p /ftp/users/$nombre/$nuevo_grupo
+
+  mount --bind /ftp/users/$nuevo_grupo /ftp/users/$nombre/$nuevo_grupo
+
+  chown :$nuevo_grupo /ftp/users/$nombre/$nuevo_grupo
+  chmod 775 /ftp/users/$nombre/$nuevo_grupo
+
+  echo "Grupo del usuario actualizado correctamente"
 }
 
 configurar_selinux(){
