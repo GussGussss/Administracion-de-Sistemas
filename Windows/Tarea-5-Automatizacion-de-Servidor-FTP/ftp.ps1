@@ -216,7 +216,16 @@ function Configurar-FTP {
     -Port 21 `
     -PhysicalPath $ftpRoot `
     -Force
+
+    # DESACTIVAR SSL OBLIGATORIO
+    Set-ItemProperty "IIS:\Sites\$ftpSite" `
+    -Name ftpServer.security.ssl.controlChannelPolicy `
+    -Value 0
     
+    Set-ItemProperty "IIS:\Sites\$ftpSite" `
+    -Name ftpServer.security.ssl.dataChannelPolicy `
+    -Value 0
+
     Set-ItemProperty "IIS:\Sites\$ftpSite" `
     -Name ftpServer.userIsolation.mode `
     -Value 3
