@@ -4,7 +4,12 @@
 # ============================================================
 
 Import-Module ServerManager
-Import-Module WebAdministration
+# Corrección: Carga módulos de IIS de forma segura
+if (Get-Module -ListAvailable -Name IISAdministration) {
+    Import-Module IISAdministration
+} else {
+    Import-Module WebAdministration
+}
 
 $ftpRoot="C:\FTP"
 $ftpSite="FTP_SERVER"
@@ -15,13 +20,14 @@ $logFile="C:\FTP\ftp_log.txt"
 # ------------------------------------------------------------
 
 function Log {
-
-param($msg)
-
-$fecha=Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-
-Add-Content $logFile "$fecha - $msg"
-
+    param($msg)
+    $fecha=Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    
+    # Asegura que la carpeta exista antes de escribir
+    $dir = Split-Path $logFile
+    if (!(Test-Path $dir)) { New-Item -Path $dir -ItemType Directory | Out-Null }
+    
+    Add-Content $logFile "$fecha - $msg"
 }
 
 # ------------------------------------------------------------
