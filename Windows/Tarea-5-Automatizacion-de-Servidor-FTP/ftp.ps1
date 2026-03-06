@@ -3,9 +3,6 @@
 # Windows Server 2016 / 2019 / 2022
 # ============================================================
 
-Import-Module ServerManager
-Import-Module WebAdministration
-
 $ftpRoot="C:\FTP"
 $ftpSite="FTP_SERVER"
 $logFile="C:\FTP\ftp_log.txt"
@@ -59,6 +56,9 @@ Write-Host "FTP instalado."
 Log "FTP instalado"
 
 }
+
+Import-Module ServerManager
+Import-Module WebAdministration
 
 # ------------------------------------------------------------
 # FIREWALL
