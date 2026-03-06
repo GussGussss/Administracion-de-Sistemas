@@ -109,10 +109,11 @@ configurarftp(){
   else
     echo "pasv_enable=YES" >> "$CONF"
   fi
+
   if grep -q "^anon_root" "$CONF"; then
-    sed -i "s|^anon_root=.*|anon_root=/ftp/general|" "$CONF"
+    sed -i "s|^anon_root=.*|anon_root=/ftp|" "$CONF"
   else
-    echo "anon_root=/ftp/general" >> "$CONF"
+    echo "anon_root=/ftp" >> "$CONF"
   fi
 
   if ! grep -q "^pasv_min_port" "$CONF"; then
@@ -170,7 +171,7 @@ crear_estructura(){
   local raiz="/ftp"
   mkdir -p "$raiz"/{general,reprobados,recursadores}
 
-  chmod 755 /ftp
+  chmod 750 /ftp
 
   echo "Estructura base creada"
 }
@@ -178,7 +179,7 @@ crear_estructura(){
 asignar_permisos(){
 
   chown root:root /ftp
-  chmod 755 /ftp
+  chmod 750 /ftp
 
   chown root:reprobados /ftp/reprobados
   chown root:recursadores /ftp/recursadores
@@ -188,11 +189,21 @@ asignar_permisos(){
 
   chown root:ftpusuarios /ftp/general
   chmod 775 /ftp/general
+  setfacl -m g:ftpusuarios:rwx /ftp/general
+
+  # Permitir a usuarios FTP listar la raíz
+  setfacl -m g:ftpusuarios:rx /ftp
+
+  # Permisos para anonymous
+  setfacl -m u:ftp:rx /ftp
+  setfacl -m u:ftp:rx /ftp/general
 }
 
 crear_usuarios(){
   read -p "Ingrese el numero de usuarios a capturar: " usuarios
+
   for (( i=1; i<=usuarios; i++ )); do
+
     echo "Usuario $i"
     read -p "Nombre de usuario: " nombre
 
@@ -202,40 +213,63 @@ crear_usuarios(){
     fi
 
     read -p "Contraseña: " password
-    read -p "Grupo: " grupo
+    read -p "Grupo (reprobados/recursadores): " grupo
 
     if [[ "$grupo" != "reprobados" && "$grupo" != "recursadores" ]]; then
-       echo "Grupo inválido"
-       continue
+      echo "Grupo inválido"
+      continue
     fi
 
-  useradd -d /ftp -s /bin/bash -g "$grupo" -G ftpusuarios "$nombre"
-  echo "$nombre:$password" | chpasswd
+    useradd -d /ftp -s /bin/bash -g "$grupo" -G ftpusuarios "$nombre"
+    echo "$nombre:$password" | chpasswd
 
     mkdir -p /ftp/"$nombre"
     chown "$nombre":"$grupo" /ftp/"$nombre"
     chmod 750 /ftp/"$nombre"
-    setfacl -m g:reprobados:rx /ftp
-    setfacl -m g:recursadores:rx /ftp
+
+    # acceso a su carpeta
+    setfacl -m u:$nombre:rwx /ftp/"$nombre"
+
+    # acceso a general
+    setfacl -m u:$nombre:rwx /ftp/general
+
+    # acceso SOLO a su grupo
+    setfacl -m u:$nombre:rwx /ftp/"$grupo"
+
   done
 }
 
+
 cambiar_grupo_usuario(){
+
   echo ""
   echo "***** Cambiar de grupo a usuario *****"
-  read -p "Ingrese el nombre del usario: " nombre
+
+  read -p "Ingrese el nombre del usuario: " nombre
+
   if ! id "$nombre" &>/dev/null; then
     echo "El usuario no existe"
     return
   fi
-  read -p "Ingrese el nuevo grupo del usuario: " nuevo_grupo
+
+  read -p "Ingrese el nuevo grupo (reprobados/recursadores): " nuevo_grupo
+
   if [[ "$nuevo_grupo" != "reprobados" && "$nuevo_grupo" != "recursadores" ]]; then
     echo "Grupo inválido"
     return
   fi
+
   usermod -g "$nuevo_grupo" "$nombre"
   chown "$nombre":"$nuevo_grupo" /ftp/"$nombre"
-  echo "Grupo del usuario "$nombre" actualizado :D"
+
+  # quitar acceso a ambos grupos
+  setfacl -x u:$nombre /ftp/reprobados
+  setfacl -x u:$nombre /ftp/recursadores
+
+  # dar acceso solo al nuevo grupo
+  setfacl -m u:$nombre:rwx /ftp/"$nuevo_grupo"
+
+  echo "Grupo del usuario $nombre actualizado :D"
 }
 
 configurar_selinux(){
