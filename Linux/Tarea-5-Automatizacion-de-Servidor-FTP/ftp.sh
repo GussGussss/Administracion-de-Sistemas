@@ -283,7 +283,6 @@ cambiar_grupo_usuario(){
     return
   fi
 
-  # grupo actual
   grupo_actual=$(id -gn $nombre)
 
   if [[ "$grupo_actual" == "$nuevo_grupo" ]]; then
@@ -292,14 +291,13 @@ cambiar_grupo_usuario(){
   fi
 
   usermod -g "$nuevo_grupo" "$nombre"
+  chown -R $nombre:$nuevo_grupo /ftp/users/$nombre
 
-  # desmontar grupo anterior
   if mountpoint -q /ftp/users/$nombre/$grupo_actual; then
     umount /ftp/users/$nombre/$grupo_actual
     rm -rf /ftp/users/$nombre/$grupo_actual
   fi
 
-  # crear nuevo grupo
   mkdir -p /ftp/users/$nombre/$nuevo_grupo
 
   mount --bind /ftp/users/$nuevo_grupo /ftp/users/$nombre/$nuevo_grupo
