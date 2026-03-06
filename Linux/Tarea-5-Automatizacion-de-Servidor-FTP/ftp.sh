@@ -176,7 +176,13 @@ crear_estructura(){
   mkdir -p /ftp/public/general
   mkdir -p /ftp/users/{reprobados,recursadores}
 
-  ln -sfn /ftp/public/general /ftp/general
+  mkdir -p /ftp/general
+  
+  if ! mount | grep -q "/ftp/general"; then
+    mount --bind /ftp/public/general /ftp/general
+  fi
+  ln -sfn /ftp/users/reprobados /ftp/reprobados
+  ln -sfn /ftp/users/recursadores /ftp/recursadores
 
   chmod 755 /ftp
   chmod 755 /ftp/public
@@ -235,7 +241,6 @@ crear_usuarios(){
   chmod 750 /ftp/users/$nombre
   
   ln -sfn /ftp/users/$nombre /ftp/$nombre
-  ln -sfn /ftp/users/$grupo /ftp/$grupo
   
   setfacl -m u:$nombre:rwx /ftp/users/$nombre
   setfacl -m u:$nombre:rx /ftp
@@ -266,7 +271,6 @@ cambiar_grupo_usuario(){
 
   usermod -g "$nuevo_grupo" "$nombre"
   chown "$nombre":"$nuevo_grupo" /ftp/users/"$nombre"
-  ln -sfn /ftp/users/$nuevo_grupo /ftp/$nuevo_grupo
   
   setfacl -x u:$nombre /ftp/users/reprobados
   setfacl -x u:$nombre /ftp/users/recursadores
