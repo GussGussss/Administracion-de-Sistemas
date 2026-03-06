@@ -185,6 +185,8 @@ asignar_permisos(){
   chown root:root /ftp
   chmod 755 /ftp
 
+  chmod 710 /ftp/users
+
   chown root:reprobados /ftp/users/reprobados
   chown root:recursadores /ftp/users/recursadores
 
@@ -195,12 +197,11 @@ asignar_permisos(){
   chmod 775 /ftp/public/general
 
   setfacl -m g:ftpusuarios:rwx /ftp/public/general
-  # anonymous
+
   setfacl -m u:ftp:rx /ftp
   setfacl -m u:ftp:rx /ftp/public
   setfacl -m u:ftp:rx /ftp/public/general
 }
-
 crear_usuarios(){
   read -p "Ingrese el numero de usuarios a capturar: " usuarios
 
