@@ -236,8 +236,7 @@ crear_usuarios(){
     fi
 
     # crear usuario con su propio home
-    useradd -m -d /ftp/users/$nombre -s /bin/bash -g "$grupo" "$nombre"
-
+    useradd -m -d /ftp/users/$nombre -s /bin/bash -g "$grupo" -G ftpusuarios "$nombre"
     echo "$nombre:$password" | chpasswd
 
     # estructura interna
