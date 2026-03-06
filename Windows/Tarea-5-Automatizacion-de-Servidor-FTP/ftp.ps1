@@ -1,34 +1,26 @@
-# ============================================================
-# ADMINISTRADOR SERVIDOR FTP - VERSION PROFESIONAL
-# Windows Server 2016 / 2019 / 2022
-# ============================================================
-
 Import-Module ServerManager
-
-# Silenciamos el error si no encuentra el módulo antiguo
-if (Get-Module -ListAvailable -Name WebAdministration) {
-    Import-Module WebAdministration
-} else {
-    Write-Host "Módulo WebAdministration no encontrado, usando comandos nativos..." -ForegroundColor Gray
-}
+Import-Module WebAdministration
 
 $ftpRoot="C:\FTP"
 $ftpSite="FTP_SERVER"
 $logFile="C:\FTP\ftp_log.txt"
+
+if (!(Test-Path $ftpRoot)) {
+New-Item $ftpRoot -ItemType Directory -Force | Out-Null
+}
 
 # ------------------------------------------------------------
 # LOG
 # ------------------------------------------------------------
 
 function Log {
-    param($msg)
-    $fecha=Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    
-    # Asegura que la carpeta exista antes de escribir
-    $dir = Split-Path $logFile
-    if (!(Test-Path $dir)) { New-Item -Path $dir -ItemType Directory | Out-Null }
-    
-    Add-Content $logFile "$fecha - $msg"
+
+param($msg)
+
+$fecha=Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+
+Add-Content $logFile "$fecha - $msg"
+
 }
 
 # ------------------------------------------------------------
@@ -56,8 +48,8 @@ Install-WindowsFeature $f -IncludeManagementTools
 
 }
 
-Start-Service W3SVC
-Start-Service ftpsvc
+Start-Service W3SVC -ErrorAction SilentlyContinue
+Start-Service ftpsvc -ErrorAction SilentlyContinue
 
 Set-Service ftpsvc -StartupType Automatic
 
@@ -155,7 +147,7 @@ icacls $ftpRoot /grant "Administrators:(OI)(CI)F"
 icacls $ftpRoot /grant "SYSTEM:(OI)(CI)F"
 icacls $ftpRoot /grant "IUSR:(RX)"
 
-# GENERAL (PUBLICA)
+# GENERAL
 icacls "$ftpRoot\general" /inheritance:r
 icacls "$ftpRoot\general" /grant "Administrators:(OI)(CI)F"
 icacls "$ftpRoot\general" /grant "SYSTEM:(OI)(CI)F"
@@ -173,6 +165,20 @@ icacls "$ftpRoot\recursadores" /inheritance:r
 icacls "$ftpRoot\recursadores" /grant "Administrators:(OI)(CI)F"
 icacls "$ftpRoot\recursadores" /grant "SYSTEM:(OI)(CI)F"
 icacls "$ftpRoot\recursadores" /grant "recursadores:(OI)(CI)M"
+
+# LOCALUSER
+icacls "$ftpRoot\LocalUser" /inheritance:r
+icacls "$ftpRoot\LocalUser" /grant "Administrators:(OI)(CI)F"
+icacls "$ftpRoot\LocalUser" /grant "SYSTEM:(OI)(CI)F"
+icacls "$ftpRoot\LocalUser" /grant "IUSR:(OI)(CI)RX"
+icacls "$ftpRoot\LocalUser" /grant "IIS_IUSRS:(OI)(CI)RX"
+
+# PUBLIC
+icacls "$ftpRoot\LocalUser\Public" /inheritance:r
+icacls "$ftpRoot\LocalUser\Public" /grant "Administrators:(OI)(CI)F"
+icacls "$ftpRoot\LocalUser\Public" /grant "SYSTEM:(OI)(CI)F"
+icacls "$ftpRoot\LocalUser\Public" /grant "IUSR:(OI)(CI)RX"
+icacls "$ftpRoot\LocalUser\Public" /grant "IIS_IUSRS:(OI)(CI)RX"
 
 Write-Host "Permisos aplicados correctamente"
 
@@ -195,6 +201,15 @@ New-WebFtpSite `
 -Port 21 `
 -PhysicalPath $ftpRoot `
 -Force
+
+# DESACTIVAR SSL (SOLUCION ERROR 534)
+Set-ItemProperty "IIS:\Sites\$ftpSite" `
+-Name ftpServer.security.ssl.controlChannelPolicy `
+-Value 0
+
+Set-ItemProperty "IIS:\Sites\$ftpSite" `
+-Name ftpServer.security.ssl.dataChannelPolicy `
+-Value 0
 
 Set-ItemProperty "IIS:\Sites\$ftpSite" `
 -Name ftpServer.userIsolation.mode `
@@ -234,169 +249,6 @@ Log "FTP configurado"
 }
 
 # ------------------------------------------------------------
-# CREAR USUARIO
-# ------------------------------------------------------------
-
-function Crear-Usuario {
-    $cantidad=Read-Host "¿Cuantos usuarios desea crear?"
-
-for($i=1;$i -le $cantidad;$i++){
-
-Write-Host ""
-Write-Host "Creando usuario $i de $cantidad"
-
-$usuario=Read-Host "Usuario"
-$pass=Read-Host "Contraseña" -AsSecureString
-$grupo=Read-Host "Grupo (reprobados/recursadores)"
-
-if($grupo -ne "reprobados" -and $grupo -ne "recursadores"){
-
-Write-Host "Grupo inválido"
-continue
-
-}
-
-if(Get-LocalUser $usuario -ErrorAction SilentlyContinue){
-
-Write-Host "El usuario ya existe"
-continue
-
-}
-
-New-LocalUser $usuario -Password $pass
-
-Add-LocalGroupMember $grupo -Member $usuario
-Add-LocalGroupMember "ftpusuarios" -Member $usuario
-
-$userHome="$ftpRoot\LocalUser\$usuario"
-
-New-Item $userHome -ItemType Directory -Force
-New-Item "$ftpRoot\Data\Usuarios\$usuario" -ItemType Directory -Force
-
-cmd /c mklink /J "$userHome\general" "$ftpRoot\general"
-cmd /c mklink /J "$userHome\$grupo" "$ftpRoot\$grupo"
-cmd /c mklink /J "$userHome\$usuario" "$ftpRoot\Data\Usuarios\$usuario"
-
-icacls "$ftpRoot\Data\Usuarios\$usuario" /grant "${usuario}:(OI)(CI)F"
-
-}
-
-Restart-Service ftpsvc
-
-Write-Host "Usuarios creados correctamente"
-
-}
-
-
-
-
-# ------------------------------------------------------------
-# ELIMINAR USUARIO
-# ------------------------------------------------------------
-
-function Eliminar-Usuario {
-
-$usuario=Read-Host "Usuario a eliminar"
-
-Remove-LocalUser $usuario
-
-Remove-Item "$ftpRoot\LocalUser\$usuario" -Recurse -Force -ErrorAction SilentlyContinue
-
-Remove-Item "$ftpRoot\Data\Usuarios\$usuario" -Recurse -Force -ErrorAction SilentlyContinue
-
-Restart-Service ftpsvc
-
-Write-Host "Usuario eliminado"
-
-Log "Usuario eliminado"
-
-}
-
-# ------------------------------------------------------------
-# CAMBIAR GRUPO
-# ------------------------------------------------------------
-
-function Cambiar-Grupo {
-
-$usuario=Read-Host "Usuario"
-$grupo=Read-Host "Nuevo grupo (reprobados/recursadores)"
-
-# quitar de grupos
-Remove-LocalGroupMember -Group "reprobados" -Member $usuario -ErrorAction SilentlyContinue
-Remove-LocalGroupMember -Group "recursadores" -Member $usuario -ErrorAction SilentlyContinue
-
-# agregar nuevo
-Add-LocalGroupMember -Group $grupo -Member $usuario
-
-$userHome="$ftpRoot\LocalUser\$usuario"
-
-# eliminar enlaces viejos
-if(Test-Path "$userHome\reprobados"){Remove-Item "$userHome\reprobados" -Force}
-if(Test-Path "$userHome\recursadores"){Remove-Item "$userHome\recursadores" -Force}
-
-# crear nuevo enlace
-cmd /c mklink /J "$userHome\$grupo" "$ftpRoot\$grupo"
-
-# reiniciar IIS completo
-iisreset
-
-Write-Host "Grupo cambiado correctamente"
-
-
-}
-
-# ------------------------------------------------------------
-# VER USUARIOS
-# ------------------------------------------------------------
-
-function Ver-Usuarios {
-
-Write-Host ""
-Write-Host "Usuarios FTP creados:"
-Write-Host ""
-
-Get-LocalGroupMember ftpusuarios | ForEach-Object {
-
-$u=$_.Name.Split("\")[-1]
-
-Write-Host "Usuario:" $u
-
-}
-
-}
-
-
-
-# ------------------------------------------------------------
-# REINICIAR FTP
-# ------------------------------------------------------------
-
-function Reiniciar-FTP {
-
-Restart-Service ftpsvc
-
-Write-Host "FTP reiniciado"
-
-}
-
-# ------------------------------------------------------------
-# ESTADO SERVIDOR
-# ------------------------------------------------------------
-
-function Estado {
-
-Write-Host "Servicio FTP"
-
-Get-Service ftpsvc
-
-Write-Host ""
-Write-Host "Puerto 21"
-
-netstat -an | find ":21"
-
-}
-
-# ------------------------------------------------------------
 # MENU
 # ------------------------------------------------------------
 
@@ -413,12 +265,6 @@ Write-Host "3 Crear Grupos"
 Write-Host "4 Crear Estructura"
 Write-Host "5 Permisos"
 Write-Host "6 Configurar FTP"
-Write-Host "7 Crear Usuario"
-Write-Host "8 Eliminar Usuario"
-Write-Host "9 Cambiar Grupo"
-Write-Host "10 Ver Usuarios"
-Write-Host "11 Estado Servidor"
-Write-Host "12 Reiniciar FTP"
 Write-Host "0 Salir"
 
 $op=Read-Host "Opcion"
@@ -431,12 +277,6 @@ switch($op){
 "4"{Crear-Estructura}
 "5"{Permisos}
 "6"{Configurar-FTP}
-"7"{Crear-Usuario}
-"8"{Eliminar-Usuario}
-"9"{Cambiar-Grupo}
-"10"{Ver-Usuarios}
-"11"{Estado}
-"12"{Reiniciar-FTP}
 "0"{break}
 
 }
@@ -445,4 +285,4 @@ switch($op){
 
 }
 
-Menu         
+Menu
