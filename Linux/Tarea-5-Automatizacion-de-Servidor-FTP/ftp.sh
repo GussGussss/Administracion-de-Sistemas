@@ -179,14 +179,14 @@ crear_estructura(){
 asignar_permisos(){
 
   chown root:root /ftp
-  chmod 755 /ftp
+  chmod 750 /ftp
 
   chown root:reprobados /ftp/reprobados
   chown root:recursadores /ftp/recursadores
 
-  chmod 2770 /ftp/reprobados
-  chmod 2770 /ftp/recursadores
-
+  chmod 2710 /ftp/reprobados
+  chmod 2710 /ftp/recursadores
+  
   chown root:ftpusuarios /ftp/general
   chmod 775 /ftp/general
 
