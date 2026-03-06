@@ -110,12 +110,6 @@ configurarftp(){
     echo "pasv_enable=YES" >> "$CONF"
   fi
 
-  if grep -q "^anon_root" "$CONF"; then
-    sed -i "s|^anon_root=.*|anon_root=/ftp|" "$CONF"
-  else
-    echo "anon_root=/ftp" >> "$CONF"
-  fi
-
   if ! grep -q "^pasv_min_port" "$CONF"; then
     echo "pasv_min_port=40000" >> "$CONF"
   fi
@@ -143,7 +137,13 @@ configurarftp(){
   if ! grep -q "^anon_world_readable_only" "$CONF"; then
     echo "anon_world_readable_only=YES" >> "$CONF"
   fi
-  
+
+  if grep -q "^anon_root" "$CONF"; then
+    sed -i "s|^anon_root=.*|anon_root=/ftp/public|" "$CONF"
+  else
+    echo "anon_root=/ftp/public" >> "$CONF"
+  fi
+
   systemctl restart vsftpd
 }
 
@@ -172,6 +172,7 @@ crear_estructura(){
   mkdir -p /ftp/public/general
   mkdir -p /ftp/users/{reprobados,recursadores}
 
+  chmod 755 /ftp
   chmod 755 /ftp/public
   chmod 775 /ftp/public/general
 
@@ -182,21 +183,19 @@ asignar_permisos(){
   chown root:root /ftp
   chmod 755 /ftp
 
-  chown root:reprobados /ftp/reprobados
-  chown root:recursadores /ftp/recursadores
+  chown root:reprobados /ftp/users/reprobados
+  chown root:recursadores /ftp/users/recursadores
 
-  chmod 2710 /ftp/reprobados
-  chmod 2710 /ftp/recursadores
+  chmod 2770 /ftp/users/reprobados
+  chmod 2770 /ftp/users/recursadores
   
-  chown root:ftpusuarios /ftp/general
-  chmod 775 /ftp/general
-
-  # usuarios ftp pueden ver /ftp
-  setfacl -m g:ftpusuarios:rx /ftp
+  chown root:ftpusuarios /ftp/public/general
+  chmod 775 /ftp/public/general
 
   # anonymous
   setfacl -m u:ftp:rx /ftp
-  setfacl -m u:ftp:rx /ftp/general
+  setfacl -m u:ftp:rx /ftp/public
+  setfacl -m u:ftp:rx /ftp/public/general
 }
 
 crear_usuarios(){
@@ -220,20 +219,16 @@ crear_usuarios(){
       continue
     fi
 
-    useradd -d /ftp -s /bin/bash -g "$grupo" -G ftpusuarios "$nombre"
+    useradd -d /ftp/users -s /bin/bash -g "$grupo" -G ftpusuarios "$nombre"
     echo "$nombre:$password" | chpasswd
 
-    mkdir -p /ftp/"$nombre"
-    chown "$nombre":"$grupo" /ftp/"$nombre"
-    chmod 750 /ftp/"$nombre"
-
-    # acceso a su carpeta
-    setfacl -m u:$nombre:rwx /ftp/"$nombre"
-    
-
+  mkdir -p /ftp/users/$nombre
+  chown "$nombre":"$grupo" /ftp/users/$nombre
+  chmod 750 /ftp/users/$nombre
+  
+  setfacl -m u:$nombre:rwx /ftp/users/$nombre
   done
 }
-
 
 cambiar_grupo_usuario(){
 
@@ -257,12 +252,10 @@ cambiar_grupo_usuario(){
   usermod -g "$nuevo_grupo" "$nombre"
   chown "$nombre":"$nuevo_grupo" /ftp/"$nombre"
 
-  # quitar acceso a ambos grupos
-  setfacl -x u:$nombre /ftp/reprobados
-  setfacl -x u:$nombre /ftp/recursadores
-
-  # dar acceso solo al nuevo grupo
-  setfacl -m u:$nombre:rwx /ftp/"$nuevo_grupo"
+  setfacl -x u:$nombre /ftp/users/reprobados
+  setfacl -x u:$nombre /ftp/users/recursadores
+  
+  setfacl -m u:$nombre:rwx /ftp/users/"$nuevo_grupo"
 
   echo "Grupo del usuario $nombre actualizado :D"
 }
