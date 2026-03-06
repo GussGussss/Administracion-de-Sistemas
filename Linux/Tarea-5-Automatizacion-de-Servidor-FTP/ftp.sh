@@ -172,7 +172,7 @@ crear_estructura(){
   mkdir -p /ftp/public/general
   mkdir -p /ftp/users/{reprobados,recursadores}
 
-  ln -s /ftp/public/general /ftp/general
+  ln -sfn /ftp/public/general /ftp/general
 
   chmod 755 /ftp
   chmod 755 /ftp/public
@@ -229,12 +229,11 @@ crear_usuarios(){
   chown "$nombre":"$grupo" /ftp/users/$nombre
   chmod 750 /ftp/users/$nombre
   
-  ln -s /ftp/users/$nombre /ftp/$nombre
+  ln -sfn /ftp/users/$nombre /ftp/$nombre
   
   setfacl -m u:$nombre:rwx /ftp/users/$nombre
   setfacl -m u:$nombre:rx /ftp
   setfacl -m u:$nombre:rx /ftp/public
-  setfacl -m u:$nombre:rx /ftp/users
   setfacl -m u:$nombre:rwx /ftp/public/general
   setfacl -m u:$nombre:rwx /ftp/users/$grupo
   done
