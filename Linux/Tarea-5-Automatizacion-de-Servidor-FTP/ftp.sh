@@ -138,6 +138,10 @@ configurarftp(){
     echo "anon_world_readable_only=YES" >> "$CONF"
   fi
 
+  if ! grep -q "^hide_file" "$CONF"; then
+    echo 'hide_file={public,users}' >> "$CONF"
+  fi
+
   if grep -q "^anon_root" "$CONF"; then
     sed -i "s|^anon_root=.*|anon_root=/ftp/public|" "$CONF"
   else
@@ -231,6 +235,7 @@ crear_usuarios(){
   chmod 750 /ftp/users/$nombre
   
   ln -sfn /ftp/users/$nombre /ftp/$nombre
+  ln -sfn /ftp/users/$grupo /ftp/$grupo
   
   setfacl -m u:$nombre:rwx /ftp/users/$nombre
   setfacl -m u:$nombre:rx /ftp
@@ -261,10 +266,11 @@ cambiar_grupo_usuario(){
 
   usermod -g "$nuevo_grupo" "$nombre"
   chown "$nombre":"$nuevo_grupo" /ftp/users/"$nombre"
-
+  ln -sfn /ftp/users/$nuevo_grupo /ftp/$nuevo_grupo
+  
   setfacl -x u:$nombre /ftp/users/reprobados
   setfacl -x u:$nombre /ftp/users/recursadores
-  
+  setfacl -m u:$nombre:rx /ftp
   setfacl -m u:$nombre:rwx /ftp/users/"$nuevo_grupo"
 
   echo "Grupo del usuario $nombre actualizado :D"
