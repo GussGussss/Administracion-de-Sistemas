@@ -259,6 +259,65 @@ Write-Host "FTP configurado"
 Log "FTP configurado"
 
 }
+# ------------------------------------------------------------
+# CREAR USUARIOS
+# ------------------------------------------------------------
+
+function Crear-Usuarios {
+
+$cantidad = Read-Host "¿Cuantos usuarios desea crear?"
+
+for($i=1; $i -le $cantidad; $i++){
+
+Write-Host ""
+Write-Host "Creando usuario $i de $cantidad"
+
+$usuario = Read-Host "Nombre de usuario"
+$pass = Read-Host "Contraseña" -AsSecureString
+$grupo = Read-Host "Grupo (reprobados/recursadores)"
+
+if($grupo -ne "reprobados" -and $grupo -ne "recursadores"){
+Write-Host "Grupo inválido"
+continue
+}
+
+if(Get-LocalUser $usuario -ErrorAction SilentlyContinue){
+Write-Host "El usuario ya existe"
+continue
+}
+
+# crear usuario
+New-LocalUser $usuario -Password $pass -FullName $usuario
+
+# agregar a grupos
+Add-LocalGroupMember $grupo -Member $usuario
+Add-LocalGroupMember "ftpusuarios" -Member $usuario
+
+# crear home ftp
+$userHome="$ftpRoot\LocalUser\$usuario"
+
+New-Item $userHome -ItemType Directory -Force
+
+# carpeta personal real
+New-Item "$ftpRoot\Data\Usuarios\$usuario" -ItemType Directory -Force
+
+# enlaces
+cmd /c mklink /J "$userHome\general" "$ftpRoot\general"
+cmd /c mklink /J "$userHome\$grupo" "$ftpRoot\$grupo"
+cmd /c mklink /J "$userHome\$usuario" "$ftpRoot\Data\Usuarios\$usuario"
+
+# permisos usuario
+icacls "$ftpRoot\Data\Usuarios\$usuario" /grant "${usuario}:(OI)(CI)F"
+
+Write-Host "Usuario $usuario creado"
+
+}
+
+Restart-Service ftpsvc
+
+Write-Host "Usuarios creados correctamente"
+
+}
 
 # ------------------------------------------------------------
 # MENU
@@ -277,6 +336,7 @@ Write-Host "3 Crear Grupos"
 Write-Host "4 Crear Estructura"
 Write-Host "5 Permisos"
 Write-Host "6 Configurar FTP"
+Write-host "7 Crear usuarios"
 Write-Host "0 Salir"
 
 $op=Read-Host "Opcion"
@@ -289,6 +349,7 @@ switch($op){
 "4"{Crear-Estructura}
 "5"{Permisos}
 "6"{Configurar-FTP}
+"7"{Crear-Usuarios}
 "0"{break}
 
 }
