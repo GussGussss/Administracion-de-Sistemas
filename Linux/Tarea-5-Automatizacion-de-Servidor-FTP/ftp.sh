@@ -236,7 +236,7 @@ crear_usuarios(){
     fi
 
     # crear usuario con su propio home
-    useradd -m -d /ftp/users/$nombre -s /sbin/nologin -g "$grupo" "$nombre"
+    useradd -m -d /ftp/users/$nombre -s /bin/bash -g "$grupo" "$nombre"
 
     echo "$nombre:$password" | chpasswd
 
