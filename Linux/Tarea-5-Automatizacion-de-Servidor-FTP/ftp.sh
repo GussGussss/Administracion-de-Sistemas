@@ -168,12 +168,13 @@ crear_grupo(){
 }
 
 crear_estructura(){
-  local raiz="/ftp"
-  mkdir -p "$raiz"/{general,reprobados,recursadores}
 
-  chmod 750 /ftp
+  mkdir -p /ftp/public/general
+  mkdir -p /ftp/users/{reprobados,recursadores}
 
-  echo "Estructura base creada"
+  chmod 755 /ftp/public
+  chmod 775 /ftp/public/general
+
 }
 
 asignar_permisos(){
