@@ -134,10 +134,17 @@ configurar_firewall() {
             fi
         done
     elif command -v firewall-cmd &>/dev/null; then
-        firewall-cmd --permanent --add-port="$puerto/tcp" &>/dev/null
-        firewall-cmd --reload &>/dev/null
-        msg_ok "firewalld: Puerto $puerto abierto."
-    else
+            firewall-cmd --permanent --add-port="$puerto/tcp" &>/dev/null
+    
+            # Cerrar puertos HTTP default si no se usan
+            for p in "${puertos_default[@]}"; do
+                if [[ "$p" -ne "$puerto" ]]; then
+                    firewall-cmd --permanent --remove-port="$p/tcp" &>/dev/null || true
+                fi
+            done
+    
+            firewall-cmd --reload &>/dev/null
+            msg_ok "firewalld: Puerto $puerto abierto."
         # IPTables como fallback
         iptables -A INPUT -p tcp --dport "$puerto" -j ACCEPT 2>/dev/null
         msg_ok "iptables: Regla para puerto $puerto añadida."
@@ -315,7 +322,10 @@ instalar_apache() {
     # Seguridad: control de métodos HTTP
     configurar_metodos_http_apache
 
-    # Crear usuario y página
+    # Crear usuario dedicado para Apache
+    crear_usuario_servicio "apache" "/var/www/html"
+    
+    # Crear página personalizada
     crear_index_html "/var/www/html" "Apache" "$version" "$puerto"
 
     # Reiniciar servicio
@@ -568,7 +578,7 @@ configurar_puerto_nginx() {
     # También en conf.d si existe
     if [[ -d /etc/nginx/conf.d ]]; then
         for f in /etc/nginx/conf.d/*.conf; do
-            [[ -f "$f" ]] && sed -i "s/listen [0-9]*;/listen $puerto;/g" "$f"
+            [[ -f "$f" ]] && sed -i -E "s/listen[[:space:]]+[0-9]+/listen $puerto/g" "$f"
         done
     fi
 
@@ -584,6 +594,7 @@ configurar_seguridad_nginx() {
     # Ocultar versión de Nginx
     if ! grep -q "server_tokens off" "$nginx_conf"; then
         sed -i "/http {/a\\    server_tokens off;" "$nginx_conf"
+        more_clear_headers Server;
         msg_ok "Nginx: server_tokens off aplicado (versión oculta)."
     fi
 
