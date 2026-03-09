@@ -1,1 +1,0 @@
-echo "script para http"
