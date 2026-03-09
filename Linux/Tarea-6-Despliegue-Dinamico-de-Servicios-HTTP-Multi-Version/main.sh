@@ -13,8 +13,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Cargar archivo de funciones
 FUNCIONES="${SCRIPT_DIR}/funciones.sh"
 if [[ ! -f "$FUNCIONES" ]]; then
-    echo "[ERROR] No se encontró http_functions.sh en $SCRIPT_DIR"
-    echo "        Asegúrate de que main.sh y http_functions.sh estén en el mismo directorio."
+    echo "[ERROR] No se encontró funciones.sh en $SCRIPT_DIR"
+    echo "        Asegúrate de que main.sh y funciones.sh estén en el mismo directorio."
     exit 1
 fi
 source "$FUNCIONES"
