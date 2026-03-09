@@ -233,7 +233,7 @@ obtener_versiones_apache() {
     local ver_repo ver_instalada versiones=""
 
     # repoquery es mucho más rápido que dnf list --showduplicates
-    ver_repo=$(timeout 8 dnf repoquery --queryformat "%{version}-%{release}" httpd \
+    ver_repo=$(timeout 8 dnf repoquery --quiet --queryformat "%{version}-%{release}" httpd \
         2>/dev/null | sort -V | uniq | tail -1)
     ver_instalada=$(rpm -q httpd --queryformat "%{version}-%{release}" 2>/dev/null)
 
@@ -291,7 +291,7 @@ seleccionar_version_apache() {
         fi
     done
 
-    echo "$version_elegida"
+    echo "$version_elegida" | awk '{print $1}'
 }
 
 # ─────────────────────────────────────────────
@@ -452,7 +452,7 @@ obtener_versiones_nginx() {
     msg_info "Consultando versiones disponibles de Nginx..."
     local ver_repo ver_instalada versiones=""
 
-    ver_repo=$(timeout 8 dnf repoquery --queryformat "%{version}-%{release}" nginx \
+    ver_repo=$(timeout 8 dnf repoquery --quiet --queryformat "%{version}-%{release}" nginx \
         2>/dev/null | sort -V | uniq | tail -1)
     ver_instalada=$(rpm -q nginx --queryformat "%{version}-%{release}" 2>/dev/null)
 
@@ -510,7 +510,7 @@ seleccionar_version_nginx() {
         fi
     done
 
-    echo "$version_elegida"
+    echo "$version_elegida" | awk '{print $1}'
 }
 
 # ─────────────────────────────────────────────
@@ -647,7 +647,7 @@ obtener_versiones_tomcat() {
     msg_info "Consultando versiones disponibles de Tomcat..."
     local ver_repo ver_instalada versiones=""
 
-    ver_repo=$(timeout 8 dnf repoquery --queryformat "%{version}-%{release}" tomcat \
+    ver_repo=$(timeout 8 dnf repoquery --quiet --queryformat "%{version}-%{release}" tomcat \
         2>/dev/null | sort -V | uniq | tail -1)
     ver_instalada=$(rpm -q tomcat --queryformat "%{version}-%{release}" 2>/dev/null)
 
