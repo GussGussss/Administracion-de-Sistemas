@@ -217,21 +217,24 @@ EOF
 # FUNCIÓN: Obtener versiones disponibles de Apache
 # ─────────────────────────────────────────────
 obtener_versiones_apache() {
-    msg_info "Consultando versiones disponibles de Apache (timeout: 15s)..."
-    local versiones
+    msg_info "Consultando versiones disponibles de Apache..."
+    local ver_repo ver_instalada versiones=""
 
-    if command -v dnf &>/dev/null; then
-        versiones=$(timeout 15 dnf list --showduplicates httpd 2>/dev/null \
-            | awk 'NR>2 {print $2}' | sort -V | uniq)
-    elif command -v apt-cache &>/dev/null; then
-        versiones=$(timeout 15 apt-cache madison apache2 2>/dev/null \
-            | awk '{print $3}' | sort -V | uniq)
+    # repoquery es mucho más rápido que dnf list --showduplicates
+    ver_repo=$(timeout 8 dnf repoquery --queryformat "%{version}-%{release}" httpd \
+        2>/dev/null | sort -V | uniq | tail -1)
+    ver_instalada=$(rpm -q httpd --queryformat "%{version}-%{release}" 2>/dev/null)
+
+    if [[ -n "$ver_instalada" && "$ver_instalada" != *"not installed"* ]]; then
+        versiones="${ver_instalada} (Instalada-actual)"$'\n'
+    fi
+    if [[ -n "$ver_repo" ]]; then
+        versiones+="${ver_repo} (Repositorio-latest)"
     fi
 
     if [[ -z "$versiones" ]]; then
-        msg_warn "No se pudo consultar el repositorio (timeout). Usando versiones conocidas."
-        versiones="2.4.51 (Stable-LTS)
-2.4.62 (Latest)"
+        msg_warn "Usando versiones conocidas de Oracle Linux 10."
+        versiones="2.4.62-1.0.1.el10 (Stable-LTS)"$'\n'"2.4.62-2.0.1.el10 (Latest)"
     fi
 
     echo "$versiones"
@@ -431,21 +434,23 @@ METHEOF
 # FUNCIÓN: Obtener versiones disponibles de Nginx
 # ─────────────────────────────────────────────
 obtener_versiones_nginx() {
-    msg_info "Consultando versiones disponibles de Nginx (timeout: 15s)..."
-    local versiones
+    msg_info "Consultando versiones disponibles de Nginx..."
+    local ver_repo ver_instalada versiones=""
 
-    if command -v dnf &>/dev/null; then
-        versiones=$(timeout 15 dnf list --showduplicates nginx 2>/dev/null \
-            | awk 'NR>2 {print $2}' | sort -V | uniq)
-    elif command -v apt-cache &>/dev/null; then
-        versiones=$(timeout 15 apt-cache madison nginx 2>/dev/null \
-            | awk '{print $3}' | sort -V | uniq)
+    ver_repo=$(timeout 8 dnf repoquery --queryformat "%{version}-%{release}" nginx \
+        2>/dev/null | sort -V | uniq | tail -1)
+    ver_instalada=$(rpm -q nginx --queryformat "%{version}-%{release}" 2>/dev/null)
+
+    if [[ -n "$ver_instalada" && "$ver_instalada" != *"not installed"* ]]; then
+        versiones="${ver_instalada} (Instalada-actual)"$'\n'
+    fi
+    if [[ -n "$ver_repo" ]]; then
+        versiones+="${ver_repo} (Repositorio-latest)"
     fi
 
     if [[ -z "$versiones" ]]; then
-        msg_warn "No se pudo consultar el repositorio (timeout). Usando versiones conocidas."
-        versiones="1.24.0 (Stable-LTS)
-1.27.3 (Latest)"
+        msg_warn "Usando versiones conocidas de Oracle Linux 10."
+        versiones="1.26.3-1.0.1.el10 (Stable-LTS)"$'\n'"1.27.3-1.0.1.el10 (Latest)"
     fi
 
     echo "$versiones"
@@ -625,18 +630,22 @@ METHEOF
 # ─────────────────────────────────────────────
 obtener_versiones_tomcat() {
     msg_info "Consultando versiones disponibles de Tomcat..."
+    local ver_repo ver_instalada versiones=""
 
-    # Intentar desde repositorio del sistema primero
-    local versiones
-    if command -v dnf &>/dev/null; then
-        versiones=$(timeout 15 dnf list --showduplicates tomcat 2>/dev/null \
-            | awk 'NR>2 {print $2}' | sort -V | uniq)
+    ver_repo=$(timeout 8 dnf repoquery --queryformat "%{version}-%{release}" tomcat \
+        2>/dev/null | sort -V | uniq | tail -1)
+    ver_instalada=$(rpm -q tomcat --queryformat "%{version}-%{release}" 2>/dev/null)
+
+    if [[ -n "$ver_instalada" && "$ver_instalada" != *"not installed"* ]]; then
+        versiones="${ver_instalada} (Instalada-actual)"$'\n'
+    fi
+    if [[ -n "$ver_repo" ]]; then
+        versiones+="${ver_repo} (Repositorio)"
     fi
 
-    # Si no hay versiones, ofrecer opciones estáticas conocidas (LTS vs Latest)
+    # Tomcat usualmente no está en repos estándar, usar versiones conocidas
     if [[ -z "$versiones" ]]; then
-        versiones="10.1.39 (LTS-Stable)
-11.0.7 (Latest)"
+        versiones="10.1.39 (LTS-Stable)"$'\n'"11.0.7 (Latest)"
     fi
 
     echo "$versiones"
