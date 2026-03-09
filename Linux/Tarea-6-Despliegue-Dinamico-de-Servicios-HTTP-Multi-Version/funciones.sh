@@ -217,20 +217,21 @@ EOF
 # FUNCIÓN: Obtener versiones disponibles de Apache
 # ─────────────────────────────────────────────
 obtener_versiones_apache() {
-    msg_info "Consultando versiones disponibles de Apache en el repositorio..."
+    msg_info "Consultando versiones disponibles de Apache (timeout: 15s)..."
     local versiones
-    # dnf para Oracle/RHEL, apt-cache como fallback
+
     if command -v dnf &>/dev/null; then
-        versiones=$(dnf list --showduplicates httpd 2>/dev/null \
+        versiones=$(timeout 15 dnf list --showduplicates httpd 2>/dev/null \
             | awk 'NR>2 {print $2}' | sort -V | uniq)
     elif command -v apt-cache &>/dev/null; then
-        versiones=$(apt-cache madison apache2 2>/dev/null \
+        versiones=$(timeout 15 apt-cache madison apache2 2>/dev/null \
             | awk '{print $3}' | sort -V | uniq)
     fi
 
     if [[ -z "$versiones" ]]; then
-        msg_warn "No se pudieron consultar versiones. Usando versión por defecto del repositorio."
-        versiones="latest"
+        msg_warn "No se pudo consultar el repositorio (timeout). Usando versiones conocidas."
+        versiones="2.4.51 (Stable-LTS)
+2.4.62 (Latest)"
     fi
 
     echo "$versiones"
@@ -430,20 +431,21 @@ METHEOF
 # FUNCIÓN: Obtener versiones disponibles de Nginx
 # ─────────────────────────────────────────────
 obtener_versiones_nginx() {
-    msg_info "Consultando versiones disponibles de Nginx en el repositorio..."
+    msg_info "Consultando versiones disponibles de Nginx (timeout: 15s)..."
     local versiones
 
     if command -v dnf &>/dev/null; then
-        versiones=$(dnf list --showduplicates nginx 2>/dev/null \
+        versiones=$(timeout 15 dnf list --showduplicates nginx 2>/dev/null \
             | awk 'NR>2 {print $2}' | sort -V | uniq)
     elif command -v apt-cache &>/dev/null; then
-        versiones=$(apt-cache madison nginx 2>/dev/null \
+        versiones=$(timeout 15 apt-cache madison nginx 2>/dev/null \
             | awk '{print $3}' | sort -V | uniq)
     fi
 
     if [[ -z "$versiones" ]]; then
-        msg_warn "No se pudieron consultar versiones de Nginx."
-        versiones="latest"
+        msg_warn "No se pudo consultar el repositorio (timeout). Usando versiones conocidas."
+        versiones="1.24.0 (Stable-LTS)
+1.27.3 (Latest)"
     fi
 
     echo "$versiones"
@@ -627,7 +629,7 @@ obtener_versiones_tomcat() {
     # Intentar desde repositorio del sistema primero
     local versiones
     if command -v dnf &>/dev/null; then
-        versiones=$(dnf list --showduplicates tomcat 2>/dev/null \
+        versiones=$(timeout 15 dnf list --showduplicates tomcat 2>/dev/null \
             | awk 'NR>2 {print $2}' | sort -V | uniq)
     fi
 
