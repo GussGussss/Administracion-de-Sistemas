@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-# http_functions.sh
+# funciones.sh
 # Archivo de funciones para despliegue HTTP en Oracle Linux
 # Práctica 6 - Despliegue Dinámico de Servicios HTTP
 # ============================================================
