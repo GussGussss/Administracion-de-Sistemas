@@ -118,36 +118,41 @@ solicitar_puerto() {
 # FUNCIÓN: Configurar firewall (UFW o IPTables)
 # ─────────────────────────────────────────────
 configurar_firewall() {
+
     local puerto="$1"
     local puertos_default=(80 8080 8888)
 
     msg_info "Configurando firewall para el puerto $puerto..."
 
     if command -v ufw &>/dev/null && ufw status | grep -q "Status: active"; then
+
         ufw allow "$puerto/tcp" &>/dev/null
         msg_ok "UFW: Puerto $puerto abierto."
-        # Cerrar puertos HTTP default que no se usen
+
         for p in "${puertos_default[@]}"; do
             if [[ "$p" -ne "$puerto" ]]; then
                 ufw deny "$p/tcp" &>/dev/null 2>&1 || true
-                msg_info "UFW: Puerto por defecto $p bloqueado."
             fi
         done
+
     elif command -v firewall-cmd &>/dev/null; then
-            firewall-cmd --permanent --add-port="$puerto/tcp" &>/dev/null
-    
-            # Cerrar puertos HTTP default si no se usan
-            for p in "${puertos_default[@]}"; do
-                if [[ "$p" -ne "$puerto" ]]; then
-                    firewall-cmd --permanent --remove-port="$p/tcp" &>/dev/null || true
-                fi
-            done
-    
-            firewall-cmd --reload &>/dev/null
-            msg_ok "firewalld: Puerto $puerto abierto."
-        # IPTables como fallback
+
+        firewall-cmd --permanent --add-port="$puerto/tcp" &>/dev/null
+
+        for p in "${puertos_default[@]}"; do
+            if [[ "$p" -ne "$puerto" ]]; then
+                firewall-cmd --permanent --remove-port="$p/tcp" &>/dev/null || true
+            fi
+        done
+
+        firewall-cmd --reload &>/dev/null
+        msg_ok "firewalld: Puerto $puerto abierto."
+
+    else
+
         iptables -A INPUT -p tcp --dport "$puerto" -j ACCEPT 2>/dev/null
         msg_ok "iptables: Regla para puerto $puerto añadida."
+
     fi
 }
 
@@ -594,7 +599,6 @@ configurar_seguridad_nginx() {
     # Ocultar versión de Nginx
     if ! grep -q "server_tokens off" "$nginx_conf"; then
         sed -i "/http {/a\\    server_tokens off;" "$nginx_conf"
-        more_clear_headers Server;
         msg_ok "Nginx: server_tokens off aplicado (versión oculta)."
     fi
 
