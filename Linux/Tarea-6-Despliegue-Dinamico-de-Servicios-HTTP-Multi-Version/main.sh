@@ -62,7 +62,23 @@ while true
         ;;
         
         3)
-        echo "Seleccionaste Tomcat"
+        listar_versiones_tomcat
+
+        read -p "Seleccione número de versión: " opcion
+        
+        case $opcion in
+        
+        1) VERSION="10.1.28";;
+        2) VERSION="10.1.26";;
+        3) VERSION="10.1.24";;
+        4) VERSION="9.0.91";;
+        5) VERSION="9.0.89";;
+        
+        esac
+        
+        read -p "Ingrese puerto: " PUERTO
+        
+        instalar_tomcat $VERSION $PUERTO
         ;;
         
         4)
