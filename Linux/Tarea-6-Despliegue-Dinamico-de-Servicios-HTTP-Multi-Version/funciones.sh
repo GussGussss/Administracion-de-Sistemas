@@ -82,6 +82,8 @@ echo "Instalando Apache versión $VERSION..."
 
 dnf install -y httpd-$VERSION > /dev/null 2>&1
 
+activar_headers_apache
+
 echo "Configurando puerto $PUERTO..."
 
 sed -i "s/Listen 80/Listen $PUERTO/g" /etc/httpd/conf/httpd.conf
@@ -89,8 +91,12 @@ sed -i "s/Listen 80/Listen $PUERTO/g" /etc/httpd/conf/httpd.conf
 systemctl enable httpd > /dev/null 2>&1
 systemctl restart httpd > /dev/null 2>&1
 
-crear_index "Apache" "$VERSION" "$PUERTO"
 abrir_firewall $PUERTO
+
+crear_index "Apache" "$VERSION" "$PUERTO"
+
+configurar_seguridad_apache
+
 echo ""
 echo "====================================="
 echo " INSTALACIÓN COMPLETADA "
@@ -102,6 +108,50 @@ echo "====================================="
 
 }
 
+
+#########################################
+# Activar módulo headers
+#########################################
+
+activar_headers_apache() {
+
+dnf install -y mod_headers > /dev/null 2>&1
+
+}
+
+#########################################
+# Seguridad para Apache
+#########################################
+
+configurar_seguridad_apache() {
+
+CONF="/etc/httpd/conf/httpd.conf"
+
+echo "Aplicando configuración de seguridad..."
+
+# Ocultar versión
+sed -i '/ServerTokens/d' $CONF
+echo "ServerTokens Prod" >> $CONF
+
+# Desactivar firma del servidor
+sed -i '/ServerSignature/d' $CONF
+echo "ServerSignature Off" >> $CONF
+
+# Agregar headers de seguridad
+cat <<EOF >> $CONF
+
+# Security Headers
+Header always append X-Frame-Options SAMEORIGIN
+Header always append X-Content-Type-Options nosniff
+
+# Bloquear métodos peligrosos
+TraceEnable Off
+
+EOF
+
+systemctl restart httpd > /dev/null 2>&1
+
+}
 
 #########################################
 # Crear página personalizada
