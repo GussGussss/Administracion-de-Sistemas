@@ -17,13 +17,37 @@ if ((PUERTO < 1024 || PUERTO > 65535)); then
     echo "Puerto fuera de rango"
     return 1
 fi
-
+if [[ $PUERTO == 22 || $PUERTO == 25 || $PUERTO == 53 ]]; then
+    echo "Puerto reservado por el sistema"
+    return 1
+fi
 if ss -tuln | grep -q ":$PUERTO "; then
     echo "El puerto ya está en uso"
     return 1
 fi
 
 return 0
+}
+
+#########################################
+# Gestionar puerto general
+#########################################
+
+gestionar_puerto() {
+
+PUERTO=$1
+
+validar_puerto $PUERTO
+
+if [ $? -ne 0 ]; then
+    echo "Error: puerto inválido o en uso"
+    return 1
+fi
+
+abrir_firewall $PUERTO
+
+return 0
+
 }
 
 #########################################
@@ -71,12 +95,14 @@ activar_headers_apache
 
 echo "Configurando puerto $PUERTO..."
 
+gestionar_puerto $PUERTO || return 1
+
+echo "Configurando puerto $PUERTO..."
+
 sed -i "s/Listen 80/Listen $PUERTO/g" /etc/httpd/conf/httpd.conf
 
 systemctl enable httpd > /dev/null 2>&1
 systemctl restart httpd > /dev/null 2>&1
-
-abrir_firewall $PUERTO
 
 crear_index "Apache" "$VERSION" "$PUERTO"
 
@@ -93,7 +119,6 @@ echo "====================================="
 
 }
 
-
 #########################################
 # Activar módulo headers
 #########################################
@@ -103,7 +128,6 @@ activar_headers_apache() {
 dnf install -y mod_headers > /dev/null 2>&1
 
 }
-
 
 #########################################
 # Seguridad Apache
@@ -139,6 +163,100 @@ TraceEnable Off
 EOF
 
 systemctl restart httpd > /dev/null 2>&1
+
+}
+
+#########################################
+# Obtener versiones de Nginx disponibles
+#########################################
+
+listar_versiones_nginx() {
+
+echo "Versiones disponibles de Nginx:"
+
+dnf list --showduplicates nginx \
+| grep nginx.x86_64 \
+| awk '{print $2}' \
+| nl
+
+}
+
+#########################################
+# Crear usuario restringido nginx
+#########################################
+
+crear_usuario_nginx() {
+
+if ! id nginxsvc &>/dev/null; then
+    useradd -r -s /sbin/nologin -d /var/www/nginx nginxsvc
+fi
+
+mkdir -p /var/www/nginx
+
+chown -R nginxsvc:nginxsvc /var/www/nginx
+chmod -R 750 /var/www/nginx
+
+}
+
+#########################################
+# Configurar puerto nginx
+#########################################
+
+configurar_puerto_nginx() {
+
+PUERTO=$1
+
+sed -i "s/listen       80;/listen       $PUERTO;/" /etc/nginx/nginx.conf
+
+}
+
+#########################################
+# Seguridad Nginx
+#########################################
+
+configurar_seguridad_nginx() {
+
+CONF="/etc/nginx/nginx.conf"
+
+sed -i '/server_tokens/d' $CONF
+echo "server_tokens off;" >> $CONF
+
+}
+
+#########################################
+# Instalar Nginx
+#########################################
+
+instalar_nginx() {
+
+VERSION=$1
+PUERTO=$2
+
+gestionar_puerto $PUERTO || return 1
+
+echo "Instalando Nginx versión $VERSION..."
+
+dnf install -y nginx-$VERSION > /dev/null 2>&1
+
+crear_usuario_nginx
+
+configurar_puerto_nginx $PUERTO
+
+systemctl enable nginx > /dev/null 2>&1
+systemctl restart nginx > /dev/null 2>&1
+
+crear_index "Nginx" "$VERSION" "$PUERTO"
+
+configurar_seguridad_nginx
+
+echo ""
+echo "====================================="
+echo " INSTALACIÓN COMPLETADA "
+echo "====================================="
+echo "Servidor: Nginx"
+echo "Versión: $VERSION"
+echo "Puerto: $PUERTO"
+echo "====================================="
 
 }
 
