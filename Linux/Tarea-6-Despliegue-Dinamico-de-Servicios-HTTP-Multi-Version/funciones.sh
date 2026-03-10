@@ -90,7 +90,7 @@ systemctl enable httpd > /dev/null 2>&1
 systemctl restart httpd > /dev/null 2>&1
 
 crear_index "Apache" "$VERSION" "$PUERTO"
-
+abrir_firewall $PUERTO
 echo ""
 echo "====================================="
 echo " INSTALACIÓN COMPLETADA "
