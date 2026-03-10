@@ -1,25 +1,27 @@
+#!/bin/bash
+
 #########################################
 # Validar puerto
 #########################################
 
 validar_puerto() {
 
-    PUERTO=$1
-    
-    if [[ ! $PUERTO =~ ^[0-9]+$ ]]; then
-        echo "Puerto inválido"
-        return 1
-    fi
-    
-    if ((PUERTO < 1024 || PUERTO > 65535)); then
-        echo "Puerto fuera de rango"
-        return 1
-    fi
-    
-    if ss -tuln | grep -q ":$PUERTO "; then
-        echo "El puerto ya está en uso"
-        return 1
-    fi
+PUERTO=$1
+
+if [[ ! $PUERTO =~ ^[0-9]+$ ]]; then
+    echo "Puerto inválido"
+    return 1
+fi
+
+if ((PUERTO < 1024 || PUERTO > 65535)); then
+    echo "Puerto fuera de rango"
+    return 1
+fi
+
+if ss -tuln | grep -q ":$PUERTO "; then
+    echo "El puerto ya está en uso"
+    return 1
+fi
 
 return 0
 }
@@ -48,5 +50,4 @@ crear_index() {
     </body>
     </html>
     EOF
-
 }
