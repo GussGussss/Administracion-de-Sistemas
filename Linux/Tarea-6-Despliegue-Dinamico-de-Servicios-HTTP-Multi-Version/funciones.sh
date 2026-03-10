@@ -55,21 +55,6 @@ dnf list --showduplicates httpd \
 }
 
 #########################################
-# Obtener versiones de Apache disponibles
-#########################################
-
-listar_versiones_apache() {
-
-echo "Versiones disponibles de Apache:"
-
-dnf list --showduplicates httpd \
-| grep httpd.x86_64 \
-| awk '{print $2}' \
-| nl
-
-}
-
-#########################################
 # Instalar Apache
 #########################################
 
