@@ -125,6 +125,7 @@ activar_headers_apache
 echo "Configurando puerto $PUERTO..."
 
 gestionar_puerto $PUERTO || return 1
+permitir_puerto_selinux $PUERTO
 
 echo "Configurando puerto $PUERTO..."
 
@@ -374,6 +375,7 @@ wget https://archive.apache.org/dist/tomcat/tomcat-10/v$VERSION/bin/apache-tomca
 
 tar -xzf apache-tomcat-$VERSION.tar.gz
 
+pkill -f tomcat 2>/dev/null
 rm -rf /opt/tomcat
 mv apache-tomcat-$VERSION /opt/tomcat
 
