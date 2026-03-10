@@ -312,6 +312,92 @@ echo "====================================="
 }
 
 #########################################
+# Obtener versiones de Tomcat disponibles
+#########################################
+
+listar_versiones_tomcat() {
+
+echo "Versiones disponibles de Tomcat:"
+
+echo "1) 10.1.28"
+echo "2) 10.1.26"
+echo "3) 10.1.24"
+echo "4) 9.0.91"
+echo "5) 9.0.89"
+
+}
+
+#########################################
+# Crear usuario restringido tomcat
+#########################################
+
+crear_usuario_tomcat() {
+
+if ! id tomcatsvc &>/dev/null; then
+    useradd -r -s /sbin/nologin -d /opt/tomcat tomcatsvc
+fi
+
+}
+
+#########################################
+# Configurar puerto Tomcat
+#########################################
+
+configurar_puerto_tomcat() {
+
+PUERTO=$1
+
+sed -i "s/Connector port=\"8080\"/Connector port=\"$PUERTO\"/" /opt/tomcat/conf/server.xml
+
+}
+
+#########################################
+# Instalar Tomcat
+#########################################
+
+instalar_tomcat() {
+
+VERSION=$1
+PUERTO=$2
+
+detener_servicios_http
+
+gestionar_puerto $PUERTO || return 1
+
+echo "Instalando Tomcat versión $VERSION..."
+
+cd /tmp
+
+wget https://archive.apache.org/dist/tomcat/tomcat-10/v$VERSION/bin/apache-tomcat-$VERSION.tar.gz -q
+
+tar -xzf apache-tomcat-$VERSION.tar.gz
+
+mv apache-tomcat-$VERSION /opt/tomcat
+
+crear_usuario_tomcat
+
+chown -R tomcatsvc:tomcatsvc /opt/tomcat
+
+sudo -u tomcatsvc /opt/tomcat/bin/startup.sh > /dev/null 2>&1
+
+configurar_puerto_tomcat $PUERTO
+
+permitir_puerto_selinux $PUERTO
+
+crear_index "Tomcat" "$VERSION" "$PUERTO" "/opt/tomcat/webapps/ROOT"
+
+echo ""
+echo "====================================="
+echo " INSTALACIÓN COMPLETADA "
+echo "====================================="
+echo "Servidor: Tomcat"
+echo "Versión: $VERSION"
+echo "Puerto: $PUERTO"
+echo "====================================="
+
+}
+
+#########################################
 # Crear página personalizada
 #########################################
 
