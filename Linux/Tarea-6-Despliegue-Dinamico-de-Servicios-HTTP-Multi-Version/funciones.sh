@@ -65,6 +65,23 @@ firewall-cmd --reload > /dev/null 2>&1
 }
 
 #########################################
+# Permitir puerto HTTP en SELinux
+#########################################
+
+permitir_puerto_selinux() {
+
+PUERTO=$1
+
+if command -v semanage >/dev/null 2>&1; then
+    if ! semanage port -l | grep -q "http_port_t.*\\b$PUERTO\\b"; then
+        semanage port -a -t http_port_t -p tcp $PUERTO 2>/dev/null || \
+        semanage port -m -t http_port_t -p tcp $PUERTO
+    fi
+fi
+
+}
+
+#########################################
 # Detener servidores HTTP para evitar conflictos
 #########################################
 
@@ -214,18 +231,27 @@ chmod -R 750 /var/www/nginx
 # Configurar puerto nginx
 #########################################
 
+#########################################
+# Configurar puerto nginx (server block limpio)
+#########################################
+
 configurar_puerto_nginx() {
 
 PUERTO=$1
+CONF="/etc/nginx/conf.d/default.conf"
 
-CONF1="/etc/nginx/conf.d/default.conf"
-CONF2="/etc/nginx/nginx.conf"
+cat > $CONF <<EOF
+server {
+    listen $PUERTO;
+    server_name _;
+    root /usr/share/nginx/html;
 
-if [ -f "$CONF1" ]; then
-    sed -i "s/listen.*80.*/listen $PUERTO;/" $CONF1
-else
-    sed -i "s/listen.*80.*/listen $PUERTO;/" $CONF2
-fi
+    location / {
+        index index.html;
+        try_files \$uri \$uri/ =404;
+    }
+}
+EOF
 
 }
 
@@ -250,7 +276,9 @@ instalar_nginx() {
 
 VERSION=$1
 PUERTO=$2
+
 detener_servicios_http
+
 gestionar_puerto $PUERTO || return 1
 
 echo "Instalando Nginx versión $VERSION..."
@@ -259,9 +287,11 @@ dnf install -y nginx-$VERSION > /dev/null 2>&1
 
 crear_usuario_nginx
 
+permitir_puerto_selinux $PUERTO
+
 configurar_puerto_nginx $PUERTO
 
-nginx -t > /dev/null 2>&1
+nginx -t || { echo "Error en configuración de Nginx"; return 1; }
 
 systemctl enable nginx > /dev/null 2>&1
 systemctl restart nginx > /dev/null 2>&1
