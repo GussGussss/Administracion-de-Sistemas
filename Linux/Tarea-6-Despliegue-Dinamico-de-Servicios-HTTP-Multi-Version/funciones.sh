@@ -82,3 +82,27 @@ dnf list --showduplicates httpd \
 | nl
 
 }
+
+#########################################
+# Instalar Apache
+#########################################
+
+instalar_apache() {
+
+VERSION=$1
+PUERTO=$2
+
+echo "Instalando Apache versión $VERSION..."
+
+dnf install -y httpd-$VERSION
+
+echo "Configurando puerto..."
+
+sed -i "s/Listen 80/Listen $PUERTO/g" /etc/httpd/conf/httpd.conf
+
+systemctl enable httpd
+systemctl restart httpd
+
+crear_index "Apache" "$VERSION" "$PUERTO"
+
+}
