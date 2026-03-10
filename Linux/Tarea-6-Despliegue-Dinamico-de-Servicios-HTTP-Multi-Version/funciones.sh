@@ -249,6 +249,8 @@ crear_usuario_nginx
 
 configurar_puerto_nginx $PUERTO
 
+nginx -t > /dev/null 2>&1
+
 systemctl enable nginx > /dev/null 2>&1
 systemctl restart nginx > /dev/null 2>&1
 
