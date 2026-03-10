@@ -45,7 +45,20 @@ while true
         ;;
         
         2)
-        echo "Seleccionaste Nginx"
+        
+        listar_versiones_nginx
+        
+        read -p "Seleccione número de versión: " VERSION_NUM
+        
+        VERSION=$(dnf list --showduplicates nginx \
+        | grep nginx.x86_64 \
+        | awk '{print $2}' \
+        | sed -n "${VERSION_NUM}p")
+        
+        read -p "Ingrese puerto: " PUERTO
+        
+        instalar_nginx $VERSION $PUERTO
+        
         ;;
         
         3)
