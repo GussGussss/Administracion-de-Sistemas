@@ -50,6 +50,7 @@ return 0
 
 }
 
+
 #########################################
 # Abrir puerto en firewall
 #########################################
@@ -60,6 +61,17 @@ PUERTO=$1
 
 firewall-cmd --permanent --add-port=${PUERTO}/tcp > /dev/null 2>&1
 firewall-cmd --reload > /dev/null 2>&1
+
+}
+
+#########################################
+# Detener servidores HTTP para evitar conflictos
+#########################################
+
+detener_servicios_http() {
+
+systemctl stop httpd 2>/dev/null
+systemctl stop nginx 2>/dev/null
 
 }
 
@@ -86,7 +98,7 @@ instalar_apache() {
 
 VERSION=$1
 PUERTO=$2
-
+detener_servicios_http
 echo "Instalando Apache versión $VERSION..."
 
 dnf install -y httpd-$VERSION > /dev/null 2>&1
@@ -238,7 +250,7 @@ instalar_nginx() {
 
 VERSION=$1
 PUERTO=$2
-
+detener_servicios_http
 gestionar_puerto $PUERTO || return 1
 
 echo "Instalando Nginx versión $VERSION..."
