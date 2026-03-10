@@ -35,9 +35,9 @@ crear_index() {
     SERVICIO=$1
     VERSION=$2
     PUERTO=$3
-    
+
     mkdir -p /var/www/html
-    
+
     cat <<EOF > /var/www/html/index.html
     <html>
     <head>
