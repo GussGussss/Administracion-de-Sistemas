@@ -210,9 +210,9 @@ CONF1="/etc/nginx/conf.d/default.conf"
 CONF2="/etc/nginx/nginx.conf"
 
 if [ -f "$CONF1" ]; then
-    sed -i "s/listen\s*80;/listen $PUERTO;/" $CONF1
+    sed -i "s/listen.*80.*/listen $PUERTO;/" $CONF1
 else
-    sed -i "s/listen\s*80;/listen $PUERTO;/" $CONF2
+    sed -i "s/listen.*80.*/listen $PUERTO;/" $CONF2
 fi
 
 }
