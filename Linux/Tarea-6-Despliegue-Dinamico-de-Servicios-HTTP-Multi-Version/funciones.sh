@@ -392,7 +392,8 @@ crear_index "Tomcat" "$VERSION" "$PUERTO" "/opt/tomcat/webapps/ROOT"
 
 # iniciar tomcat
 sudo -u tomcatsvc /opt/tomcat/bin/startup.sh > /dev/null 2>&1
-
+sleep 3
+ss -tuln | grep -q ":$PUERTO " || echo "Advertencia: Tomcat podría no haber iniciado correctamente"
 echo ""
 echo "====================================="
 echo " INSTALACIÓN COMPLETADA "
