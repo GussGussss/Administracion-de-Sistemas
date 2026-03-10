@@ -32,22 +32,23 @@ return 0
 
 crear_index() {
 
-    SERVICIO=$1
-    VERSION=$2
-    PUERTO=$3
+SERVICIO=$1
+VERSION=$2
+PUERTO=$3
 
-    mkdir -p /var/www/html
+mkdir -p /var/www/html
 
-    cat <<EOF > /var/www/html/index.html
-    <html>
-    <head>
-    <title>Servidor HTTP</title>
-    </head>
-    <body>
-    <h1>Servidor: $SERVICIO</h1>
-    <h2>Versión: $VERSION</h2>
-    <h3>Puerto: $PUERTO</h3>
-    </body>
-    </html>
-    EOF
+cat <<EOF > /var/www/html/index.html
+<html>
+<head>
+<title>Servidor HTTP</title>
+</head>
+<body>
+<h1>Servidor: $SERVICIO</h1>
+<h2>Versión: $VERSION</h2>
+<h3>Puerto: $PUERTO</h3>
+</body>
+</html>
+EOF
+
 }
