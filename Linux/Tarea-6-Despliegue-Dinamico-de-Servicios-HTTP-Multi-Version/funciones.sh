@@ -27,29 +27,15 @@ return 0
 }
 
 #########################################
-# Crear página personalizada
+# Abrir puerto en firewall
 #########################################
 
-crear_index() {
+abrir_firewall() {
 
-SERVICIO=$1
-VERSION=$2
-PUERTO=$3
+PUERTO=$1
 
-mkdir -p /var/www/html
-
-cat <<EOF > /var/www/html/index.html
-<html>
-<head>
-<title>Servidor HTTP</title>
-</head>
-<body>
-<h1>Servidor: $SERVICIO</h1>
-<h2>Versión: $VERSION</h2>
-<h3>Puerto: $PUERTO</h3>
-</body>
-</html>
-EOF
+firewall-cmd --permanent --add-port=${PUERTO}/tcp > /dev/null 2>&1
+firewall-cmd --reload > /dev/null 2>&1
 
 }
 
@@ -113,5 +99,33 @@ echo "Servidor: Apache"
 echo "Versión: $VERSION"
 echo "Puerto: $PUERTO"
 echo "====================================="
+
+}
+
+
+#########################################
+# Crear página personalizada
+#########################################
+
+crear_index() {
+
+SERVICIO=$1
+VERSION=$2
+PUERTO=$3
+
+mkdir -p /var/www/html
+
+cat <<EOF > /var/www/html/index.html
+<html>
+<head>
+<title>Servidor HTTP</title>
+</head>
+<body>
+<h1>Servidor: $SERVICIO</h1>
+<h2>Versión: $VERSION</h2>
+<h3>Puerto: $PUERTO</h3>
+</body>
+</html>
+EOF
 
 }
