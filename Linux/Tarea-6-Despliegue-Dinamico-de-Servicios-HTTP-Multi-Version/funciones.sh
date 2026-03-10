@@ -119,32 +119,36 @@ dnf install -y mod_headers > /dev/null 2>&1
 
 }
 
+
 #########################################
-# Seguridad para Apache
+# Seguridad Apache
 #########################################
 
 configurar_seguridad_apache() {
 
-CONF="/etc/httpd/conf/httpd.conf"
+SECURITY_CONF="/etc/httpd/conf.d/security.conf"
 
-echo "Aplicando configuración de seguridad..."
+echo "Aplicando seguridad Apache..."
 
-# Ocultar versión
-sed -i '/ServerTokens/d' $CONF
-echo "ServerTokens Prod" >> $CONF
+# Crear archivo si no existe
+touch $SECURITY_CONF
 
-# Desactivar firma del servidor
-sed -i '/ServerSignature/d' $CONF
-echo "ServerSignature Off" >> $CONF
+# Eliminar configuraciones previas
+sed -i '/ServerTokens/d' $SECURITY_CONF
+sed -i '/ServerSignature/d' $SECURITY_CONF
 
-# Agregar headers de seguridad
-cat <<EOF >> $CONF
+# Aplicar configuraciones seguras
+echo "ServerTokens Prod" >> $SECURITY_CONF
+echo "ServerSignature Off" >> $SECURITY_CONF
 
-# Security Headers
-Header always append X-Frame-Options SAMEORIGIN
-Header always append X-Content-Type-Options nosniff
+# Headers de seguridad
+cat <<EOF >> $SECURITY_CONF
 
-# Bloquear métodos peligrosos
+<IfModule mod_headers.c>
+Header always set X-Frame-Options "SAMEORIGIN"
+Header always set X-Content-Type-Options "nosniff"
+</IfModule>
+
 TraceEnable Off
 
 EOF
