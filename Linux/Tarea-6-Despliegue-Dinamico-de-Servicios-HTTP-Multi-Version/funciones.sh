@@ -357,6 +357,8 @@ sed -i "s/Connector port=\"8080\"/Connector port=\"$PUERTO\"/" /opt/tomcat/conf/
 
 instalar_tomcat() {
 
+dnf install -y java-17-openjdk > /dev/null 2>&1
+
 VERSION=$1
 PUERTO=$2
 
@@ -372,19 +374,22 @@ wget https://archive.apache.org/dist/tomcat/tomcat-10/v$VERSION/bin/apache-tomca
 
 tar -xzf apache-tomcat-$VERSION.tar.gz
 
+rm -rf /opt/tomcat
 mv apache-tomcat-$VERSION /opt/tomcat
 
 crear_usuario_tomcat
 
 chown -R tomcatsvc:tomcatsvc /opt/tomcat
 
-sudo -u tomcatsvc /opt/tomcat/bin/startup.sh > /dev/null 2>&1
-
+# configurar puerto antes de iniciar
 configurar_puerto_tomcat $PUERTO
 
 permitir_puerto_selinux $PUERTO
 
 crear_index "Tomcat" "$VERSION" "$PUERTO" "/opt/tomcat/webapps/ROOT"
+
+# iniciar tomcat
+sudo -u tomcatsvc /opt/tomcat/bin/startup.sh > /dev/null 2>&1
 
 echo ""
 echo "====================================="
@@ -396,7 +401,6 @@ echo "Puerto: $PUERTO"
 echo "====================================="
 
 }
-
 #########################################
 # Crear página personalizada
 #########################################
