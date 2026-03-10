@@ -205,8 +205,9 @@ chmod -R 750 /var/www/nginx
 configurar_puerto_nginx() {
 
 PUERTO=$1
+CONF="/etc/nginx/conf.d/default.conf"
 
-sed -i "s/listen       80;/listen       $PUERTO;/" /etc/nginx/nginx.conf
+sed -i "s/listen\s*80;/listen $PUERTO;/" $CONF
 
 }
 
@@ -269,10 +270,11 @@ crear_index() {
 SERVICIO=$1
 VERSION=$2
 PUERTO=$3
+DIRECTORIO=$4
 
-mkdir -p /var/www/html
+mkdir -p $DIRECTORIO
 
-cat <<EOF > /var/www/html/index.html
+cat <<EOF > $DIRECTORIO/index.html
 <html>
 <head>
 <title>Servidor HTTP</title>
