@@ -104,7 +104,7 @@ sed -i "s/Listen 80/Listen $PUERTO/g" /etc/httpd/conf/httpd.conf
 systemctl enable httpd > /dev/null 2>&1
 systemctl restart httpd > /dev/null 2>&1
 
-crear_index "Apache" "$VERSION" "$PUERTO"
+crear_index "Apache" "$VERSION" "$PUERTO" "/var/www/html"
 
 configurar_seguridad_apache
 
@@ -205,9 +205,15 @@ chmod -R 750 /var/www/nginx
 configurar_puerto_nginx() {
 
 PUERTO=$1
-CONF="/etc/nginx/conf.d/default.conf"
 
-sed -i "s/listen\s*80;/listen $PUERTO;/" $CONF
+CONF1="/etc/nginx/conf.d/default.conf"
+CONF2="/etc/nginx/nginx.conf"
+
+if [ -f "$CONF1" ]; then
+    sed -i "s/listen\s*80;/listen $PUERTO;/" $CONF1
+else
+    sed -i "s/listen\s*80;/listen $PUERTO;/" $CONF2
+fi
 
 }
 
@@ -246,7 +252,7 @@ configurar_puerto_nginx $PUERTO
 systemctl enable nginx > /dev/null 2>&1
 systemctl restart nginx > /dev/null 2>&1
 
-crear_index "Nginx" "$VERSION" "$PUERTO"
+crear_index "Nginx" "$VERSION" "$PUERTO" "/usr/share/nginx/html"
 
 configurar_seguridad_nginx
 
