@@ -372,7 +372,6 @@ echo "Instalando Tomcat versión $VERSION..."
 cd /tmp
 
 wget https://archive.apache.org/dist/tomcat/tomcat-10/v$VERSION/bin/apache-tomcat-$VERSION.tar.gz -q
-
 tar -xzf apache-tomcat-$VERSION.tar.gz
 
 pkill -f tomcat 2>/dev/null
@@ -391,7 +390,11 @@ permitir_puerto_selinux $PUERTO
 crear_index "Tomcat" "$VERSION" "$PUERTO" "/opt/tomcat/webapps/ROOT"
 
 # iniciar tomcat
-sudo -u tomcatsvc /opt/tomcat/bin/startup.sh > /dev/null 2>&1
+sudo -u tomcatsvc bash -c '
+export JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java))))
+export CATALINA_HOME=/opt/tomcat
+/opt/tomcat/bin/startup.sh
+'
 
 echo "Esperando a que Tomcat inicie..."
 
