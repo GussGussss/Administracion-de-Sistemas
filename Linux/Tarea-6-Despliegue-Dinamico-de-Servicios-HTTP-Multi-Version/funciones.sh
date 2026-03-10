@@ -94,15 +94,24 @@ PUERTO=$2
 
 echo "Instalando Apache versión $VERSION..."
 
-dnf install -y httpd-$VERSION
+dnf install -y httpd-$VERSION > /dev/null 2>&1
 
-echo "Configurando puerto..."
+echo "Configurando puerto $PUERTO..."
 
 sed -i "s/Listen 80/Listen $PUERTO/g" /etc/httpd/conf/httpd.conf
 
-systemctl enable httpd
-systemctl restart httpd
+systemctl enable httpd > /dev/null 2>&1
+systemctl restart httpd > /dev/null 2>&1
 
 crear_index "Apache" "$VERSION" "$PUERTO"
+
+echo ""
+echo "====================================="
+echo " INSTALACIÓN COMPLETADA "
+echo "====================================="
+echo "Servidor: Apache"
+echo "Versión: $VERSION"
+echo "Puerto: $PUERTO"
+echo "====================================="
 
 }
