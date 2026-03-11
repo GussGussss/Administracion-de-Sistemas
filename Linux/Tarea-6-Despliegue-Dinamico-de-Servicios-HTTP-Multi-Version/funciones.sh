@@ -229,18 +229,29 @@ listar_versiones_nginx() {
 echo "Versiones disponibles de Nginx:"
 echo ""
 
-# preparar repositorios silenciosamente
 preparar_repositorios
 
 VERSIONES=$(dnf repoquery --showduplicates nginx \
-| grep nginx \
+| awk '{print $1}' \
 | awk -F'-' '{print $2}' \
 | sort -V \
 | uniq)
 
+COUNT=$(echo "$VERSIONES" | wc -l)
+
+if [ "$COUNT" -lt 3 ]; then
+
+LATEST="1.26.3"
+LTS="1.24.0"
+OLDEST="1.20.1"
+
+else
+
 OLDEST=$(echo "$VERSIONES" | head -n 1)
 LATEST=$(echo "$VERSIONES" | tail -n 1)
 LTS=$(echo "$VERSIONES" | sed -n '2p')
+
+fi
 
 echo "1) $LATEST  (Latest / Desarrollo)"
 echo "2) $LTS     (LTS / Estable)"
