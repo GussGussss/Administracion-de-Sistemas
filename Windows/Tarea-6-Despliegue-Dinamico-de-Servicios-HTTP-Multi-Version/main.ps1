@@ -19,7 +19,7 @@ switch ($opcion) {
 
 listar_versiones_iis
 
-$puerto = Read-Host "Ingrese puerto"
+$puerto = [int](Read-Host "Ingrese puerto")
 
 if (validar_puerto $puerto) {
 
@@ -35,7 +35,7 @@ listar_versiones_apache_win
 
 $version = Read-Host "Seleccione versión"
 
-$puerto = Read-Host "Ingrese puerto"
+$puerto = [int](Read-Host "Ingrese puerto")
 
 if (validar_puerto $puerto) {
 
@@ -51,7 +51,7 @@ listar_versiones_nginx_win
 
 $version = Read-Host "Seleccione versión"
 
-$puerto = Read-Host "Ingrese puerto"
+$puerto = [int](Read-Host "Ingrese puerto")
 
 if (validar_puerto $puerto) {
 
