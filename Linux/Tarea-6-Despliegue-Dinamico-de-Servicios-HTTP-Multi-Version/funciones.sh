@@ -358,7 +358,8 @@ sed -i "s/Connector port=\"8080\"/Connector port=\"$PUERTO\"/" /opt/tomcat/conf/
 
 instalar_tomcat() {
 
-dnf install -y java-17-openjdk java-17-openjdk-devel > /dev/null 2>&1
+# instalar java
+dnf install -y java-21-openjdk java-21-openjdk-devel > /dev/null 2>&1
 
 VERSION=$1
 PUERTO=$2
@@ -390,8 +391,7 @@ permitir_puerto_selinux $PUERTO
 crear_index "Tomcat" "$VERSION" "$PUERTO" "/opt/tomcat/webapps/ROOT"
 
 # iniciar tomcat
-
-JAVA_HOME=/usr/lib/jvm/java-17-openjdk
+JAVA_HOME=/usr/lib/jvm/java-21-openjdk
 
 sudo -u tomcatsvc env JAVA_HOME=$JAVA_HOME CATALINA_HOME=/opt/tomcat /opt/tomcat/bin/startup.sh
 
