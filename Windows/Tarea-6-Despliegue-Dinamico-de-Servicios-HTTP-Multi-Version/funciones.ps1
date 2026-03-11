@@ -82,13 +82,31 @@ function Gestionar-Firewall {
 # Verificar e instalar winget si no esta disponible
 # ============================================================
 function Verificar-Winget {
-    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-        Write-Host "winget no encontrado. Instalando App Installer..." -ForegroundColor Yellow
-        $url = "https://aka.ms/getwinget"
-        $dest = "$env:TEMP\AppInstaller.msixbundle"
-        Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing
-        Add-AppxPackage -Path $dest
+    if (Get-Command winget -ErrorAction SilentlyContinue) { return $true }
+
+    Write-Host "winget no encontrado. Intentando instalar dependencias..." -ForegroundColor Yellow
+
+    try {
+        $vcLibUrl  = "https://aka.ms/Microsoft.VCLibs.x64.14.00.Desktop.appx"
+        $vcLibDest = "$env:TEMP\VCLibs.appx"
+        Invoke-WebRequest -Uri $vcLibUrl -OutFile $vcLibDest -UseBasicParsing -ErrorAction Stop
+        Add-AppxPackage -Path $vcLibDest -ErrorAction SilentlyContinue
+
+        $wingetUrl  = "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle"
+        $wingetDest = "$env:TEMP\winget.msixbundle"
+        Invoke-WebRequest -Uri $wingetUrl -OutFile $wingetDest -UseBasicParsing -ErrorAction Stop
+        Add-AppxPackage -Path $wingetDest -ErrorAction SilentlyContinue
+
+        if (Get-Command winget -ErrorAction SilentlyContinue) {
+            Write-Host "winget instalado correctamente." -ForegroundColor Green
+            return $true
+        }
+    } catch {
+        # Fallo de red o instalacion — se usaran versiones predefinidas
     }
+
+    Write-Host "Se usaran versiones predefinidas (winget no disponible)." -ForegroundColor Yellow
+    return $false
 }
 
 # ============================================================
@@ -243,21 +261,22 @@ function Configurar-Seguridad-IIS {
 function Listar-Versiones-Apache {
 
     Write-Host ""
-    Write-Host "Consultando versiones disponibles de Apache (winget)..." -ForegroundColor Cyan
+    Write-Host "Consultando versiones disponibles de Apache..." -ForegroundColor Cyan
 
-    # Buscar versiones con winget
-    $raw = winget show Apache.ApacheHTTPServer 2>&1 | Out-String
-
-    # Extraer version disponible del resultado
-    $versionLine = ($raw -split "`n") | Where-Object { $_ -match "Version\s*:" } | Select-Object -First 1
     $latest = ""
-    if ($versionLine -match ":\s*(.+)") {
-        $latest = $matches[1].Trim()
+
+    # Intentar con winget si esta disponible
+    $wingetOk = Verificar-Winget
+    if ($wingetOk) {
+        try {
+            $raw = winget show Apache.ApacheHTTPServer 2>&1 | Out-String
+            $versionLine = ($raw -split "`n") | Where-Object { $_ -match "Version\s*:" } | Select-Object -First 1
+            if ($versionLine -match ":\s*(.+)") { $latest = $matches[1].Trim() }
+        } catch {}
     }
 
+    # Versiones predefinidas como fallback
     if (-not $latest) { $latest = "2.4.62" }
-
-    # LTS y Oldest aproximados para Apache 2.4
     $lts    = "2.4.58"
     $oldest = "2.4.54"
 
@@ -268,7 +287,6 @@ function Listar-Versiones-Apache {
     Write-Host "2) $lts     (LTS / Estable)"
     Write-Host "3) $oldest  (Oldest)"
 
-    # Exportar para uso en main
     $global:APACHE_LATEST = $latest
     $global:APACHE_LTS    = $lts
     $global:APACHE_OLDEST = $oldest
@@ -389,18 +407,22 @@ TraceEnable Off
 function Listar-Versiones-Nginx {
 
     Write-Host ""
-    Write-Host "Consultando versiones disponibles de Nginx (winget)..." -ForegroundColor Cyan
+    Write-Host "Consultando versiones disponibles de Nginx..." -ForegroundColor Cyan
 
-    $raw = winget show Nginx.Nginx 2>&1 | Out-String
-
-    $versionLine = ($raw -split "`n") | Where-Object { $_ -match "Version\s*:" } | Select-Object -First 1
     $latest = ""
-    if ($versionLine -match ":\s*(.+)") {
-        $latest = $matches[1].Trim()
+
+    # Intentar con winget si esta disponible
+    $wingetOk = Verificar-Winget
+    if ($wingetOk) {
+        try {
+            $raw = winget show Nginx.Nginx 2>&1 | Out-String
+            $versionLine = ($raw -split "`n") | Where-Object { $_ -match "Version\s*:" } | Select-Object -First 1
+            if ($versionLine -match ":\s*(.+)") { $latest = $matches[1].Trim() }
+        } catch {}
     }
 
+    # Versiones predefinidas como fallback
     if (-not $latest) { $latest = "1.26.2" }
-
     $lts    = "1.24.0"
     $oldest = "1.22.1"
 
