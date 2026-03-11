@@ -328,7 +328,10 @@ gestionar_puerto $PUERTO || return 1
 
 echo "Instalando Nginx versión $VERSION..."
 
-dnf install -y nginx-$VERSION nginx --allowerasing > /dev/null 2>&1
+dnf install -y nginx > /dev/null 2>&1
+
+VERSION_REAL=$(nginx -v 2>&1 | cut -d'/' -f2)
+VERSION=$VERSION_REAL
 
 crear_usuario_nginx
 
