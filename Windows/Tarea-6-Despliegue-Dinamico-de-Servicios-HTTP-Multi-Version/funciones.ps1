@@ -48,6 +48,17 @@ winget show ApacheFriends.ApacheHTTPServer
 
 }
 
+function listar_versiones_iis(){
+
+Write-Host ""
+Write-Host "IIS es un servicio integrado en Windows."
+Write-Host "La versión depende del sistema operativo."
+Write-Host ""
+
+Get-WindowsOptionalFeature -Online -FeatureName IIS-WebServerRole
+
+}
+
 function listar_versiones_nginx_win(){
 
 Write-Host ""
@@ -108,7 +119,7 @@ $config="C:\Apache24\conf\httpd.conf"
 abrir_firewall $puerto
 
 crear_index "Apache" $version $puerto "C:\Apache24\htdocs"
-
+Restart-Service Apache2.4 -ErrorAction SilentlyContinue
 }
 
 function instalar_nginx_win($version,$puerto){
@@ -130,7 +141,8 @@ $config="C:\Program Files\nginx\conf\nginx.conf"
 abrir_firewall $puerto
 
 crear_index "Nginx" $version $puerto "C:\Program Files\nginx\html"
-
+Stop-Process -Name nginx -Force -ErrorAction SilentlyContinue
+Start-Process "C:\Program Files\nginx\nginx.exe"
 }
 
 function crear_index($servicio,$version,$puerto,$directorio){
