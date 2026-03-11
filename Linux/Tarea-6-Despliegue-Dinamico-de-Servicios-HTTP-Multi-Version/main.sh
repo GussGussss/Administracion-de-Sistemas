@@ -53,16 +53,14 @@ while true
         ;;
         
         2)
-        # Ejecutamos la función para que el usuario vea la lista
         listar_versiones_nginx
         
-        # Recalculamos para asignar a las variables locales del main
-        VERSIONES=$(dnf repoquery --showduplicates nginx | awk -F'-' '{print $2}' | sort -V | uniq)
+        VERSIONES=$(dnf list --showduplicates nginx | grep nginx.x86_64 | awk '{print $2}' | sort -V | uniq)
         
         OLDEST=$(echo "$VERSIONES" | head -n 1)
         LTS=$(echo "$VERSIONES" | sed -n '2p')
         LATEST=$(echo "$VERSIONES" | tail -n 1)
-        
+                
         read -p "Seleccione número de versión: " VERSION_NUM
         
         case $VERSION_NUM in
