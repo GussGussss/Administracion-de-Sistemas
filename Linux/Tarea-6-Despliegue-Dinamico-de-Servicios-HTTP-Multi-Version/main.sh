@@ -55,12 +55,6 @@ while true
         2)
         listar_versiones_nginx
         
-        VERSIONES=$(dnf list --showduplicates nginx | grep nginx.x86_64 | awk '{print $2}' | sort -V | uniq)
-        
-        OLDEST=$(echo "$VERSIONES" | head -n 1)
-        LTS=$(echo "$VERSIONES" | sed -n '2p')
-        LATEST=$(echo "$VERSIONES" | tail -n 1)
-                
         read -p "Seleccione número de versión: " VERSION_NUM
         
         case $VERSION_NUM in
