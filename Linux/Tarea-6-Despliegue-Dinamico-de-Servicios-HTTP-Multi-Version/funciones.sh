@@ -99,11 +99,17 @@ systemctl stop nginx 2>/dev/null
 listar_versiones_apache() {
 
 echo "Versiones disponibles de Apache:"
+echo ""
 
-dnf list --showduplicates httpd \
-| grep httpd.x86_64 \
-| awk '{print $2}' \
-| nl
+VERSIONES=$(dnf list --showduplicates httpd | grep httpd.x86_64 | awk '{print $2}')
+
+LATEST=$(echo "$VERSIONES" | head -n 1)
+OLDEST=$(echo "$VERSIONES" | tail -n 1)
+LTS=$(echo "$VERSIONES" | sed -n '2p')
+
+echo "1) $LATEST  (Latest / Desarrollo)"
+echo "2) $LTS     (LTS / Estable)"
+echo "3) $OLDEST  (Oldest)"
 
 }
 
@@ -203,11 +209,17 @@ systemctl restart httpd > /dev/null 2>&1
 listar_versiones_nginx() {
 
 echo "Versiones disponibles de Nginx:"
+echo ""
 
-dnf list --showduplicates nginx \
-| grep nginx.x86_64 \
-| awk '{print $2}' \
-| nl
+VERSIONES=$(dnf list --showduplicates nginx | grep nginx.x86_64 | awk '{print $2}')
+
+LATEST=$(echo "$VERSIONES" | head -n 1)
+OLDEST=$(echo "$VERSIONES" | tail -n 1)
+LTS=$(echo "$VERSIONES" | sed -n '2p')
+
+echo "1) $LATEST  (Latest / Desarrollo)"
+echo "2) $LTS     (LTS / Estable)"
+echo "3) $OLDEST  (Oldest)"
 
 }
 
@@ -329,12 +341,11 @@ sed -i 's|protocol="org.apache.coyote.http11.Http11NioProtocol"|protocol="org.ap
 listar_versiones_tomcat() {
 
 echo "Versiones disponibles de Tomcat:"
+echo ""
 
-echo "1) 10.1.28"
-echo "2) 10.1.26"
-echo "3) 10.1.24"
-echo "4) 9.0.91"
-echo "5) 9.0.89"
+echo "1) 10.1.28  (Latest / Desarrollo)"
+echo "2) 10.1.26  (LTS / Estable)"
+echo "3) 9.0.91   (Oldest)"
 
 }
 
