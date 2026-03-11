@@ -84,18 +84,18 @@ while true
         
         3)
         listar_versiones_tomcat
-
+        
         read -p "Seleccione número de versión: " opcion
         
         case $opcion in
-        
         1) VERSION="10.1.28";;
         2) VERSION="10.1.26";;
         3) VERSION="9.0.91";;
         *) echo "Opción inválida"; continue;;
+        esac
         
         read -p "Ingrese puerto: " PUERTO
-
+        
         validar_puerto $PUERTO
         
         if [ $? -eq 0 ]; then
