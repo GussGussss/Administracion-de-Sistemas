@@ -1,5 +1,5 @@
 # main.ps1
-. .\http_functions.ps1
+. .\funciones.ps1
 
 while ($true) {
     Clear-Host
