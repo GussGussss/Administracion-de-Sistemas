@@ -390,7 +390,9 @@ permitir_puerto_selinux $PUERTO
 crear_index "Tomcat" "$VERSION" "$PUERTO" "/opt/tomcat/webapps/ROOT"
 
 # iniciar tomcat
-sudo -u tomcatsvc env JAVA_HOME=/usr/lib/jvm/java-17-openjdk CATALINA_HOME=/opt/tomcat /opt/tomcat/bin/startup.sh
+JAVA_HOME=$(dirname $(dirname $(readlink -f $(which javac))))
+
+sudo -u tomcatsvc env JAVA_HOME=$JAVA_HOME CATALINA_HOME=/opt/tomcat /opt/tomcat/bin/startup.sh
 
 echo "Esperando a que Tomcat inicie..."
 
