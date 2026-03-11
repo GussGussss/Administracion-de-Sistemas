@@ -97,24 +97,25 @@ systemctl stop nginx 2>/dev/null
 #########################################
 
 listar_versiones_apache() {
+    echo "Buscando versiones de Apache disponibles..."
+    
+    # Extraer versiones limpias usando repoquery
+    VERSIONES=$(dnf repoquery --showduplicates httpd | awk -F'-' '{print $2}' | sort -V | uniq)
+    COUNT=$(echo "$VERSIONES" | wc -l)
 
-echo "Versiones disponibles de Apache:"
-echo ""
+    if [ "$COUNT" -lt 3 ]; then
+        LATEST="2.4.62"
+        LTS="2.4.57"
+        OLDEST="2.4.37"
+    else
+        OLDEST=$(echo "$VERSIONES" | head -n 1)
+        LATEST=$(echo "$VERSIONES" | tail -n 1)
+        LTS=$(echo "$VERSIONES" | sed -n '2p')
+    fi
 
-VERSIONES=$(dnf list --showduplicates httpd \
-| grep httpd.x86_64 \
-| awk '{print $2}' \
-| sort -V \
-| uniq)
-
-OLDEST=$(echo "$VERSIONES" | head -n 1)
-LATEST=$(echo "$VERSIONES" | tail -n 1)
-LTS=$(echo "$VERSIONES" | sed -n '2p')
-
-echo "1) $LATEST  (Latest / Desarrollo)"
-echo "2) $LTS     (LTS / Estable)"
-echo "3) $OLDEST  (Oldest)"
-
+    echo "1) $LATEST  (Latest / Desarrollo)"
+    echo "2) $LTS     (LTS / Estable)"
+    echo "3) $OLDEST  (Oldest)"
 }
 
 #########################################
@@ -352,14 +353,12 @@ sed -i 's|protocol="org.apache.coyote.http11.Http11NioProtocol"|protocol="org.ap
 #########################################
 
 listar_versiones_tomcat() {
-
-echo "Versiones disponibles de Tomcat:"
-echo ""
-
-echo "1) 10.1.28  (Latest / Desarrollo)"
-echo "2) 10.1.26  (LTS / Estable)"
-echo "3) 9.0.91   (Oldest)"
-
+    echo "Versiones disponibles de Tomcat:"
+    echo ""
+    # Definimos versiones que existen en https://archive.apache.org/dist/tomcat/
+    echo "1) 10.1.28  (Latest / Desarrollo)"
+    echo "2) 10.1.26  (LTS / Estable)"
+    echo "3) 9.0.93   (Oldest)"
 }
 
 #########################################
