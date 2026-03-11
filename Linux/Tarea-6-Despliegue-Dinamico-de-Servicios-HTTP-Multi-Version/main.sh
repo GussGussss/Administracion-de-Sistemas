@@ -21,7 +21,7 @@ while true
        1)
         listar_versiones_apache
         
-        VERSIONES=$(dnf list --showduplicates httpd | grep httpd.x86_64 | awk '{print $2}')
+        VERSIONES=$(dnf list --showduplicates httpd | grep httpd.x86_64 | awk '{print $2}' | sort -V | uniq)
         
         LATEST=$(echo "$VERSIONES" | head -n 1)
         LTS=$(echo "$VERSIONES" | sed -n '2p')
@@ -55,7 +55,7 @@ while true
         2)
         listar_versiones_nginx
         
-        VERSIONES=$(dnf list --showduplicates nginx | grep nginx.x86_64 | awk '{print $2}')
+        VERSIONES=$(dnf list --showduplicates httpd | grep httpd.x86_64 | awk '{print $2}' | sort -V | uniq)
         
         LATEST=$(echo "$VERSIONES" | head -n 1)
         LTS=$(echo "$VERSIONES" | sed -n '2p')
