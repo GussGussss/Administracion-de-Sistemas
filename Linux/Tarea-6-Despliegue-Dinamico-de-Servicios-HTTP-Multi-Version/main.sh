@@ -20,38 +20,43 @@ while true
         
        1)
         listar_versiones_apache
-
-        VERSIONES=$(dnf repoquery --showduplicates httpd | awk -F'-' '{print $2}' | sort -V | uniq)
-        COUNT=$(echo "$VERSIONES" | wc -l)
         
-        if [ "$COUNT" -lt 3 ]; then
-            LATEST="2.4.62"; LTS="2.4.57"; OLDEST="2.4.37"
-        else
-            OLDEST=$(echo "$VERSIONES" | head -n 1)
-            LTS=$(echo "$VERSIONES" | sed -n '2p')
-            LATEST=$(echo "$VERSIONES" | tail -n 1)
-        fi
+        VERSIONES=$(dnf list --showduplicates httpd | grep httpd.x86_64 | awk '{print $2}' | sort -V | uniq)
+        
+        OLDEST=$(echo "$VERSIONES" | head -n 1)
+        LTS=$(echo "$VERSIONES" | sed -n '2p')
+        LATEST=$(echo "$VERSIONES" | tail -n 1)
         
         read -p "Seleccione número de versión: " VERSION_NUM
+        
         case $VERSION_NUM in
-            1) VERSION=$LATEST ;;
-            2) VERSION=$LTS ;;
-            3) VERSION=$OLDEST ;;
-            *) echo "Opción inválida"; continue ;;
+        1) VERSION=$LATEST ;;
+        2) VERSION=$LTS ;;
+        3) VERSION=$OLDEST ;;
+        *) echo "Opción inválida"; continue ;;
         esac
         
         read -p "Ingrese puerto: " PUERTO
+        
         validar_puerto $PUERTO
+        
         if [ $? -eq 0 ]; then
-            instalar_apache $VERSION $PUERTO
+        
+        instalar_apache $VERSION $PUERTO
+        
         else
-            echo "Puerto inválido"
+        
+        echo "Puerto inválido"
+        
         fi
+        
         ;;
         
         2)
+        # Ejecutamos la función para que el usuario vea la lista
         listar_versiones_nginx
-
+        
+        # Recalculamos para asignar a las variables locales del main
         VERSIONES=$(dnf repoquery --showduplicates nginx | awk -F'-' '{print $2}' | sort -V | uniq)
         
         OLDEST=$(echo "$VERSIONES" | head -n 1)
@@ -83,15 +88,18 @@ while true
         listar_versiones_tomcat
         
         read -p "Seleccione número de versión: " opcion
+        
         case $opcion in
-            1) VERSION="10.1.28" ;;
-            2) VERSION="10.1.26" ;;
-            3) VERSION="9.0.93" ;;
-            *) echo "Opción inválida"; continue ;;
+        1) VERSION="10.1.28";;
+        2) VERSION="10.1.26";;
+        3) VERSION="9.0.91";;
+        *) echo "Opción inválida"; continue;;
         esac
         
         read -p "Ingrese puerto: " PUERTO
+        
         validar_puerto $PUERTO
+        
         if [ $? -eq 0 ]; then
             instalar_tomcat $VERSION $PUERTO
         else
