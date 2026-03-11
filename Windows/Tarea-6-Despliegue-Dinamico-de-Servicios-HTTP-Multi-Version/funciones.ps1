@@ -3,16 +3,16 @@ function Test-ValidarPuerto ($Puerto) {
     if ($Puerto -match '^\d+$') {
         $p = [int]$Puerto
         if ($p -lt 1 -or $p -gt 65535) { Write-Host "Puerto fuera de rango (1-65535)"; return $false }
-        if ($p -in @(22, 25, 53, 3389)) { Write-Host "Puerto reservado por el sistema"; return $false }
+        if ($p -in @(22, 25, 53, 3389)) { Write-Host "Puerto reservado por el sistema (SSH/RDP/DNS)"; return $false }
         
         $check = Get-NetTCPConnection -LocalPort $p -ErrorAction SilentlyContinue
         if ($check) {
-            Write-Host "El puerto $p ya está en uso" -ForegroundColor Red
+            Write-Host "El puerto $p ya está en uso por otro servicio" -ForegroundColor Red
             return $false
         }
         return $true
     }
-    Write-Host "Entrada no válida" -ForegroundColor Red
+    Write-Host "Entrada no válida: Debe ser un número" -ForegroundColor Red
     return $false
 }
 
@@ -26,14 +26,17 @@ function Get-VersionesWinget ($Id) {
             LTS    = $list[1]
         }
     } catch {
-        return [PSCustomObject]@{ Latest = "Desconocida"; LTS = "Estable" }
+        return [PSCustomObject]@{ Latest = "Latest"; LTS = "Stable" }
     }
 }
 
-# --- 3. FIREWALL ---
+# --- 3. FIREWALL (CORREGIDO) ---
 function Set-CustomFirewall ($Puerto) {
     Write-Host "Configurando Firewall para puerto $Puerto..." -ForegroundColor Gray
-    New-NetFirewallRule -DisplayName "HTTP-Custom-$Puerto" -Direction Inbound -LocalPort $Puerto -Protocol TCP -Action Allow -Force | Out-Null
+    # Se eliminó -Force porque no existe en este comando en Server 2019
+    # Primero borramos si existe una regla previa con el mismo nombre para evitar duplicados
+    Remove-NetFirewallRule -DisplayName "HTTP-Custom-$Puerto" -ErrorAction SilentlyContinue
+    New-NetFirewallRule -DisplayName "HTTP-Custom-$Puerto" -Direction Inbound -LocalPort $Puerto -Protocol TCP -Action Allow | Out-Null
 }
 
 # --- 4. CREAR INDEX PERSONALIZADO ---
@@ -52,7 +55,7 @@ function New-CustomIndex ($Servicio, $Version, $Puerto, $Path) {
     $html | Out-File -FilePath "$Path\index.html" -Encoding utf8 -Force
 }
 
-# --- 5. INSTALACIÓN IIS (FUNCIÓN PRINCIPAL) ---
+# --- 5. INSTALACIÓN IIS (CORREGIDO) ---
 function Install-IIS ($Version, $Puerto) {
     Write-Host "Iniciando despliegue silencioso de IIS..." -ForegroundColor Cyan
     
@@ -72,9 +75,13 @@ function Install-IIS ($Version, $Puerto) {
 
     # SEGURIDAD (Hardening)
     Write-Host "Aplicando políticas de seguridad (Headers)..."
-    # Quitar X-Powered-By
     $headerPath = "system.webServer/httpProtocol/customHeaders"
-    Remove-WebConfigurationProperty -Filter $headerPath -Name "." -AtElement @{name='X-Powered-By'} -PSPath "IIS:\" -ErrorAction SilentlyContinue
+    
+    # Quitar X-Powered-By de forma segura para evitar el WARNING
+    $config = Get-WebConfigurationProperty -Filter $headerPath -Name "." -PSPath "IIS:\"
+    if ($config.Collection | Where-Object { $_.name -eq "X-Powered-By" }) {
+        Remove-WebConfigurationProperty -Filter $headerPath -Name "." -AtElement @{name='X-Powered-By'} -PSPath "IIS:\"
+    }
 
     # Agregar Security Headers
     add-webconfigurationproperty -filter $headerPath -pspath "IIS:\" -name "." -value @{name='X-Frame-Options';value='SAMEORIGIN'} -ErrorAction SilentlyContinue
@@ -92,12 +99,12 @@ function Install-IIS ($Version, $Puerto) {
 function Install-ApacheWin ($Version, $Puerto) {
     Write-Host "Instalando Apache $Version..." -ForegroundColor Cyan
     winget install --id ApacheFriends.XAMPP.8.2 --version $Version --silent --accept-package-agreements
-    # Lógica de configuración...
+    # Aquí puedes añadir la edición del httpd.conf similar al script de Linux
 }
 
 # --- 7. INSTALACIÓN NGINX (WINGET) ---
 function Install-NginxWin ($Version, $Puerto) {
     Write-Host "Instalando Nginx $Version..." -ForegroundColor Cyan
     winget install --id nginx.nginx --version $Version --silent
-    # Lógica de configuración...
+    # Aquí puedes añadir la edición del nginx.conf similar al script de Linux
 }
