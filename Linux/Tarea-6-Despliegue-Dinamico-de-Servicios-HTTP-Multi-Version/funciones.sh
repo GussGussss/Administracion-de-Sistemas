@@ -13,7 +13,7 @@ if [[ ! $PUERTO =~ ^[0-9]+$ ]]; then
     return 1
 fi
 
-if ((PUERTO < 1024 || PUERTO > 65535)); then
+if ((PUERTO < 1 || PUERTO > 65535)); then
     echo "Puerto fuera de rango"
     return 1
 fi
