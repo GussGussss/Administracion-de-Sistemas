@@ -1,4 +1,18 @@
 #!/bin/bash
+#########################################
+# Preparar repositorios silenciosamente
+#########################################
+
+preparar_repositorios() {
+
+# instalar utilidades necesarias
+dnf install -y dnf-plugins-core yum-utils epel-release > /dev/null 2>&1
+
+# limpiar cache
+dnf clean all > /dev/null 2>&1
+dnf makecache > /dev/null 2>&1
+
+}
 
 #########################################
 # Validar puerto
@@ -215,9 +229,12 @@ listar_versiones_nginx() {
 echo "Versiones disponibles de Nginx:"
 echo ""
 
-VERSIONES=$(dnf list --showduplicates nginx \
-| grep nginx.x86_64 \
-| awk '{print $2}' \
+# preparar repositorios silenciosamente
+preparar_repositorios
+
+VERSIONES=$(dnf repoquery --showduplicates nginx \
+| grep nginx \
+| awk -F'-' '{print $2}' \
 | sort -V \
 | uniq)
 
@@ -300,7 +317,7 @@ gestionar_puerto $PUERTO || return 1
 
 echo "Instalando Nginx versión $VERSION..."
 
-dnf install -y nginx-$VERSION --allowerasing > /dev/null 2>&1
+dnf install -y nginx-$VERSION nginx --allowerasing > /dev/null 2>&1
 
 crear_usuario_nginx
 
@@ -462,6 +479,7 @@ mkdir -p $DIRECTORIO
 cat <<EOF > $DIRECTORIO/index.html
 <html>
 <head>
+<meta charset="UTF-8">
 <title>Servidor HTTP</title>
 </head>
 <body>
