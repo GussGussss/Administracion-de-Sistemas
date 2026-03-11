@@ -358,7 +358,7 @@ sed -i "s/Connector port=\"8080\"/Connector port=\"$PUERTO\"/" /opt/tomcat/conf/
 
 instalar_tomcat() {
 
-dnf install -y java-17-openjdk > /dev/null 2>&1
+dnf install -y java-17-openjdk java-17-openjdk-devel > /dev/null 2>&1
 
 VERSION=$1
 PUERTO=$2
