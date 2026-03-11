@@ -406,7 +406,10 @@ echo "Instalando Tomcat versión $VERSION..."
 
 cd /tmp
 
-wget https://archive.apache.org/dist/tomcat/tomcat-10/v$VERSION/bin/apache-tomcat-$VERSION.tar.gz -q
+MAJOR=$(echo $VERSION | cut -d'.' -f1)
+
+wget https://archive.apache.org/dist/tomcat/tomcat-$MAJOR/v$VERSION/bin/apache-tomcat-$VERSION.tar.gz -q
+
 tar -xzf apache-tomcat-$VERSION.tar.gz
 
 pkill -f tomcat 2>/dev/null
