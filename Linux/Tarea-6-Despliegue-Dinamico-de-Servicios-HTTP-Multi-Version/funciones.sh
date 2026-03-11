@@ -390,7 +390,7 @@ permitir_puerto_selinux $PUERTO
 crear_index "Tomcat" "$VERSION" "$PUERTO" "/opt/tomcat/webapps/ROOT"
 
 # iniciar tomcat
-JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java))))
+JAVA_HOME=/usr/lib/jvm/java-17-openjdk
 
 sudo -u tomcatsvc bash -c "
 export JAVA_HOME=$JAVA_HOME
