@@ -313,6 +313,16 @@ echo "====================================="
 }
 
 #########################################
+# Configurar header Server en Tomcat
+#########################################
+
+configurar_header_tomcat() {
+
+sed -i 's|protocol="org.apache.coyote.http11.Http11NioProtocol"|protocol="org.apache.coyote.http11.Http11NioProtocol" server="Apache-Tomcat"|' /opt/tomcat/conf/server.xml
+
+}
+
+#########################################
 # Obtener versiones de Tomcat disponibles
 #########################################
 
@@ -385,6 +395,9 @@ chown -R tomcatsvc:tomcatsvc /opt/tomcat
 
 # configurar puerto antes de iniciar
 configurar_puerto_tomcat $PUERTO
+
+# agregar header Server
+configurar_header_tomcat
 
 permitir_puerto_selinux $PUERTO
 
