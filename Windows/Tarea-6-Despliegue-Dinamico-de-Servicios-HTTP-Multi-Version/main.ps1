@@ -1,85 +1,45 @@
-. .\funciones.ps1
+# Main.ps1
+. .\http_functions.ps1
 
 while ($true) {
+    Clear-Host
+    Write-Host "==============================" -ForegroundColor Cyan
+    Write-Host " DESPLIEGUE SERVIDORES HTTP (WIN) " -ForegroundColor Cyan
+    Write-Host "==============================" -ForegroundColor Cyan
+    Write-Host "1) IIS (Internet Information Services)"
+    Write-Host "2) Apache Win64"
+    Write-Host "3) Nginx para Windows"
+    Write-Host "4) Salir"
+    
+    $opcion = Read-Host "Seleccione una opción"
+    
+    if ($opcion -eq "4") { break }
 
-Write-Host "=============================="
-Write-Host " DESPLIEGUE SERVIDORES HTTP "
-Write-Host "=============================="
-
-Write-Host "1) IIS"
-Write-Host "2) Apache"
-Write-Host "3) Nginx"
-Write-Host "4) Instalar Winget"
-Write-Host "5) Salir"
-
-$opcion = Read-Host "Seleccione una opción"
-
-switch ($opcion) {
-
-"1" {
-
-listar_versiones_iis
-
-$puerto = [int](Read-Host "Ingrese puerto")
-
-if (validar_puerto $puerto) {
-
-instalar_iis $puerto
-
-}
-
-}
-
-"2" {
-
-listar_versiones_apache_win
-
-$version = Read-Host "Seleccione versión"
-
-$puerto = [int](Read-Host "Ingrese puerto")
-
-if (validar_puerto $puerto) {
-
-instalar_apache_win $version $puerto
-
-}
-
-}
-
-"3" {
-
-listar_versiones_nginx_win
-
-$version = Read-Host "Seleccione versión"
-
-$puerto = [int](Read-Host "Ingrese puerto")
-
-if (validar_puerto $puerto) {
-
-instalar_nginx_win $version $puerto
-
-}
-
-}
-
-"4" {
-
-instalar_winget
-
-}
-
-"5" {
-
-exit
-
-}
-
-default {
-
-Write-Host "Opción inválida"
-
-}
-
-}
-
+    switch ($opcion) {
+        "1" {
+            # IIS suele venir con el sistema, listamos versiones de la característica
+            $version = (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\InetStp\").VersionString
+            $puerto = Read-Host "Ingrese puerto para IIS"
+            if (Test-PuertoValido $puerto) {
+                Install-IIS -Puerto $puerto -Version $version
+            }
+        }
+        "2" {
+            $versiones = Get-VersionesWinget "ApacheFriends.XAMPP" # Ejemplo con XAMPP o Apache
+            # Lógica para elegir entre $versiones[0] (Latest) o $versiones[-1] (LTS/Old)
+            $puerto = Read-Host "Ingrese puerto para Apache"
+            if (Test-PuertoValido $puerto) {
+                Install-ApacheWin -Version $versiones[0] -Puerto $puerto
+            }
+        }
+        "3" {
+            $versiones = Get-VersionesWinget "nginx.nginx"
+            $puerto = Read-Host "Ingrese puerto para Nginx"
+            if (Test-PuertoValido $puerto) {
+                Install-NginxWin -Version $versiones[0] -Puerto $puerto
+            }
+        }
+        Default { Write-Host "Opción inválida" -ForegroundColor Red }
+    }
+    Pause
 }
