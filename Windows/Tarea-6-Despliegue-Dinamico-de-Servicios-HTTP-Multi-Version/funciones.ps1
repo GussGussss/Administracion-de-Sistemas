@@ -1,3 +1,38 @@
+function instalar_winget(){
+
+Write-Host ""
+Write-Host "Instalando Winget..."
+Write-Host ""
+
+$dir="C:\winget"
+
+New-Item -ItemType Directory -Path $dir -Force | Out-Null
+
+# Descargar dependencias
+Invoke-WebRequest `
+https://aka.ms/Microsoft.VCLibs.x64.14.00.Desktop.appx `
+-OutFile "$dir\VCLibs.appx"
+
+Invoke-WebRequest `
+https://github.com/microsoft/microsoft-ui-xaml/releases/download/v2.8.6/Microsoft.UI.Xaml.2.8.x64.appx `
+-OutFile "$dir\UI.Xaml.appx"
+
+Invoke-WebRequest `
+https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle `
+-OutFile "$dir\winget.msixbundle"
+
+Write-Host "Instalando dependencias..."
+
+Add-AppxPackage "$dir\VCLibs.appx"
+Add-AppxPackage "$dir\UI.Xaml.appx"
+Add-AppxPackage "$dir\winget.msixbundle"
+
+Write-Host ""
+Write-Host "Winget instalado correctamente"
+Write-Host ""
+
+}
+
 function validar_puerto($puerto){
 
 if ($puerto -notmatch "^\d+$"){
