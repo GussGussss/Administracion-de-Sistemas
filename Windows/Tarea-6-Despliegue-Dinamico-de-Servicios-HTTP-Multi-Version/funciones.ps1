@@ -38,6 +38,19 @@ New-NetFirewallRule `
 
 }
 
+function configurar_seguridad_iis(){
+
+Import-Module WebAdministration
+
+Remove-WebConfigurationProperty `
+-pspath 'MACHINE/WEBROOT/APPHOST' `
+-filter "system.webServer/httpProtocol/customHeaders" `
+-name "." `
+-atElement @{name='X-Powered-By'} `
+-ErrorAction SilentlyContinue
+
+}
+
 function listar_versiones_apache_win(){
 
 Write-Host ""
@@ -95,6 +108,8 @@ New-WebBinding `
 abrir_firewall $puerto
 
 crear_index "IIS" "Windows" $puerto "C:\inetpub\wwwroot"
+
+configurar_seguridad_iis
 
 Write-Host "IIS instalado en puerto $puerto"
 
@@ -167,10 +182,3 @@ $html=@"
 $html | Out-File "$directorio\index.html" -Encoding utf8
 
 }
-
-Remove-WebConfigurationProperty `
--pspath 'MACHINE/WEBROOT/APPHOST' `
--filter "system.webServer/httpProtocol/customHeaders" `
--name "." `
--atElement @{name='X-Powered-By'} `
--ErrorAction SilentlyContinue
