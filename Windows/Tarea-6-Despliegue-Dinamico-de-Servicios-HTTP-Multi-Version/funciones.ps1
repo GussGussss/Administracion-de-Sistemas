@@ -119,13 +119,18 @@ function instalar_apache_win($version,$puerto){
 
 Write-Host "Instalando Apache..."
 
-winget install `
---id ApacheFriends.ApacheHTTPServer `
---silent `
---accept-package-agreements `
---accept-source-agreements
+$url="https://www.apachelounge.com/download/VS17/binaries/httpd-2.4.62-win64-VS17.zip"
 
-$config="C:\Apache24\conf\httpd.conf"
+$zip="C:\temp\apache.zip"
+$dest="C:\Apache24"
+
+New-Item -ItemType Directory -Path C:\temp -Force | Out-Null
+
+Invoke-WebRequest $url -OutFile $zip
+
+Expand-Archive $zip -DestinationPath C:\ -Force
+
+$config="$dest\conf\httpd.conf"
 
 (Get-Content $config) `
 -replace "Listen 80","Listen $puerto" `
@@ -133,21 +138,30 @@ $config="C:\Apache24\conf\httpd.conf"
 
 abrir_firewall $puerto
 
-crear_index "Apache" $version $puerto "C:\Apache24\htdocs"
-Restart-Service Apache2.4 -ErrorAction SilentlyContinue
+crear_index "Apache" "2.4.62" $puerto "$dest\htdocs"
+
+Start-Process "$dest\bin\httpd.exe"
+
 }
 
 function instalar_nginx_win($version,$puerto){
 
 Write-Host "Instalando Nginx..."
 
-winget install `
---id Nginx.Nginx `
---silent `
---accept-package-agreements `
---accept-source-agreements
+$url="https://nginx.org/download/nginx-1.26.2.zip"
 
-$config="C:\Program Files\nginx\conf\nginx.conf"
+$zip="C:\temp\nginx.zip"
+$dest="C:\nginx"
+
+New-Item -ItemType Directory -Path C:\temp -Force | Out-Null
+
+Invoke-WebRequest $url -OutFile $zip
+
+Expand-Archive $zip -DestinationPath C:\ -Force
+
+Rename-Item "C:\nginx-1.26.2" $dest -Force
+
+$config="$dest\conf\nginx.conf"
 
 (Get-Content $config) `
 -replace "listen\s+80","listen $puerto" `
@@ -155,9 +169,10 @@ $config="C:\Program Files\nginx\conf\nginx.conf"
 
 abrir_firewall $puerto
 
-crear_index "Nginx" $version $puerto "C:\Program Files\nginx\html"
-Stop-Process -Name nginx -Force -ErrorAction SilentlyContinue
-Start-Process "C:\Program Files\nginx\nginx.exe"
+crear_index "Nginx" "1.26.2" $puerto "$dest\html"
+
+Start-Process "$dest\nginx.exe"
+
 }
 
 function crear_index($servicio,$version,$puerto,$directorio){
