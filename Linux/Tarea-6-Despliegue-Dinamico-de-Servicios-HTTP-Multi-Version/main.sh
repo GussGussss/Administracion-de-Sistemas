@@ -21,12 +21,20 @@ while true
        1)
         listar_versiones_apache
         
+        VERSIONES=$(dnf list --showduplicates httpd | grep httpd.x86_64 | awk '{print $2}')
+        
+        LATEST=$(echo "$VERSIONES" | head -n 1)
+        LTS=$(echo "$VERSIONES" | sed -n '2p')
+        OLDEST=$(echo "$VERSIONES" | tail -n 1)
+        
         read -p "Seleccione número de versión: " VERSION_NUM
         
-        VERSION=$(dnf list --showduplicates httpd \
-        | grep httpd.x86_64 \
-        | awk '{print $2}' \
-        | sed -n "${VERSION_NUM}p")
+        case $VERSION_NUM in
+        1) VERSION=$LATEST ;;
+        2) VERSION=$LTS ;;
+        3) VERSION=$OLDEST ;;
+        *) echo "Opción inválida"; continue ;;
+        esac
         
         read -p "Ingrese puerto: " PUERTO
         
@@ -45,19 +53,32 @@ while true
         ;;
         
         2)
-        
         listar_versiones_nginx
+        
+        VERSIONES=$(dnf list --showduplicates nginx | grep nginx.x86_64 | awk '{print $2}')
+        
+        LATEST=$(echo "$VERSIONES" | head -n 1)
+        LTS=$(echo "$VERSIONES" | sed -n '2p')
+        OLDEST=$(echo "$VERSIONES" | tail -n 1)
         
         read -p "Seleccione número de versión: " VERSION_NUM
         
-        VERSION=$(dnf list --showduplicates nginx \
-        | grep nginx.x86_64 \
-        | awk '{print $2}' \
-        | sed -n "${VERSION_NUM}p")
+        case $VERSION_NUM in
+        1) VERSION=$LATEST ;;
+        2) VERSION=$LTS ;;
+        3) VERSION=$OLDEST ;;
+        *) echo "Opción inválida"; continue ;;
+        esac
         
         read -p "Ingrese puerto: " PUERTO
         
-        instalar_nginx $VERSION $PUERTO
+        validar_puerto $PUERTO
+        
+        if [ $? -eq 0 ]; then
+            instalar_nginx $VERSION $PUERTO
+        else
+            echo "Puerto inválido"
+        fi
         
         ;;
         
@@ -70,15 +91,18 @@ while true
         
         1) VERSION="10.1.28";;
         2) VERSION="10.1.26";;
-        3) VERSION="10.1.24";;
-        4) VERSION="9.0.91";;
-        5) VERSION="9.0.89";;
-        
-        esac
+        3) VERSION="9.0.91";;
+        *) echo "Opción inválida"; continue;;
         
         read -p "Ingrese puerto: " PUERTO
+
+        validar_puerto $PUERTO
         
-        instalar_tomcat $VERSION $PUERTO
+        if [ $? -eq 0 ]; then
+            instalar_tomcat $VERSION $PUERTO
+        else
+            echo "Puerto inválido"
+        fi
         ;;
         
         4)
