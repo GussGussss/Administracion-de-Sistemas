@@ -55,7 +55,7 @@ while true
         2)
         listar_versiones_nginx
         
-        VERSIONES=$(dnf list --showduplicates nginx | grep nginx.x86_64 | awk '{print $2}' | sort -V | uniq)
+        VERSIONES=$(dnf repoquery --showduplicates nginx | awk -F'-' '{print $2}' | sort -V | uniq)
         
         OLDEST=$(echo "$VERSIONES" | head -n 1)
         LTS=$(echo "$VERSIONES" | sed -n '2p')
