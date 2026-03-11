@@ -107,8 +107,8 @@ VERSIONES=$(dnf list --showduplicates httpd \
 | sort -V \
 | uniq)
 
-LATEST=$(echo "$VERSIONES" | tail -n 1)
 OLDEST=$(echo "$VERSIONES" | head -n 1)
+LATEST=$(echo "$VERSIONES" | tail -n 1)
 LTS=$(echo "$VERSIONES" | sed -n '2p')
 
 echo "1) $LATEST  (Latest / Desarrollo)"
@@ -221,8 +221,8 @@ VERSIONES=$(dnf list --showduplicates nginx \
 | sort -V \
 | uniq)
 
-LATEST=$(echo "$VERSIONES" | tail -n 1)
 OLDEST=$(echo "$VERSIONES" | head -n 1)
+LATEST=$(echo "$VERSIONES" | tail -n 1)
 LTS=$(echo "$VERSIONES" | sed -n '2p')
 
 echo "1) $LATEST  (Latest / Desarrollo)"
