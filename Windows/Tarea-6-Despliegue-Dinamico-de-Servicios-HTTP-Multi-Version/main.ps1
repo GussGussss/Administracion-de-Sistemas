@@ -9,7 +9,8 @@ Write-Host "=============================="
 Write-Host "1) IIS"
 Write-Host "2) Apache"
 Write-Host "3) Nginx"
-Write-Host "4) Salir"
+Write-Host "4) Instalar Winget"
+Write-Host "5) Salir"
 
 $opcion = Read-Host "Seleccione una opción"
 
@@ -62,6 +63,12 @@ instalar_nginx_win $version $puerto
 }
 
 "4" {
+
+instalar_winget
+
+}
+
+"5" {
 
 exit
 
