@@ -2,7 +2,6 @@
 . .\funciones.ps1
 
 while ($true) {
-    Clear-Host
     Write-Host "==============================" -ForegroundColor Cyan
     Write-Host "  DESPLIEGUE SERVIDORES HTTP  " -ForegroundColor Cyan
     Write-Host "==============================" -ForegroundColor Cyan
