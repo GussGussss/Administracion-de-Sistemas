@@ -601,6 +601,22 @@ function Crear-Usuario-Restringido {
             $acl.AddAccessRule($regla)
         }
 
+        # IUSR e IIS_IUSRS necesitan lectura para servir contenido anonimo en IIS
+        foreach ($cuenta in @("IUSR", "IIS_IUSRS")) {
+            try {
+                $reglaIIS = New-Object System.Security.AccessControl.FileSystemAccessRule(
+                    $cuenta,
+                    "ReadAndExecute",
+                    "ContainerInherit,ObjectInherit",
+                    "None",
+                    "Allow"
+                )
+                $acl.AddAccessRule($reglaIIS)
+            } catch {
+                Write-Host "Advertencia: No se pudo agregar $cuenta a la ACL." -ForegroundColor Yellow
+            }
+        }
+
         $acl.AddAccessRule($reglaServicio)
         Set-Acl $Directorio $acl
         Write-Host "Permisos NTFS aplicados en $Directorio para usuario $usuarioLocal." -ForegroundColor Green
