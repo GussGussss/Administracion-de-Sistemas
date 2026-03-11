@@ -391,7 +391,7 @@ crear_index "Tomcat" "$VERSION" "$PUERTO" "/opt/tomcat/webapps/ROOT"
 
 # iniciar tomcat
 
-JAVA_HOME=$(ls -d /usr/lib/jvm/java-17-openjdk* | head -n 1)
+JAVA_HOME=$(dirname $(dirname $(readlink -f /usr/bin/java)))
 
 sudo -u tomcatsvc env JAVA_HOME=$JAVA_HOME CATALINA_HOME=/opt/tomcat /opt/tomcat/bin/startup.sh
 
