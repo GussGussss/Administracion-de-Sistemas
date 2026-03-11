@@ -101,10 +101,14 @@ listar_versiones_apache() {
 echo "Versiones disponibles de Apache:"
 echo ""
 
-VERSIONES=$(dnf list --showduplicates httpd | grep httpd.x86_64 | awk '{print $2}')
+VERSIONES=$(dnf list --showduplicates httpd \
+| grep httpd.x86_64 \
+| awk '{print $2}' \
+| sort -V \
+| uniq)
 
-LATEST=$(echo "$VERSIONES" | head -n 1)
-OLDEST=$(echo "$VERSIONES" | tail -n 1)
+LATEST=$(echo "$VERSIONES" | tail -n 1)
+OLDEST=$(echo "$VERSIONES" | head -n 1)
 LTS=$(echo "$VERSIONES" | sed -n '2p')
 
 echo "1) $LATEST  (Latest / Desarrollo)"
@@ -211,10 +215,14 @@ listar_versiones_nginx() {
 echo "Versiones disponibles de Nginx:"
 echo ""
 
-VERSIONES=$(dnf list --showduplicates nginx | grep nginx.x86_64 | awk '{print $2}')
+VERSIONES=$(dnf list --showduplicates nginx \
+| grep nginx.x86_64 \
+| awk '{print $2}' \
+| sort -V \
+| uniq)
 
-LATEST=$(echo "$VERSIONES" | head -n 1)
-OLDEST=$(echo "$VERSIONES" | tail -n 1)
+LATEST=$(echo "$VERSIONES" | tail -n 1)
+OLDEST=$(echo "$VERSIONES" | head -n 1)
 LTS=$(echo "$VERSIONES" | sed -n '2p')
 
 echo "1) $LATEST  (Latest / Desarrollo)"
