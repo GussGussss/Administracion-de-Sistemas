@@ -550,8 +550,11 @@ function Crear-Usuario-Restringido {
     )
 
     $usuario = "svc_$($Servicio.ToLower())"
-    $password = [System.Web.Security.Membership]::GeneratePassword(16, 4)
-    $secPwd = ConvertTo-SecureString $password -AsPlainText -Force
+
+    # Generar contraseña aleatoria sin dependencias externas
+    $chars   = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%"
+    $password = -join ((1..16) | ForEach-Object { $chars[(Get-Random -Maximum $chars.Length)] })
+    $secPwd  = ConvertTo-SecureString $password -AsPlainText -Force
 
     # Crear usuario local si no existe
     if (-not (Get-LocalUser -Name $usuario -ErrorAction SilentlyContinue)) {
@@ -565,27 +568,29 @@ function Crear-Usuario-Restringido {
         Write-Host "Usuario $usuario creado." -ForegroundColor Green
     }
 
-    # Asignar permisos NTFS: solo el usuario de servicio tiene acceso al directorio
+    # Asignar permisos NTFS
     if (Test-Path $Directorio) {
         $acl = Get-Acl $Directorio
 
-        # Deshabilitar herencia
+        # Deshabilitar herencia y limpiar ACL
         $acl.SetAccessRuleProtection($true, $false)
-
-        # Limpiar ACL existente
         $acl.Access | ForEach-Object { $acl.RemoveAccessRule($_) | Out-Null }
+
+        # Nombre completo del usuario local: HOSTNAME\usuario
+        $hostname      = $env:COMPUTERNAME
+        $usuarioLocal  = "$hostname\$usuario"
 
         # Regla para el usuario de servicio (lectura + ejecucion)
         $reglaServicio = New-Object System.Security.AccessControl.FileSystemAccessRule(
-            $usuario,
+            $usuarioLocal,
             "ReadAndExecute",
             "ContainerInherit,ObjectInherit",
             "None",
             "Allow"
         )
 
-        # Regla para SYSTEM y Administrators (control total)
-        foreach ($cuenta in @("NT AUTHORITY\SYSTEM","BUILTIN\Administrators")) {
+        # Reglas para SYSTEM y Administrators (control total)
+        foreach ($cuenta in @("NT AUTHORITY\SYSTEM", "BUILTIN\Administrators")) {
             $regla = New-Object System.Security.AccessControl.FileSystemAccessRule(
                 $cuenta,
                 "FullControl",
@@ -598,6 +603,6 @@ function Crear-Usuario-Restringido {
 
         $acl.AddAccessRule($reglaServicio)
         Set-Acl $Directorio $acl
-        Write-Host "Permisos NTFS aplicados en $Directorio para usuario $usuario." -ForegroundColor Green
+        Write-Host "Permisos NTFS aplicados en $Directorio para usuario $usuarioLocal." -ForegroundColor Green
     }
 }
