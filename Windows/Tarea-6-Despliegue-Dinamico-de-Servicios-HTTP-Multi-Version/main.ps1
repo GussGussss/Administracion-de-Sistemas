@@ -16,10 +16,15 @@ while ($true) {
     if ($opcion -eq "4") { break }
 
     switch ($opcion) {
-        "1" {
-            # IIS es una característica de Windows, no listamos versiones externas
-            $version = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\InetStp\").VersionString
-            Write-Host "Versión de IIS detectada: $version" -ForegroundColor Yellow
+            "1" {
+            # Intentamos obtener la versión, si falla (porque no está instalado), ponemos "Por instalar"
+            try {
+                $version = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\InetStp\" -ErrorAction Stop).VersionString
+            } catch {
+                $version = "10.0 (Windows Server 2019)"
+            }
+
+            Write-Host "Versión de IIS a desplegar: $version" -ForegroundColor Yellow
             $puerto = Read-Host "Ingrese puerto de escucha"
             
             if (Test-ValidarPuerto $puerto) {
