@@ -51,29 +51,40 @@ function New-CustomIndex ($Servicio, $Version, $Puerto, $Path) {
     $html | Out-File -FilePath "$Path\index.html" -Encoding utf8
 }
 
-# --- INSTALACIÓN IIS ---
 function Install-IIS ($Version, $Puerto) {
-    Write-Host "Instalando IIS..." -ForegroundColor Cyan
-    Install-WindowsFeature -Name Web-Server -IncludeManagementTools
+    Write-Host "Instalando IIS (Instalación Silenciosa)..." -ForegroundColor Cyan
+    # Instalación silenciosa del rol
+    Install-WindowsFeature -Name Web-Server -IncludeManagementTools > $null
     
-    # Cambiar puerto (Binding)
-    Import-Module WebAdministration
-    Set-WebBinding -Name "Default Web Site" -BindingInformation "*:80:" -PropertyName Port -Value $Puerto
-    
-    # Seguridad: Ocultar Server Headers
-    # 1. Eliminar X-Powered-By
-    Remove-WebConfigurationProperty -Filter "system.webServer/httpProtocol/customHeaders" -Name "." -AtElement @{name='X-Powered-By'} -PSPath "IIS:\"
-    
-    # 2. Agregar Security Headers
-    Set-WebConfigurationProperty -Filter "system.webServer/httpProtocol/customHeaders" -Name "." -Value @{name='X-Frame-Options';value='SAMEORIGIN'}
-    Set-WebConfigurationProperty -Filter "system.webServer/httpProtocol/customHeaders" -Name "." -Value @{name='X-Content-Type-Options';value='nosniff'}
+    # Forzar la importación del módulo de administración de IIS
+    Import-Module WebAdministration -ErrorAction SilentlyContinue
 
+    # Cambiar puerto (Binding) - Se asegura de que el sitio exista antes de cambiarlo
+    if (Test-Path "IIS:\Sites\Default Web Site") {
+        Set-WebBinding -Name "Default Web Site" -BindingInformation "*:80:" -PropertyName Port -Value $Puerto
+    } else {
+        # Si por alguna razón no existe el default, se crea con el puerto nuevo
+        New-WebSite -Name "Default Web Site" -Port $Puerto -PhysicalPath "C:\inetpub\wwwroot" -Force
+    }
+    
+    # --- Seguridad: Hardening ---
+    # Eliminar X-Powered-By
+    Get-WebConfigurationProperty -Filter "system.webServer/httpProtocol/customHeaders" -PSPath "IIS:\" -Name "." | 
+        Where-Object { $_.Name -eq "X-Powered-By" } | 
+        Remove-WebConfigurationProperty -Filter "system.webServer/httpProtocol/customHeaders" -PSPath "IIS:\" -Name "."
+
+    # Agregar Security Headers (X-Frame y X-Content)
+    $configPath = "system.webServer/httpProtocol/customHeaders"
+    add-webconfigurationproperty -filter $configPath -pspath "IIS:\" -name "." -value @{name='X-Frame-Options';value='SAMEORIGIN'} -ErrorAction SilentlyContinue
+    add-webconfigurationproperty -filter $configPath -pspath "IIS:\" -name "." -value @{name='X-Content-Type-Options';value='nosniff'} -ErrorAction SilentlyContinue
+
+    # Firewall y Index
     Set-CustomFirewall $Puerto
     New-CustomIndex "IIS" $Version $Puerto "C:\inetpub\wwwroot"
+    
     Restart-Service W3SVC
-    Write-Host "IIS Desplegado en puerto $Puerto" -ForegroundColor Green
+    Write-Host "INSTALACIÓN COMPLETADA: IIS en puerto $Puerto" -ForegroundColor Green
 }
-
 # --- INSTALACIÓN APACHE (WINGET) ---
 function Install-ApacheWin ($Version, $Puerto) {
     Write-Host "Instalando Apache $Version vía Winget..." -ForegroundColor Cyan
