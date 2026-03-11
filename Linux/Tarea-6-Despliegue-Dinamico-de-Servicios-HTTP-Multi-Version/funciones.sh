@@ -390,11 +390,13 @@ permitir_puerto_selinux $PUERTO
 crear_index "Tomcat" "$VERSION" "$PUERTO" "/opt/tomcat/webapps/ROOT"
 
 # iniciar tomcat
-sudo -u tomcatsvc bash -c '
-export JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java))))
+JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java))))
+
+sudo -u tomcatsvc bash -c "
+export JAVA_HOME=$JAVA_HOME
 export CATALINA_HOME=/opt/tomcat
 /opt/tomcat/bin/startup.sh
-'
+"
 
 echo "Esperando a que Tomcat inicie..."
 
