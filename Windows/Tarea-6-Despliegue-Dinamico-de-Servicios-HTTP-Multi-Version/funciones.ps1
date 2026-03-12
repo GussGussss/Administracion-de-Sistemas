@@ -220,19 +220,15 @@ function Listar-Versiones-Apache {
     Write-Host ""
     Write-Host "Consultando versiones disponibles de Apache..." -ForegroundColor Cyan
 
-    $latest = ""
-
-    $wingetOk = Verificar-Winget
-    if ($wingetOk) {
-        try {
-            $raw = winget show Apache.ApacheHTTPServer 2>&1 | Out-String
-            $versionLine = ($raw -split "`n") | Where-Object { $_ -match "Version\s*:" } | Select-Object -First 1
-            if ($versionLine -match ":\s*(.+)") { $latest = $matches[1].Trim() }
-        } catch {}
+    # URLs verificadas en fossies.org — mirror publico que no bloquea servidores
+    # Fossies aloja los mismos ZIPs de ApacheLounge sin restricciones de IP
+    $global:APACHE_URLS = @{
+        "2.4.63" = "https://fossies.org/windows/www/httpd-2.4.63-250207-win64-VS17.zip"
+        "2.4.62" = "https://fossies.org/windows/www/httpd-2.4.62-240718-win64-VS17.zip"
+        "2.4.61" = "https://fossies.org/windows/www/httpd-2.4.61-240703-win64-VS17.zip"
     }
 
-    # Versiones con fechas de build conocidas en apachelounge.com
-    if (-not $latest) { $latest = "2.4.63" }
+    $latest = "2.4.63"
     $lts    = "2.4.62"
     $oldest = "2.4.61"
 
@@ -267,89 +263,57 @@ function Instalar-Apache {
 
     if (-not (Test-Path "$apacheBase\bin\httpd.exe")) {
 
-        $urlBase = "https://www.apachelounge.com/download/VS17/binaries"
         $zipDest = "$env:TEMP\apache.zip"
+        Remove-Item $zipDest -Force -ErrorAction SilentlyContinue
 
-        # URLs exactas verificadas por version (Apache Lounge usa fecha de build en el nombre)
-        $urlsMap = @{
-            "2.4.63" = @("$urlBase/httpd-2.4.63-250207-win64-VS17.zip")
-            "2.4.62" = @("$urlBase/httpd-2.4.62-240904-win64-VS17.zip")
-            "2.4.61" = @("$urlBase/httpd-2.4.61-240703-win64-VS17.zip")
+        # Obtener URL desde el mapa global (cargado por Listar-Versiones-Apache)
+        if ($global:APACHE_URLS -and $global:APACHE_URLS.ContainsKey($Version)) {
+            $urlDescarga = $global:APACHE_URLS[$Version]
+        } else {
+            # Fallback si no se ejecuto Listar primero
+            $urlDescarga = "https://fossies.org/windows/www/httpd-$Version-win64-VS17.zip"
         }
 
-        if (-not $urlsMap.ContainsKey($Version)) {
-            Write-Host "Error: Version $Version no tiene URL configurada." -ForegroundColor Red
-            return
-        }
+        Write-Host "Descargando Apache $Version..." -ForegroundColor Cyan
+        Write-Host "Desde: $urlDescarga" -ForegroundColor Gray
 
-        $candidatos = $urlsMap[$Version]
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        $descargaOk = $false
 
-        # Detectar ZIP pre-descargado manualmente en C:\apache.zip
-        if (Test-Path "C:\apache.zip") {
-            $b = [System.IO.File]::ReadAllBytes("C:\apache.zip")
-            if ($b.Length -gt 100000 -and $b[0] -eq 0x50 -and $b[1] -eq 0x4B) {
-                Write-Host "Usando ZIP pre-descargado en C:\apache.zip" -ForegroundColor Green
-                Copy-Item "C:\apache.zip" $zipDest -Force
-            }
-        }
-
-        # Verificar si ya tenemos un ZIP valido en TEMP
-        $yaDescargado = $false
-        if (Test-Path $zipDest) {
-            $b2 = [System.IO.File]::ReadAllBytes($zipDest)
-            if ($b2.Length -gt 100000 -and $b2[0] -eq 0x50 -and $b2[1] -eq 0x4B) {
-                Write-Host "ZIP valido encontrado, omitiendo descarga." -ForegroundColor Green
-                $yaDescargado = $true
-            }
-        }
-
-        if (-not $yaDescargado) {
-            Write-Host "Descargando Apache $Version..." -ForegroundColor Cyan
-
-            $descargaOk = $false
-            foreach ($url in $candidatos) {
-                try {
-                    Write-Host "Desde: $url" -ForegroundColor Gray
-                    Remove-Item $zipDest -Force -ErrorAction SilentlyContinue
-
-                    # curl.exe viene incluido en Windows Server 2019 y no es bloqueado por apachelounge
-                    $curlArgs = @(
-                        "-L",                          # seguir redirects
-                        "--silent",
-                        "--show-error",
-                        "--fail",                      # falla con codigo de error si HTTP error
-                        "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0",
-                        "--referer", "https://www.apachelounge.com/download/",
-                        "-o", $zipDest,
-                        $url
-                    )
-                    & curl.exe @curlArgs
-
-                    if (Test-Path $zipDest) {
-                        $b3 = [System.IO.File]::ReadAllBytes($zipDest)
-                        if ($b3.Length -gt 100000 -and $b3[0] -eq 0x50 -and $b3[1] -eq 0x4B) {
-                            Write-Host "Descarga correcta ($([math]::Round($b3.Length/1MB,1)) MB)." -ForegroundColor Green
-                            $descargaOk = $true
-                            break
-                        }
-                    }
-                    Remove-Item $zipDest -Force -ErrorAction SilentlyContinue
-                } catch {
-                    Write-Host "Fallo: $($_.Exception.Message)" -ForegroundColor Gray
-                    Remove-Item $zipDest -Force -ErrorAction SilentlyContinue
+        # Intento 1: Invoke-WebRequest
+        try {
+            Invoke-WebRequest -Uri $urlDescarga -OutFile $zipDest -UseBasicParsing -ErrorAction Stop
+            if (Test-Path $zipDest) {
+                $b = [System.IO.File]::ReadAllBytes($zipDest)
+                if ($b.Length -gt 100000 -and $b[0] -eq 0x50 -and $b[1] -eq 0x4B) {
+                    Write-Host "Descarga correcta ($([math]::Round($b.Length/1MB,1)) MB)." -ForegroundColor Green
+                    $descargaOk = $true
                 }
             }
+        } catch {
+            Write-Host "Invoke-WebRequest fallo, intentando con curl.exe..." -ForegroundColor Gray
+        }
 
-            if (-not $descargaOk) {
-                Write-Host ""
-                Write-Host "Error: No se pudo descargar Apache $Version." -ForegroundColor Red
-                Write-Host "SOLUCION MANUAL:" -ForegroundColor Cyan
-                Write-Host "  1. Descargue el ZIP desde su PC: https://www.apachelounge.com/download/VS17/" -ForegroundColor White
-                Write-Host "  2. Copielo al servidor con SCP:" -ForegroundColor White
-                Write-Host "     scp httpd-$Version-*-win64-VS17.zip Administrator@SERVIDOR:C:\apache.zip" -ForegroundColor White
-                Write-Host "  3. Ejecute el script de nuevo -- detectara C:\apache.zip automaticamente." -ForegroundColor White
-                return
+        # Intento 2: curl.exe (incluido en Windows Server 2019)
+        if (-not $descargaOk) {
+            Remove-Item $zipDest -Force -ErrorAction SilentlyContinue
+            try {
+                & curl.exe -L --silent --show-error --fail -o $zipDest $urlDescarga
+                if (Test-Path $zipDest) {
+                    $b = [System.IO.File]::ReadAllBytes($zipDest)
+                    if ($b.Length -gt 100000 -and $b[0] -eq 0x50 -and $b[1] -eq 0x4B) {
+                        Write-Host "Descarga correcta via curl ($([math]::Round($b.Length/1MB,1)) MB)." -ForegroundColor Green
+                        $descargaOk = $true
+                    }
+                }
+            } catch {
+                Write-Host "curl.exe tambien fallo." -ForegroundColor Gray
             }
+        }
+
+        if (-not $descargaOk) {
+            Write-Host "Error: No se pudo descargar Apache $Version desde fossies.org." -ForegroundColor Red
+            return
         }
 
         Write-Host "Extrayendo archivos..." -ForegroundColor Cyan
