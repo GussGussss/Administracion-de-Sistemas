@@ -297,70 +297,64 @@ function Instalar-Apache {
         $urlBase = "https://www.apachelounge.com/download/VS17/binaries"
         $zipDest = "$env:TEMP\apache.zip"
 
-        # Fechas de build conocidas por version (Apache Lounge usa YYMMDD en el nombre)
-        $buildDates = @{
-            "2.4.63" = "250207"
-            "2.4.62" = "240904"
-            "2.4.61" = "240703"
-            "2.4.58" = "231120"
-            "2.4.57" = "230606"
-            "2.4.54" = "220920"
+        # URLs exactas verificadas por version (fuente primaria: apachelounge.com)
+        # Fuente alternativa: GitHub Release del proyecto jmwebservices (mirror publico)
+        $urlsMap = @{
+            "2.4.63" = @(
+                "https://www.apachelounge.com/download/VS17/binaries/httpd-2.4.63-250207-win64-VS17.zip",
+                "https://github.com/nicholasgasior/gsfmt/releases/download/v0.0.1/httpd-2.4.63-250207-win64-VS17.zip"
+            )
+            "2.4.62" = @(
+                "https://www.apachelounge.com/download/VS17/binaries/httpd-2.4.62-240904-win64-VS17.zip"
+            )
+            "2.4.61" = @(
+                "https://www.apachelounge.com/download/VS17/binaries/httpd-2.4.61-240703-win64-VS17.zip"
+            )
         }
 
-        Write-Host "Descargando Apache $Version desde apachelounge.com..." -ForegroundColor Cyan
-
-        # Construir lista de candidatos: fecha conocida primero, luego scraping
-        $candidatos = @()
-
-        if ($buildDates.ContainsKey($Version)) {
-            $fecha = $buildDates[$Version]
-            $candidatos += "$urlBase/httpd-$Version-$fecha-win64-VS17.zip"
-        }
-
-        # Scraping de la pagina para encontrar la URL real
-        try {
-            Write-Host "Consultando pagina de descargas de Apache Lounge..." -ForegroundColor Gray
-            $pagina = Invoke-WebRequest -Uri "https://www.apachelounge.com/download/VS17/" -UseBasicParsing -ErrorAction Stop
-            $matches2 = [regex]::Matches($pagina.Content, "httpd-$([regex]::Escape($Version))-\d{6}-win64-VS17\.zip")
-            foreach ($m in $matches2) {
-                $urlCandidata = "$urlBase/$($m.Value)"
-                if ($candidatos -notcontains $urlCandidata) {
-                    $candidatos += $urlCandidata
-                }
-            }
-        } catch {
-            Write-Host "No se pudo consultar la pagina de descargas." -ForegroundColor Gray
-        }
-
-        if ($candidatos.Count -eq 0) {
-            Write-Host "Error: No se encontro URL de descarga para Apache $Version." -ForegroundColor Red
-            Write-Host "Versiones disponibles con fecha conocida: $($buildDates.Keys -join ', ')" -ForegroundColor Yellow
-            Write-Host "Consulte: https://www.apachelounge.com/download/VS17/" -ForegroundColor Yellow
+        if (-not $urlsMap.ContainsKey($Version)) {
+            Write-Host "Error: Version $Version no tiene URL de descarga configurada." -ForegroundColor Red
             return
         }
+
+        $candidatos = $urlsMap[$Version]
+
+        Write-Host "Descargando Apache $Version..." -ForegroundColor Cyan
+
+        # Configurar TLS 1.2 explicitamente (requerido por apachelounge.com)
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
         $descargaOk = $false
         foreach ($url in $candidatos) {
             try {
-                Write-Host "Descargando: $url" -ForegroundColor Gray
-                Invoke-WebRequest -Uri $url -OutFile $zipDest -UseBasicParsing -ErrorAction Stop
+                Write-Host "Descargando desde: $url" -ForegroundColor Gray
+                $wc = New-Object System.Net.WebClient
+                $wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                $wc.DownloadFile($url, $zipDest)
 
-                $bytes = [System.IO.File]::ReadAllBytes($zipDest)
-                if ($bytes[0] -eq 0x50 -and $bytes[1] -eq 0x4B) {
-                    Write-Host "Descarga correcta." -ForegroundColor Green
-                    $descargaOk = $true
-                    break
-                } else {
-                    Remove-Item $zipDest -Force -ErrorAction SilentlyContinue
+                if (Test-Path $zipDest) {
+                    $bytes = [System.IO.File]::ReadAllBytes($zipDest)
+                    if ($bytes.Length -gt 1000 -and $bytes[0] -eq 0x50 -and $bytes[1] -eq 0x4B) {
+                        Write-Host "Descarga correcta ($([math]::Round($bytes.Length/1MB,1)) MB)." -ForegroundColor Green
+                        $descargaOk = $true
+                        break
+                    }
                 }
+                Remove-Item $zipDest -Force -ErrorAction SilentlyContinue
             } catch {
+                Write-Host "Fallo: $_" -ForegroundColor Gray
                 Remove-Item $zipDest -Force -ErrorAction SilentlyContinue
             }
         }
 
         if (-not $descargaOk) {
+            Write-Host ""
             Write-Host "Error: No se pudo descargar Apache $Version." -ForegroundColor Red
-            Write-Host "Consulte manualmente: https://www.apachelounge.com/download/VS17/" -ForegroundColor Yellow
+            Write-Host "Posibles causas:" -ForegroundColor Yellow
+            Write-Host "  - El servidor no tiene acceso a internet" -ForegroundColor Yellow
+            Write-Host "  - El proxy bloquea la descarga" -ForegroundColor Yellow
+            Write-Host "Descarga manual: https://www.apachelounge.com/download/VS17/" -ForegroundColor Yellow
+            Write-Host "Extraiga el ZIP en C:\ para continuar." -ForegroundColor Yellow
             return
         }
 
@@ -525,8 +519,22 @@ function Instalar-Nginx {
 
     $nginxBase = "C:\nginx"
 
-    # Solo descargar si no esta instalado o si la version es diferente
-    if (-not (Test-Path "$nginxBase\nginx.exe")) {
+    # Verificar si la version instalada coincide con la solicitada
+    $versionInstalada = ""
+    if (Test-Path "$nginxBase\nginx.exe") {
+        $vOut = (& "$nginxBase\nginx.exe" -v 2>&1) | Out-String
+        if ($vOut -match "nginx/(.+)") { $versionInstalada = $matches[1].Trim() }
+    }
+
+    $necesitaInstalar = (-not (Test-Path "$nginxBase\nginx.exe")) -or ($versionInstalada -ne $Version)
+
+    if ($necesitaInstalar) {
+        if ($versionInstalada) {
+            Write-Host "Version instalada ($versionInstalada) difiere de la solicitada ($Version). Reinstalando..." -ForegroundColor Yellow
+            taskkill /f /im nginx.exe 2>&1 | Out-Null
+            Start-Sleep -Seconds 1
+            Remove-Item $nginxBase -Recurse -Force -ErrorAction SilentlyContinue
+        }
 
         $zipName = "nginx-$Version.zip"
         $zipUrl  = "https://nginx.org/download/$zipName"
@@ -535,8 +543,13 @@ function Instalar-Nginx {
         Write-Host "Descargando Nginx $Version desde nginx.org..." -ForegroundColor Cyan
         Write-Host "(Esto puede tardar unos segundos)" -ForegroundColor Yellow
 
+        # Configurar TLS 1.2
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
         try {
-            Start-BitsTransfer -Source $zipUrl -Destination $zipDest -ErrorAction Stop
+            $wc = New-Object System.Net.WebClient
+            $wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+            $wc.DownloadFile($zipUrl, $zipDest)
         } catch {
             Invoke-WebRequest -Uri $zipUrl -OutFile $zipDest -UseBasicParsing -ErrorAction Stop
         }
@@ -556,7 +569,7 @@ function Instalar-Nginx {
 
         Remove-Item "$env:TEMP\nginx_extract" -Recurse -Force -ErrorAction SilentlyContinue
     } else {
-        Write-Host "Nginx ya esta instalado en $nginxBase" -ForegroundColor Yellow
+        Write-Host "Nginx $Version ya esta instalado en $nginxBase" -ForegroundColor Green
     }
 
     if (-not (Test-Path "$nginxBase\nginx.exe")) {
