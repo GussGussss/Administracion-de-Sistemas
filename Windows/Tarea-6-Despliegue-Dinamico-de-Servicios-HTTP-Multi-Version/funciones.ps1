@@ -231,8 +231,6 @@ function Listar-Versiones-Apache {
             $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
                         [System.Environment]::GetEnvironmentVariable("Path","User")
             Write-Host "Chocolatey instalado correctamente." -ForegroundColor Green
-            Write-Host "Reiniciando computadora..."
-            Restart-Computer -Force
         } catch {
             Write-Host "No se pudo instalar Chocolatey: $($_.Exception.Message)" -ForegroundColor Red
         }
@@ -313,6 +311,8 @@ function Instalar-Apache {
         --yes `
         --no-progress `
         --accept-license `
+        --allow-downgrade `
+        --force `
         2>&1
 
     if ($LASTEXITCODE -ne 0) {
@@ -321,33 +321,21 @@ function Instalar-Apache {
         return
     }
 
-    # Chocolatey con /installLocation:C:\Apache24 crea subcarpeta extra Apache24
-    # Detectar la ruta real donde esta httpd.exe
-    $rutaReal = $null
-    foreach ($candidato in @("$apacheBase\bin\httpd.exe", "$apacheBase\Apache24\bin\httpd.exe")) {
-        if (Test-Path $candidato) { $rutaReal = $candidato; break }
-    }
-    if (-not $rutaReal) {
+    # Verificar que httpd.exe existe (Chocolatey puede instalarlo en subdirectorio)
+    if (-not (Test-Path "$apacheBase\bin\httpd.exe")) {
         $encontrado = Get-ChildItem "C:\" -Filter "httpd.exe" -Recurse -ErrorAction SilentlyContinue |
                       Select-Object -First 1
-        if ($encontrado) { $rutaReal = $encontrado.FullName }
+        if ($encontrado) {
+            $apacheBase = $encontrado.DirectoryName | Split-Path -Parent
+            Write-Host "Apache encontrado en: $apacheBase" -ForegroundColor Yellow
+        } else {
+            Write-Host "Error: httpd.exe no encontrado tras la instalacion." -ForegroundColor Red
+            return
+        }
     }
-    if (-not $rutaReal) {
-        Write-Host "Error: httpd.exe no encontrado tras la instalacion." -ForegroundColor Red
-        return
-    }
-
-    # Recalcular apacheBase desde la ruta real de httpd.exe
-    $apacheBase = Split-Path (Split-Path $rutaReal -Parent) -Parent
-    Write-Host "Apache base detectada: $apacheBase" -ForegroundColor Gray
 
     $confPath  = "$apacheBase\conf\httpd.conf"
     $apacheExe = "$apacheBase\bin\httpd.exe"
-
-    # Corregir ServerRoot en httpd.conf (Chocolatey puede dejar ruta incorrecta)
-    $apacheBaseForward = $apacheBase -replace "\\", "/"
-    (Get-Content $confPath) -replace 'ServerRoot "[^"]*"', "ServerRoot `"$apacheBaseForward`"" |
-        Set-Content $confPath
 
     $versionReal = (& $apacheExe -v 2>&1) | Select-String "Apache/" |
                    ForEach-Object { ($_.ToString() -split "/")[1] -split " " | Select-Object -First 1 }
@@ -363,9 +351,47 @@ function Instalar-Apache {
 
     Crear-Usuario-Restringido -Servicio "Apache" -Directorio $webRoot
 
+    # Actualizar ServerRoot en httpd.conf (Chocolatey puede dejarlo incorrecto)
+    $confContent = Get-Content $confPath -Raw
+    if ($confContent -match 'Define SRVROOT "([^"]+)"') {
+        $srvrootActual = $matches[1]
+        if ($srvrootActual -ne $apacheBase) {
+            Write-Host "Corrigiendo ServerRoot: $srvrootActual -> $apacheBase" -ForegroundColor Yellow
+            $confContent = $confContent -replace [regex]::Escape("Define SRVROOT `"$srvrootActual`""), "Define SRVROOT `"$apacheBase`""
+            [System.IO.File]::WriteAllText($confPath, $confContent)
+        }
+    }
+
+    # Registrar e iniciar servicio
+    Write-Host "Registrando servicio Apache..." -ForegroundColor Cyan
     & "$apacheBase\bin\httpd.exe" -k install 2>&1 | Out-Null
+    Start-Sleep -Seconds 2
+
+    Write-Host "Iniciando servicio Apache..." -ForegroundColor Cyan
     Start-Service -Name "Apache2.4" -ErrorAction SilentlyContinue
-    if (-not $?) { & "$apacheBase\bin\httpd.exe" -k start 2>&1 | Out-Null }
+    Start-Sleep -Seconds 3
+
+    # Verificar que esta escuchando en el puerto
+    $escuchando = Test-NetConnection -ComputerName "127.0.0.1" -Port $Puerto -InformationLevel Quiet -ErrorAction SilentlyContinue
+    if ($escuchando) {
+        Write-Host "Apache escuchando en puerto $Puerto correctamente." -ForegroundColor Green
+    } else {
+        Write-Host "ADVERTENCIA: Apache no responde en puerto $Puerto." -ForegroundColor Yellow
+        Write-Host "Revisando error.log..." -ForegroundColor Gray
+        $errorLog = "$apacheBase\logs\error.log"
+        if (Test-Path $errorLog) {
+            Get-Content $errorLog -Tail 8 | ForEach-Object { Write-Host "  $_" -ForegroundColor Gray }
+        }
+        # Intentar arranque directo
+        & "$apacheBase\bin\httpd.exe" -k start 2>&1 | Out-Null
+        Start-Sleep -Seconds 3
+        $escuchando2 = Test-NetConnection -ComputerName "127.0.0.1" -Port $Puerto -InformationLevel Quiet -ErrorAction SilentlyContinue
+        if ($escuchando2) {
+            Write-Host "Apache arrancado correctamente." -ForegroundColor Green
+        } else {
+            Write-Host "Error: Apache no pudo iniciar. Revise $errorLog" -ForegroundColor Red
+        }
+    }
 
     Gestionar-Firewall -Puerto $Puerto
 
@@ -393,11 +419,9 @@ TraceEnable Off
     Header always set X-Content-Type-Options "nosniff"
 </IfModule>
 
-<Directory "/">
-    <LimitExcept GET POST HEAD>
-        Deny from all
-    </LimitExcept>
-</Directory>
+<LimitExcept GET POST HEAD>
+    Deny from all
+</LimitExcept>
 "@ | Set-Content $secConf -Encoding UTF8
 
     $confPath = "$ApacheBase\conf\httpd.conf"
