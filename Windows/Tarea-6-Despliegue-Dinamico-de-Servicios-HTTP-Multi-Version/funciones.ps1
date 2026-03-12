@@ -228,9 +228,38 @@ function Listar-Versiones-Apache {
             [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
             Set-ExecutionPolicy Bypass -Scope Process -Force
             Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
-            $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
-                        [System.Environment]::GetEnvironmentVariable("Path","User")
-            Write-Host "Chocolatey instalado correctamente." -ForegroundColor Green
+
+            # Chocolatey requiere reinicio para que el PATH quede disponible globalmente.
+            # Creamos una tarea programada para continuar automaticamente tras el reinicio.
+            $scriptPath = $MyInvocation.ScriptName
+            if (-not $scriptPath) {
+                # Fallback: buscar main.ps1 en la carpeta del modulo actual
+                $scriptPath = Join-Path (Split-Path $PSCommandPath -Parent) "main.ps1"
+            }
+
+            $taskName   = "HTTP-Deploy-Resume-Apache"
+            $psExe      = "C:\Windows\System32\WindowsPowerShell1.0\powershell.exe"
+            $taskArgs   = "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`" -AutoResume Apache"
+
+            # Registrar tarea programada que se ejecuta una sola vez al iniciar sesion como Administrator
+            $action   = New-ScheduledTaskAction  -Execute $psExe -Argument $taskArgs
+            $trigger  = New-ScheduledTaskTrigger -AtLogOn -User "Administrator"
+            $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 30) -DeleteExpiredTaskAfter (New-TimeSpan -Seconds 1)
+            Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings `
+                -RunLevel Highest -Force | Out-Null
+
+            Write-Host ""
+            Write-Host "========================================" -ForegroundColor Yellow
+            Write-Host " Chocolatey instalado correctamente.   " -ForegroundColor Green
+            Write-Host " El servidor se reiniciara en 10 seg.  " -ForegroundColor Yellow
+            Write-Host " Al iniciar sesion, el script Apache   " -ForegroundColor Yellow
+            Write-Host " continuara automaticamente.           " -ForegroundColor Yellow
+            Write-Host "========================================" -ForegroundColor Yellow
+            Write-Host ""
+            Start-Sleep -Seconds 10
+            Restart-Computer -Force
+            exit 0
+
         } catch {
             Write-Host "No se pudo instalar Chocolatey: $($_.Exception.Message)" -ForegroundColor Red
         }
