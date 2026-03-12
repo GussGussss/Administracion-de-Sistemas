@@ -321,16 +321,26 @@ function Instalar-Apache {
         return
     }
 
-    # Verificar que httpd.exe existe (Chocolatey puede instalarlo en subdirectorio)
+    # Verificar que httpd.exe existe — Chocolatey a veces crea subcarpeta extra (C:\Apache24\Apache24)
     if (-not (Test-Path "$apacheBase\bin\httpd.exe")) {
-        $encontrado = Get-ChildItem "C:\" -Filter "httpd.exe" -Recurse -ErrorAction SilentlyContinue |
+        $encontrado = Get-ChildItem "C:\" -Filter "httpd.exe" -Recurse -Depth 4 -ErrorAction SilentlyContinue |
                       Select-Object -First 1
         if ($encontrado) {
-            $apacheBase = $encontrado.DirectoryName | Split-Path -Parent
+            # DirectoryName = ...\bin  →  Parent = carpeta raiz de Apache
+            $apacheBase = Split-Path $encontrado.DirectoryName -Parent
             Write-Host "Apache encontrado en: $apacheBase" -ForegroundColor Yellow
         } else {
             Write-Host "Error: httpd.exe no encontrado tras la instalacion." -ForegroundColor Red
             return
+        }
+    }
+
+    # Doble verificacion: si bin\httpd.exe no esta directamente en $apacheBase, buscar subcarpeta
+    if (-not (Test-Path "$apacheBase\bin\httpd.exe")) {
+        $sub = Get-ChildItem $apacheBase -Directory | Where-Object { Test-Path "$($_.FullName)\bin\httpd.exe" } | Select-Object -First 1
+        if ($sub) {
+            $apacheBase = $sub.FullName
+            Write-Host "Ajustando ruta Apache a: $apacheBase" -ForegroundColor Yellow
         }
     }
 
