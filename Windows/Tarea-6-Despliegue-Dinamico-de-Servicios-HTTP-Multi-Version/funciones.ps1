@@ -319,6 +319,26 @@ function Instalar-Apache {
 
         $candidatos = $urlsMap[$Version]
 
+        # Verificar si hay un ZIP pre-descargado manualmente en C:pache.zip
+        if (Test-Path "C:\apache.zip") {
+            $bytes = [System.IO.File]::ReadAllBytes("C:\apache.zip")
+            if ($bytes.Length -gt 100000 -and $bytes[0] -eq 0x50 -and $bytes[1] -eq 0x4B) {
+                Write-Host "Usando ZIP pre-descargado encontrado en C:\apache.zip" -ForegroundColor Green
+                Copy-Item "C:\apache.zip" $zipDest -Force
+            }
+        }
+
+        # Si ya tenemos el ZIP valido, saltar la descarga
+        $yaDescargado = $false
+        if (Test-Path $zipDest) {
+            $bytesCheck = [System.IO.File]::ReadAllBytes($zipDest)
+            if ($bytesCheck.Length -gt 100000 -and $bytesCheck[0] -eq 0x50 -and $bytesCheck[1] -eq 0x4B) {
+                Write-Host "ZIP valido encontrado, omitiendo descarga." -ForegroundColor Green
+                $yaDescargado = $true
+            }
+        }
+
+        if (-not $yaDescargado) {
         Write-Host "Descargando Apache $Version..." -ForegroundColor Cyan
 
         # Configurar TLS 1.2 explicitamente (requerido por apachelounge.com)
@@ -328,21 +348,30 @@ function Instalar-Apache {
         foreach ($url in $candidatos) {
             try {
                 Write-Host "Descargando desde: $url" -ForegroundColor Gray
-                $wc = New-Object System.Net.WebClient
-                $wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-                $wc.DownloadFile($url, $zipDest)
+                Remove-Item $zipDest -Force -ErrorAction SilentlyContinue
+
+                # Usar Invoke-WebRequest con headers de navegador (igual que nginx.org — funciona con apachelounge)
+                $headers = @{
+                    "User-Agent"      = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                    "Accept"          = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+                    "Accept-Language" = "en-US,en;q=0.5"
+                    "Referer"         = "https://www.apachelounge.com/download/"
+                }
+                Invoke-WebRequest -Uri $url -OutFile $zipDest -Headers $headers -UseBasicParsing -ErrorAction Stop
 
                 if (Test-Path $zipDest) {
                     $bytes = [System.IO.File]::ReadAllBytes($zipDest)
-                    if ($bytes.Length -gt 1000 -and $bytes[0] -eq 0x50 -and $bytes[1] -eq 0x4B) {
+                    if ($bytes.Length -gt 100000 -and $bytes[0] -eq 0x50 -and $bytes[1] -eq 0x4B) {
                         Write-Host "Descarga correcta ($([math]::Round($bytes.Length/1MB,1)) MB)." -ForegroundColor Green
                         $descargaOk = $true
                         break
+                    } else {
+                        Write-Host "Archivo invalido o incompleto, probando siguiente URL..." -ForegroundColor Gray
+                        Remove-Item $zipDest -Force -ErrorAction SilentlyContinue
                     }
                 }
-                Remove-Item $zipDest -Force -ErrorAction SilentlyContinue
             } catch {
-                Write-Host "Fallo: $_" -ForegroundColor Gray
+                Write-Host "Fallo: $($_.Exception.Message)" -ForegroundColor Gray
                 Remove-Item $zipDest -Force -ErrorAction SilentlyContinue
             }
         }
@@ -350,13 +379,17 @@ function Instalar-Apache {
         if (-not $descargaOk) {
             Write-Host ""
             Write-Host "Error: No se pudo descargar Apache $Version." -ForegroundColor Red
-            Write-Host "Posibles causas:" -ForegroundColor Yellow
-            Write-Host "  - El servidor no tiene acceso a internet" -ForegroundColor Yellow
-            Write-Host "  - El proxy bloquea la descarga" -ForegroundColor Yellow
-            Write-Host "Descarga manual: https://www.apachelounge.com/download/VS17/" -ForegroundColor Yellow
-            Write-Host "Extraiga el ZIP en C:\ para continuar." -ForegroundColor Yellow
+            Write-Host "El servidor rechaza la conexion a apachelounge.com." -ForegroundColor Yellow
+            Write-Host ""
+            Write-Host "SOLUCION MANUAL:" -ForegroundColor Cyan
+            Write-Host "  1. Descargue el ZIP desde su PC: https://www.apachelounge.com/download/VS17/" -ForegroundColor White
+            Write-Host "  2. Copielo al servidor con SCP:" -ForegroundColor White
+            Write-Host "     scp httpd-$Version-*-win64-VS17.zip Administrator@$($env:COMPUTERNAME):C:pache.zip" -ForegroundColor White
+            Write-Host "  3. Vuelva a ejecutar el script — detectara el ZIP en C:pache.zip" -ForegroundColor White
             return
         }
+
+        } # fin if -not $yaDescargado
 
         Write-Host "Extrayendo archivos..." -ForegroundColor Cyan
 
@@ -553,6 +586,8 @@ function Instalar-Nginx {
         } catch {
             Invoke-WebRequest -Uri $zipUrl -OutFile $zipDest -UseBasicParsing -ErrorAction Stop
         }
+
+        } # fin if -not $yaDescargado
 
         Write-Host "Extrayendo archivos..." -ForegroundColor Cyan
 
