@@ -82,30 +82,9 @@ function Gestionar-Firewall {
 # Verificar e instalar winget si no esta disponible
 # ============================================================
 function Verificar-Winget {
+    # Windows Server Core no soporta AppX/winget de forma nativa.
+    # Si ya esta disponible se usa; si no, se usan versiones predefinidas sin intentar instalar nada.
     if (Get-Command winget -ErrorAction SilentlyContinue) { return $true }
-
-    Write-Host "winget no encontrado. Intentando instalar dependencias..." -ForegroundColor Yellow
-
-    try {
-        $vcLibUrl  = "https://aka.ms/Microsoft.VCLibs.x64.14.00.Desktop.appx"
-        $vcLibDest = "$env:TEMP\VCLibs.appx"
-        Invoke-WebRequest -Uri $vcLibUrl -OutFile $vcLibDest -UseBasicParsing -ErrorAction Stop
-        Add-AppxPackage -Path $vcLibDest -ErrorAction SilentlyContinue
-
-        $wingetUrl  = "https://github.com/microsoft/winget-cli/releases/latest/download/Microsoft.DesktopAppInstaller_8wekyb3d8bbwe.msixbundle"
-        $wingetDest = "$env:TEMP\winget.msixbundle"
-        Invoke-WebRequest -Uri $wingetUrl -OutFile $wingetDest -UseBasicParsing -ErrorAction Stop
-        Add-AppxPackage -Path $wingetDest -ErrorAction SilentlyContinue
-
-        if (Get-Command winget -ErrorAction SilentlyContinue) {
-            Write-Host "winget instalado correctamente." -ForegroundColor Green
-            return $true
-        }
-    } catch {
-        # Fallo de red o instalacion — se usaran versiones predefinidas
-    }
-
-    Write-Host "Se usaran versiones predefinidas (winget no disponible)." -ForegroundColor Yellow
     return $false
 }
 
