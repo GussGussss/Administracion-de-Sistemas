@@ -237,16 +237,16 @@ function Listar-Versiones-Apache {
                 $scriptPath = Join-Path (Split-Path $PSCommandPath -Parent) "main.ps1"
             }
 
-            $taskName   = "HTTP-Deploy-Resume-Apache"
-            $psExe      = "C:\Windows\System32\WindowsPowerShell1.0\powershell.exe"
-            $taskArgs   = "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`" -AutoResume Apache"
+            $taskName = "HTTP-Deploy-Resume-Apache"
 
-            # Registrar tarea programada que se ejecuta una sola vez al iniciar sesion como Administrator
-            $action   = New-ScheduledTaskAction  -Execute $psExe -Argument $taskArgs
-            $trigger  = New-ScheduledTaskTrigger -AtLogOn -User "Administrator"
-            $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 30) -DeleteExpiredTaskAfter (New-TimeSpan -Seconds 1)
-            Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings `
-                -RunLevel Highest -Force | Out-Null
+            # Usar schtasks.exe para evitar error "Illegal xml character"
+            # cuando la ruta del script contiene guiones y espacios
+            $psExe   = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+            $runArgs = "-NoProfile -ExecutionPolicy Bypass -File \"$scriptPath\" -AutoResume Apache"
+            $cmdLine = "cmd.exe /C \"$psExe\" $runArgs"
+
+            & schtasks.exe /Create /TN "$taskName" /TR $cmdLine `
+                /SC ONLOGON /RU "Administrator" /RL HIGHEST /F | Out-Null
 
             Write-Host ""
             Write-Host "========================================" -ForegroundColor Yellow
