@@ -319,21 +319,33 @@ function Instalar-Apache {
         return
     }
 
-    # Verificar que httpd.exe existe (Chocolatey puede instalarlo en subdirectorio)
-    if (-not (Test-Path "$apacheBase\bin\httpd.exe")) {
+    # Chocolatey con /installLocation:C:\Apache24 crea subcarpeta extra Apache24
+    # Detectar la ruta real donde esta httpd.exe
+    $rutaReal = $null
+    foreach ($candidato in @("$apacheBase\bin\httpd.exe", "$apacheBase\Apache24\bin\httpd.exe")) {
+        if (Test-Path $candidato) { $rutaReal = $candidato; break }
+    }
+    if (-not $rutaReal) {
         $encontrado = Get-ChildItem "C:\" -Filter "httpd.exe" -Recurse -ErrorAction SilentlyContinue |
                       Select-Object -First 1
-        if ($encontrado) {
-            $apacheBase = $encontrado.DirectoryName | Split-Path -Parent
-            Write-Host "Apache encontrado en: $apacheBase" -ForegroundColor Yellow
-        } else {
-            Write-Host "Error: httpd.exe no encontrado tras la instalacion." -ForegroundColor Red
-            return
-        }
+        if ($encontrado) { $rutaReal = $encontrado.FullName }
     }
+    if (-not $rutaReal) {
+        Write-Host "Error: httpd.exe no encontrado tras la instalacion." -ForegroundColor Red
+        return
+    }
+
+    # Recalcular apacheBase desde la ruta real de httpd.exe
+    $apacheBase = Split-Path (Split-Path $rutaReal -Parent) -Parent
+    Write-Host "Apache base detectada: $apacheBase" -ForegroundColor Gray
 
     $confPath  = "$apacheBase\conf\httpd.conf"
     $apacheExe = "$apacheBase\bin\httpd.exe"
+
+    # Corregir ServerRoot en httpd.conf (Chocolatey puede dejar ruta incorrecta)
+    $apacheBaseForward = $apacheBase -replace "\\", "/"
+    (Get-Content $confPath) -replace 'ServerRoot "[^"]*"', "ServerRoot `"$apacheBaseForward`"" |
+        Set-Content $confPath
 
     $versionReal = (& $apacheExe -v 2>&1) | Select-String "Apache/" |
                    ForEach-Object { ($_.ToString() -split "/")[1] -split " " | Select-Object -First 1 }
