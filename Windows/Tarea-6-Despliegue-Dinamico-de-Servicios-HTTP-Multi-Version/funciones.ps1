@@ -295,27 +295,43 @@ function Instalar-Apache {
         # Apache Lounge: distribucion oficial Win64 sin VC redistribuibles extra
         # URL directa del zip segun version
         $urlBase = "https://www.apachelounge.com/download/VS17/binaries"
-        $zipName = "httpd-$Version-240101-win64-VS17.zip"
-        $zipUrl  = "$urlBase/$zipName"
         $zipDest = "$env:TEMP\apache.zip"
+
+        # Apache Lounge cambia el sufijo de fecha en cada build — probar varios patrones
+        $candidatos = @(
+            "$urlBase/httpd-$Version-win64-VS17.zip",
+            "$urlBase/httpd-$Version-250101-win64-VS17.zip",
+            "$urlBase/httpd-$Version-240101-win64-VS17.zip",
+            "$urlBase/httpd-$Version-230101-win64-VS17.zip"
+        )
 
         Write-Host "Descargando Apache $Version desde apachelounge.com..." -ForegroundColor Cyan
         Write-Host "(Esto puede tardar unos segundos)" -ForegroundColor Yellow
 
-        try {
-            # Usar BITS para descarga en background con progreso visible
-            Start-BitsTransfer -Source $zipUrl -Destination $zipDest -ErrorAction Stop
-        } catch {
-            # Fallback a Invoke-WebRequest si BITS falla
+        $descargaOk = $false
+        foreach ($url in $candidatos) {
             try {
-                Invoke-WebRequest -Uri $zipUrl -OutFile $zipDest -UseBasicParsing -ErrorAction Stop
+                Write-Host "Probando: $url" -ForegroundColor Gray
+                Invoke-WebRequest -Uri $url -OutFile $zipDest -UseBasicParsing -ErrorAction Stop
+
+                # Verificar que el archivo descargado es un ZIP valido (magic bytes PK)
+                $bytes = [System.IO.File]::ReadAllBytes($zipDest)
+                if ($bytes[0] -eq 0x50 -and $bytes[1] -eq 0x4B) {
+                    Write-Host "Descarga correcta." -ForegroundColor Green
+                    $descargaOk = $true
+                    break
+                } else {
+                    Remove-Item $zipDest -Force -ErrorAction SilentlyContinue
+                }
             } catch {
-                # Intentar URL alternativa (Apache Lounge cambia nombres de zip)
-                $zipName2 = "httpd-$Version-win64-VS17.zip"
-                $zipUrl2  = "$urlBase/$zipName2"
-                Write-Host "Intentando URL alternativa..." -ForegroundColor Yellow
-                Invoke-WebRequest -Uri $zipUrl2 -OutFile $zipDest -UseBasicParsing -ErrorAction Stop
+                Remove-Item $zipDest -Force -ErrorAction SilentlyContinue
             }
+        }
+
+        if (-not $descargaOk) {
+            Write-Host "Error: No se pudo descargar Apache $Version desde apachelounge.com." -ForegroundColor Red
+            Write-Host "Verifique la version en: https://www.apachelounge.com/download/" -ForegroundColor Yellow
+            return
         }
 
         Write-Host "Extrayendo archivos..." -ForegroundColor Cyan
@@ -565,8 +581,29 @@ http {
 
     Crear-Usuario-Restringido -Servicio "Nginx" -Directorio $webRoot
 
-    # Iniciar nginx
-    Start-Process -FilePath $nginxExe -WorkingDirectory $nginxBase -WindowStyle Hidden
+    # Iniciar nginx — matar instancias previas y arrancar de nuevo
+    taskkill /f /im nginx.exe 2>&1 | Out-Null
+    Start-Sleep -Seconds 1
+
+    $proc = Start-Process -FilePath $nginxExe -WorkingDirectory $nginxBase -WindowStyle Hidden -PassThru
+    Start-Sleep -Seconds 3
+
+    # Verificar que nginx esta escuchando
+    $escuchando = Test-NetConnection -ComputerName localhost -Port $Puerto -WarningAction SilentlyContinue
+    if (-not $escuchando.TcpTestSucceeded) {
+        Write-Host "Advertencia: Nginx no responde en el puerto $Puerto." -ForegroundColor Yellow
+        Write-Host "Revisando logs de error..." -ForegroundColor Yellow
+        $logPath = "$nginxBase\logs\error.log"
+        if (Test-Path $logPath) {
+            Get-Content $logPath -Tail 5 | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+        }
+        # Intentar iniciar manualmente con salida de error visible
+        Write-Host "Reintentando inicio de Nginx..." -ForegroundColor Cyan
+        & $nginxExe -p $nginxBase 2>&1 | Out-Null
+        Start-Sleep -Seconds 2
+    } else {
+        Write-Host "Nginx escuchando en puerto $Puerto." -ForegroundColor Green
+    }
 
     Gestionar-Firewall -Puerto $Puerto
 
