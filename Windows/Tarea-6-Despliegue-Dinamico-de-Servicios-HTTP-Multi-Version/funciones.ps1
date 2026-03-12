@@ -254,10 +254,10 @@ function Listar-Versiones-Apache {
         } catch {}
     }
 
-    # Versiones predefinidas como fallback
-    if (-not $latest) { $latest = "2.4.62" }
-    $lts    = "2.4.58"
-    $oldest = "2.4.54"
+    # Versiones con fechas de build conocidas en apachelounge.com
+    if (-not $latest) { $latest = "2.4.63" }
+    $lts    = "2.4.62"
+    $oldest = "2.4.61"
 
     Write-Host ""
     Write-Host "Versiones disponibles de Apache HTTP Server:" -ForegroundColor Cyan
@@ -297,24 +297,54 @@ function Instalar-Apache {
         $urlBase = "https://www.apachelounge.com/download/VS17/binaries"
         $zipDest = "$env:TEMP\apache.zip"
 
-        # Apache Lounge cambia el sufijo de fecha en cada build — probar varios patrones
-        $candidatos = @(
-            "$urlBase/httpd-$Version-win64-VS17.zip",
-            "$urlBase/httpd-$Version-250101-win64-VS17.zip",
-            "$urlBase/httpd-$Version-240101-win64-VS17.zip",
-            "$urlBase/httpd-$Version-230101-win64-VS17.zip"
-        )
+        # Fechas de build conocidas por version (Apache Lounge usa YYMMDD en el nombre)
+        $buildDates = @{
+            "2.4.63" = "250207"
+            "2.4.62" = "240904"
+            "2.4.61" = "240703"
+            "2.4.58" = "231120"
+            "2.4.57" = "230606"
+            "2.4.54" = "220920"
+        }
 
         Write-Host "Descargando Apache $Version desde apachelounge.com..." -ForegroundColor Cyan
-        Write-Host "(Esto puede tardar unos segundos)" -ForegroundColor Yellow
+
+        # Construir lista de candidatos: fecha conocida primero, luego scraping
+        $candidatos = @()
+
+        if ($buildDates.ContainsKey($Version)) {
+            $fecha = $buildDates[$Version]
+            $candidatos += "$urlBase/httpd-$Version-$fecha-win64-VS17.zip"
+        }
+
+        # Scraping de la pagina para encontrar la URL real
+        try {
+            Write-Host "Consultando pagina de descargas de Apache Lounge..." -ForegroundColor Gray
+            $pagina = Invoke-WebRequest -Uri "https://www.apachelounge.com/download/VS17/" -UseBasicParsing -ErrorAction Stop
+            $matches2 = [regex]::Matches($pagina.Content, "httpd-$([regex]::Escape($Version))-\d{6}-win64-VS17\.zip")
+            foreach ($m in $matches2) {
+                $urlCandidata = "$urlBase/$($m.Value)"
+                if ($candidatos -notcontains $urlCandidata) {
+                    $candidatos += $urlCandidata
+                }
+            }
+        } catch {
+            Write-Host "No se pudo consultar la pagina de descargas." -ForegroundColor Gray
+        }
+
+        if ($candidatos.Count -eq 0) {
+            Write-Host "Error: No se encontro URL de descarga para Apache $Version." -ForegroundColor Red
+            Write-Host "Versiones disponibles con fecha conocida: $($buildDates.Keys -join ', ')" -ForegroundColor Yellow
+            Write-Host "Consulte: https://www.apachelounge.com/download/VS17/" -ForegroundColor Yellow
+            return
+        }
 
         $descargaOk = $false
         foreach ($url in $candidatos) {
             try {
-                Write-Host "Probando: $url" -ForegroundColor Gray
+                Write-Host "Descargando: $url" -ForegroundColor Gray
                 Invoke-WebRequest -Uri $url -OutFile $zipDest -UseBasicParsing -ErrorAction Stop
 
-                # Verificar que el archivo descargado es un ZIP valido (magic bytes PK)
                 $bytes = [System.IO.File]::ReadAllBytes($zipDest)
                 if ($bytes[0] -eq 0x50 -and $bytes[1] -eq 0x4B) {
                     Write-Host "Descarga correcta." -ForegroundColor Green
@@ -329,8 +359,8 @@ function Instalar-Apache {
         }
 
         if (-not $descargaOk) {
-            Write-Host "Error: No se pudo descargar Apache $Version desde apachelounge.com." -ForegroundColor Red
-            Write-Host "Verifique la version en: https://www.apachelounge.com/download/" -ForegroundColor Yellow
+            Write-Host "Error: No se pudo descargar Apache $Version." -ForegroundColor Red
+            Write-Host "Consulte manualmente: https://www.apachelounge.com/download/VS17/" -ForegroundColor Yellow
             return
         }
 
@@ -575,7 +605,8 @@ http {
     }
 }
 "@
-    $nginxConf | Set-Content $confPath -Encoding UTF8
+    # Escribir sin BOM para que nginx pueda leer el archivo correctamente
+    [System.IO.File]::WriteAllText($confPath, $nginxConf, [System.Text.UTF8Encoding]::new($false))
 
     Crear-Index -Servicio "Nginx" -Version $Version -Puerto $Puerto -Directorio $webRoot
 
