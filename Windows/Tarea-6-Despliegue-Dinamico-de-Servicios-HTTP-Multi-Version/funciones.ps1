@@ -431,7 +431,7 @@ TraceEnable Off
 
 <Directory "${SRVROOT}/htdocs">
     <LimitExcept GET POST HEAD>
-        Deny from all
+        Require all denied
     </LimitExcept>
 </Directory>
 "@ | Set-Content $secConf -Encoding UTF8
