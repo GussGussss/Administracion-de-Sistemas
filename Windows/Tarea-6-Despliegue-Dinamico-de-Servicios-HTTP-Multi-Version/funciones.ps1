@@ -215,26 +215,54 @@ function Configurar-Seguridad-IIS {
 # ============================================================
 # Apache Win64: Listar versiones
 # ============================================================
+
 function Listar-Versiones-Apache {
 
     Write-Host ""
     Write-Host "Consultando versiones disponibles de Apache..." -ForegroundColor Cyan
 
-    $latest = ""
-
-    $wingetOk = Verificar-Winget
-    if ($wingetOk) {
+    # Instalar Chocolatey si no esta presente (gestor de paquetes para Windows Server 2019)
+    if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
+        Write-Host "Instalando Chocolatey (gestor de paquetes)..." -ForegroundColor Yellow
         try {
-            $raw = winget show Apache.ApacheHTTPServer 2>&1 | Out-String
-            $versionLine = ($raw -split "`n") | Where-Object { $_ -match "Version\s*:" } | Select-Object -First 1
-            if ($versionLine -match ":\s*(.+)") { $latest = $matches[1].Trim() }
-        } catch {}
+            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+            Set-ExecutionPolicy Bypass -Scope Process -Force
+            Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+            $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
+                        [System.Environment]::GetEnvironmentVariable("Path","User")
+            Write-Host "Chocolatey instalado correctamente." -ForegroundColor Green
+        } catch {
+            Write-Host "No se pudo instalar Chocolatey: $($_.Exception.Message)" -ForegroundColor Red
+        }
     }
 
-    # Versiones con fechas de build conocidas en apachelounge.com
-    if (-not $latest) { $latest = "2.4.63" }
-    $lts    = "2.4.62"
-    $oldest = "2.4.61"
+    # Consultar versiones disponibles via Chocolatey
+    $latest = ""
+    $lts    = ""
+    $oldest = ""
+
+    if (Get-Command choco -ErrorAction SilentlyContinue) {
+        try {
+            Write-Host "Consultando repositorio de Chocolatey..." -ForegroundColor Gray
+            $raw = choco search apache-httpd --all-versions --limit-output 2>&1 | Out-String
+            $versiones = ($raw -split "`n") |
+                Where-Object { $_ -match "^apache-httpd" } |
+                ForEach-Object { ($_ -split "[|]")[1].Trim() } |
+                Where-Object { $_ -match "^\d+\.\d+\.\d+$" } |
+                Sort-Object { [Version]$_ } -Descending
+
+            if ($versiones.Count -ge 1) { $latest = $versiones[0] }
+            if ($versiones.Count -ge 2) { $lts    = $versiones[1] }
+            if ($versiones.Count -ge 3) { $oldest = $versiones[$versiones.Count - 1] }
+        } catch {
+            Write-Host "Chocolatey no pudo listar versiones: $($_.Exception.Message)" -ForegroundColor Gray
+        }
+    }
+
+    # Fallback con versiones conocidas de Chocolatey
+    if (-not $latest) { $latest = "2.4.55" }
+    if (-not $lts)    { $lts    = "2.4.54" }
+    if (-not $oldest) { $oldest = "2.4.52" }
 
     Write-Host ""
     Write-Host "Versiones disponibles de Apache HTTP Server:" -ForegroundColor Cyan
@@ -248,127 +276,60 @@ function Listar-Versiones-Apache {
     $global:APACHE_OLDEST = $oldest
 }
 
-# ============================================================
-# Apache Win64: Instalar y configurar
-# ============================================================
 function Instalar-Apache {
-    param(
-        [string]$Version,
-        [int]$Puerto
-    )
+    param([string]$Version, [int]$Puerto)
 
-    Write-Host "Instalando Apache HTTP Server $Version..." -ForegroundColor Cyan
-
-    Stop-Service -Name "Apache*" -ErrorAction SilentlyContinue
-    Stop-Service -Name "httpd*"  -ErrorAction SilentlyContinue
-    taskkill /f /im httpd.exe 2>&1 | Out-Null
+    Write-Host ""
+    Write-Host "Instalando Apache HTTP Server $Version via Chocolatey..." -ForegroundColor Cyan
 
     $apacheBase = "C:\Apache24"
 
-    if (-not (Test-Path "$apacheBase\bin\httpd.exe")) {
-
-        $urlBase = "https://www.apachelounge.com/download/VS17/binaries"
-        $zipDest = "$env:TEMP\apache.zip"
-
-        # URLs exactas verificadas por version (Apache Lounge usa fecha de build en el nombre)
-        $urlsMap = @{
-            "2.4.63" = @("$urlBase/httpd-2.4.63-250207-win64-VS17.zip")
-            "2.4.62" = @("$urlBase/httpd-2.4.62-240904-win64-VS17.zip")
-            "2.4.61" = @("$urlBase/httpd-2.4.61-240703-win64-VS17.zip")
-        }
-
-        if (-not $urlsMap.ContainsKey($Version)) {
-            Write-Host "Error: Version $Version no tiene URL configurada." -ForegroundColor Red
-            return
-        }
-
-        $candidatos = $urlsMap[$Version]
-
-        # Detectar ZIP pre-descargado manualmente en C:\apache.zip
-        if (Test-Path "C:\apache.zip") {
-            $b = [System.IO.File]::ReadAllBytes("C:\apache.zip")
-            if ($b.Length -gt 100000 -and $b[0] -eq 0x50 -and $b[1] -eq 0x4B) {
-                Write-Host "Usando ZIP pre-descargado en C:\apache.zip" -ForegroundColor Green
-                Copy-Item "C:\apache.zip" $zipDest -Force
-            }
-        }
-
-        # Verificar si ya tenemos un ZIP valido en TEMP
-        $yaDescargado = $false
-        if (Test-Path $zipDest) {
-            $b2 = [System.IO.File]::ReadAllBytes($zipDest)
-            if ($b2.Length -gt 100000 -and $b2[0] -eq 0x50 -and $b2[1] -eq 0x4B) {
-                Write-Host "ZIP valido encontrado, omitiendo descarga." -ForegroundColor Green
-                $yaDescargado = $true
-            }
-        }
-
-        if (-not $yaDescargado) {
-            Write-Host "Descargando Apache $Version..." -ForegroundColor Cyan
-            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-
-            $descargaOk = $false
-            foreach ($url in $candidatos) {
-                try {
-                    Write-Host "Desde: $url" -ForegroundColor Gray
-                    Remove-Item $zipDest -Force -ErrorAction SilentlyContinue
-
-                    $headers = @{
-                        "User-Agent"      = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                        "Accept"          = "text/html,application/xhtml+xml,*/*;q=0.8"
-                        "Accept-Language" = "en-US,en;q=0.5"
-                        "Referer"         = "https://www.apachelounge.com/download/"
-                    }
-                    Invoke-WebRequest -Uri $url -OutFile $zipDest -Headers $headers -UseBasicParsing -ErrorAction Stop
-
-                    if (Test-Path $zipDest) {
-                        $b3 = [System.IO.File]::ReadAllBytes($zipDest)
-                        if ($b3.Length -gt 100000 -and $b3[0] -eq 0x50 -and $b3[1] -eq 0x4B) {
-                            Write-Host "Descarga correcta ($([math]::Round($b3.Length/1MB,1)) MB)." -ForegroundColor Green
-                            $descargaOk = $true
-                            break
-                        }
-                        Remove-Item $zipDest -Force -ErrorAction SilentlyContinue
-                    }
-                } catch {
-                    Write-Host "Fallo: $($_.Exception.Message)" -ForegroundColor Gray
-                    Remove-Item $zipDest -Force -ErrorAction SilentlyContinue
-                }
-            }
-
-            if (-not $descargaOk) {
-                Write-Host ""
-                Write-Host "Error: No se pudo descargar Apache $Version." -ForegroundColor Red
-                Write-Host "SOLUCION MANUAL:" -ForegroundColor Cyan
-                Write-Host "  1. Descargue el ZIP desde su PC: https://www.apachelounge.com/download/VS17/" -ForegroundColor White
-                Write-Host "  2. Copielo al servidor con SCP:" -ForegroundColor White
-                Write-Host "     scp httpd-$Version-*-win64-VS17.zip Administrator@SERVIDOR:C:\apache.zip" -ForegroundColor White
-                Write-Host "  3. Ejecute el script de nuevo -- detectara C:\apache.zip automaticamente." -ForegroundColor White
-                return
-            }
-        }
-
-        Write-Host "Extrayendo archivos..." -ForegroundColor Cyan
-        Expand-Archive -Path $zipDest -DestinationPath "$env:TEMP\apache_extract" -Force
-        Remove-Item $zipDest -Force -ErrorAction SilentlyContinue
-
-        $extractedDir = Get-ChildItem "$env:TEMP\apache_extract" -Filter "Apache24" -Directory | Select-Object -First 1
-        if (-not $extractedDir) {
-            $extractedDir = Get-ChildItem "$env:TEMP\apache_extract" -Directory | Select-Object -First 1
-        }
-        if ($extractedDir) {
-            if (Test-Path $apacheBase) { Remove-Item $apacheBase -Recurse -Force }
-            Move-Item $extractedDir.FullName $apacheBase
-        }
-        Remove-Item "$env:TEMP\apache_extract" -Recurse -Force -ErrorAction SilentlyContinue
-
-    } else {
-        Write-Host "Apache ya esta instalado en $apacheBase" -ForegroundColor Yellow
+    # Verificar que Chocolatey esta disponible
+    if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
+        Write-Host "Error: Chocolatey no disponible. Ejecute primero la opcion de listar versiones." -ForegroundColor Red
+        return
     }
 
-    if (-not (Test-Path "$apacheBase\bin\httpd.exe")) {
-        Write-Host "Error: No se encontro httpd.exe tras la instalacion." -ForegroundColor Red
+    # Detener servicios e instancias previas
+    Stop-Service -Name "Apache2.4" -Force -ErrorAction SilentlyContinue
+    Stop-Service -Name "Apache"    -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
+    Get-Process -Name "httpd" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
+    # Desinstalar version previa si existe
+    if (Test-Path "$apacheBase\bin\httpd.exe") {
+        Write-Host "Desinstalando version previa de Apache..." -ForegroundColor Yellow
+        choco uninstall apache-httpd --yes --no-progress 2>&1 | Out-Null
+        Remove-Item $apacheBase -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    # Instalar con Chocolatey — versión especifica, sin registrar servicio aun (/noService)
+    Write-Host "Descargando e instalando Apache $Version (puede tardar unos minutos)..." -ForegroundColor Cyan
+    $chocoOut = choco install apache-httpd `
+        --version $Version `
+        --params "/installLocation:$apacheBase /noService" `
+        --yes `
+        --no-progress `
+        --accept-license `
+        2>&1
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Error: Chocolatey fallo al instalar Apache $Version." -ForegroundColor Red
+        Write-Host ($chocoOut | Select-Object -Last 5 | Out-String) -ForegroundColor Gray
         return
+    }
+
+    # Verificar que httpd.exe existe (Chocolatey puede instalarlo en subdirectorio)
+    if (-not (Test-Path "$apacheBase\bin\httpd.exe")) {
+        $encontrado = Get-ChildItem "C:\" -Filter "httpd.exe" -Recurse -ErrorAction SilentlyContinue |
+                      Select-Object -First 1
+        if ($encontrado) {
+            $apacheBase = $encontrado.DirectoryName | Split-Path -Parent
+            Write-Host "Apache encontrado en: $apacheBase" -ForegroundColor Yellow
+        } else {
+            Write-Host "Error: httpd.exe no encontrado tras la instalacion." -ForegroundColor Red
+            return
+        }
     }
 
     $confPath  = "$apacheBase\conf\httpd.conf"
@@ -403,10 +364,6 @@ function Instalar-Apache {
     Write-Host "Puerto   : $Puerto"
     Write-Host "=====================================" -ForegroundColor Green
 }
-
-# ============================================================
-# Seguridad Apache Windows
-# ============================================================
 function Configurar-Seguridad-Apache {
     param([string]$ApacheBase)
 
