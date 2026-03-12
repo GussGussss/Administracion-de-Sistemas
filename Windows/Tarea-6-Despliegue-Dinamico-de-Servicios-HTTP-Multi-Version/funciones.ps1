@@ -305,7 +305,6 @@ function Instalar-Apache {
 
         if (-not $yaDescargado) {
             Write-Host "Descargando Apache $Version..." -ForegroundColor Cyan
-            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
             $descargaOk = $false
             foreach ($url in $candidatos) {
@@ -313,13 +312,18 @@ function Instalar-Apache {
                     Write-Host "Desde: $url" -ForegroundColor Gray
                     Remove-Item $zipDest -Force -ErrorAction SilentlyContinue
 
-                    $headers = @{
-                        "User-Agent"      = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                        "Accept"          = "text/html,application/xhtml+xml,*/*;q=0.8"
-                        "Accept-Language" = "en-US,en;q=0.5"
-                        "Referer"         = "https://www.apachelounge.com/download/"
-                    }
-                    Invoke-WebRequest -Uri $url -OutFile $zipDest -Headers $headers -UseBasicParsing -ErrorAction Stop
+                    # curl.exe viene incluido en Windows Server 2019 y no es bloqueado por apachelounge
+                    $curlArgs = @(
+                        "-L",                          # seguir redirects
+                        "--silent",
+                        "--show-error",
+                        "--fail",                      # falla con codigo de error si HTTP error
+                        "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0",
+                        "--referer", "https://www.apachelounge.com/download/",
+                        "-o", $zipDest,
+                        $url
+                    )
+                    & curl.exe @curlArgs
 
                     if (Test-Path $zipDest) {
                         $b3 = [System.IO.File]::ReadAllBytes($zipDest)
@@ -328,8 +332,8 @@ function Instalar-Apache {
                             $descargaOk = $true
                             break
                         }
-                        Remove-Item $zipDest -Force -ErrorAction SilentlyContinue
                     }
+                    Remove-Item $zipDest -Force -ErrorAction SilentlyContinue
                 } catch {
                     Write-Host "Fallo: $($_.Exception.Message)" -ForegroundColor Gray
                     Remove-Item $zipDest -Force -ErrorAction SilentlyContinue
