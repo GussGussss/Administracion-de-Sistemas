@@ -301,25 +301,69 @@ function Instalar-Apache {
         [int]$Puerto
     )
 
-    Write-Host "Instalando Apache HTTP Server $Version via winget..." -ForegroundColor Cyan
+    Write-Host "Instalando Apache HTTP Server $Version..." -ForegroundColor Cyan
 
     # Detener instancias previas
     Stop-Service -Name "Apache*" -ErrorAction SilentlyContinue
     Stop-Service -Name "httpd*"  -ErrorAction SilentlyContinue
+    taskkill /f /im httpd.exe 2>&1 | Out-Null
 
-    # Instalar via winget silenciosamente
-    winget install --id Apache.ApacheHTTPServer --silent --accept-package-agreements --accept-source-agreements 2>&1 | Out-Null
-
-    # Ruta de instalacion tipica de Apache Win64
     $apacheBase = "C:\Apache24"
-    if (-not (Test-Path $apacheBase)) {
-        # Buscar en Program Files
-        $apacheBase = Get-ChildItem "C:\Program Files" -Filter "Apache*" -Directory -ErrorAction SilentlyContinue |
-                      Select-Object -First 1 -ExpandProperty FullName
+
+    # Solo descargar si no esta ya instalado
+    if (-not (Test-Path "$apacheBase\bin\httpd.exe")) {
+
+        # Apache Lounge: distribucion oficial Win64 sin VC redistribuibles extra
+        # URL directa del zip segun version
+        $urlBase = "https://www.apachelounge.com/download/VS17/binaries"
+        $zipName = "httpd-$Version-240101-win64-VS17.zip"
+        $zipUrl  = "$urlBase/$zipName"
+        $zipDest = "$env:TEMP\apache.zip"
+
+        Write-Host "Descargando Apache $Version desde apachelounge.com..." -ForegroundColor Cyan
+        Write-Host "(Esto puede tardar unos segundos)" -ForegroundColor Yellow
+
+        try {
+            # Usar BITS para descarga en background con progreso visible
+            Start-BitsTransfer -Source $zipUrl -Destination $zipDest -ErrorAction Stop
+        } catch {
+            # Fallback a Invoke-WebRequest si BITS falla
+            try {
+                Invoke-WebRequest -Uri $zipUrl -OutFile $zipDest -UseBasicParsing -ErrorAction Stop
+            } catch {
+                # Intentar URL alternativa (Apache Lounge cambia nombres de zip)
+                $zipName2 = "httpd-$Version-win64-VS17.zip"
+                $zipUrl2  = "$urlBase/$zipName2"
+                Write-Host "Intentando URL alternativa..." -ForegroundColor Yellow
+                Invoke-WebRequest -Uri $zipUrl2 -OutFile $zipDest -UseBasicParsing -ErrorAction Stop
+            }
+        }
+
+        Write-Host "Extrayendo archivos..." -ForegroundColor Cyan
+
+        # Extraer zip — contiene carpeta Apache24 dentro
+        Expand-Archive -Path $zipDest -DestinationPath "$env:TEMP\apache_extract" -Force
+        Remove-Item $zipDest -Force -ErrorAction SilentlyContinue
+
+        # Mover Apache24 a C:\
+        $extractedDir = Get-ChildItem "$env:TEMP\apache_extract" -Filter "Apache24" -Directory | Select-Object -First 1
+        if (-not $extractedDir) {
+            $extractedDir = Get-ChildItem "$env:TEMP\apache_extract" -Directory | Select-Object -First 1
+        }
+
+        if ($extractedDir) {
+            if (Test-Path $apacheBase) { Remove-Item $apacheBase -Recurse -Force }
+            Move-Item $extractedDir.FullName $apacheBase
+        }
+
+        Remove-Item "$env:TEMP\apache_extract" -Recurse -Force -ErrorAction SilentlyContinue
+    } else {
+        Write-Host "Apache ya esta instalado en $apacheBase" -ForegroundColor Yellow
     }
 
-    if (-not $apacheBase -or -not (Test-Path $apacheBase)) {
-        Write-Host "Error: No se encontro directorio de Apache tras instalacion." -ForegroundColor Red
+    if (-not (Test-Path "$apacheBase\bin\httpd.exe")) {
+        Write-Host "Error: No se encontro httpd.exe tras la instalacion." -ForegroundColor Red
+        Write-Host "Verifique conectividad y que la version $Version existe en apachelounge.com" -ForegroundColor Yellow
         return
     }
 
@@ -327,7 +371,8 @@ function Instalar-Apache {
 
     # Obtener version real instalada
     $apacheExe = "$apacheBase\bin\httpd.exe"
-    $versionReal = & $apacheExe -v 2>&1 | Select-String "Apache/" | ForEach-Object { ($_ -split "/")[1] -split " " | Select-Object -First 1 }
+    $versionReal = (& $apacheExe -v 2>&1) | Select-String "Apache/" |
+                   ForEach-Object { ($_.ToString() -split "/")[1] -split " " | Select-Object -First 1 }
     if ($versionReal) { $Version = $versionReal.Trim() }
 
     Write-Host "Configurando puerto $Puerto en httpd.conf..." -ForegroundColor Cyan
@@ -447,29 +492,57 @@ function Instalar-Nginx {
         [int]$Puerto
     )
 
-    Write-Host "Instalando Nginx $Version via winget..." -ForegroundColor Cyan
+    Write-Host "Instalando Nginx $Version..." -ForegroundColor Cyan
 
     # Detener instancias previas
     Stop-Service -Name "nginx" -ErrorAction SilentlyContinue
     taskkill /f /im nginx.exe 2>&1 | Out-Null
 
-    winget install --id Nginx.Nginx --silent --accept-package-agreements --accept-source-agreements 2>&1 | Out-Null
-
-    # Buscar directorio nginx
     $nginxBase = "C:\nginx"
-    if (-not (Test-Path $nginxBase)) {
-        $nginxBase = Get-ChildItem "C:\Program Files" -Filter "nginx*" -Directory -ErrorAction SilentlyContinue |
-                     Select-Object -First 1 -ExpandProperty FullName
+
+    # Solo descargar si no esta instalado o si la version es diferente
+    if (-not (Test-Path "$nginxBase\nginx.exe")) {
+
+        $zipName = "nginx-$Version.zip"
+        $zipUrl  = "https://nginx.org/download/$zipName"
+        $zipDest = "$env:TEMP\nginx.zip"
+
+        Write-Host "Descargando Nginx $Version desde nginx.org..." -ForegroundColor Cyan
+        Write-Host "(Esto puede tardar unos segundos)" -ForegroundColor Yellow
+
+        try {
+            Start-BitsTransfer -Source $zipUrl -Destination $zipDest -ErrorAction Stop
+        } catch {
+            Invoke-WebRequest -Uri $zipUrl -OutFile $zipDest -UseBasicParsing -ErrorAction Stop
+        }
+
+        Write-Host "Extrayendo archivos..." -ForegroundColor Cyan
+
+        Expand-Archive -Path $zipDest -DestinationPath "$env:TEMP\nginx_extract" -Force
+        Remove-Item $zipDest -Force -ErrorAction SilentlyContinue
+
+        # El zip de nginx contiene carpeta nginx-X.X.X dentro
+        $extractedDir = Get-ChildItem "$env:TEMP\nginx_extract" -Directory | Select-Object -First 1
+
+        if ($extractedDir) {
+            if (Test-Path $nginxBase) { Remove-Item $nginxBase -Recurse -Force }
+            Move-Item $extractedDir.FullName $nginxBase
+        }
+
+        Remove-Item "$env:TEMP\nginx_extract" -Recurse -Force -ErrorAction SilentlyContinue
+    } else {
+        Write-Host "Nginx ya esta instalado en $nginxBase" -ForegroundColor Yellow
     }
 
-    if (-not $nginxBase -or -not (Test-Path $nginxBase)) {
-        Write-Host "Error: No se encontro directorio de Nginx." -ForegroundColor Red
+    if (-not (Test-Path "$nginxBase\nginx.exe")) {
+        Write-Host "Error: No se encontro nginx.exe tras la instalacion." -ForegroundColor Red
+        Write-Host "Verifique conectividad y que la version $Version existe en nginx.org/download/" -ForegroundColor Yellow
         return
     }
 
-    # Obtener version real
-    $nginxExe = "$nginxBase\nginx.exe"
-    $versionReal = & $nginxExe -v 2>&1 | ForEach-Object { ($_ -split "/")[1] }
+    # Obtener version real del binario
+    $nginxExe    = "$nginxBase\nginx.exe"
+    $versionReal = (& $nginxExe -v 2>&1) | ForEach-Object { ($_.ToString() -split "/")[1] }
     if ($versionReal) { $Version = $versionReal.Trim() }
 
     $confPath = "$nginxBase\conf\nginx.conf"
