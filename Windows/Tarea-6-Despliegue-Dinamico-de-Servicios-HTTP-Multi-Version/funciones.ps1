@@ -1,239 +1,218 @@
 # ============================================================
-# http_functions.ps1
-# Funciones para despliegue de servidores HTTP en Windows
-# Windows Server 2019 Core (sin GUI) - PowerShell
+#  http_functions_v4.ps1  —  Funciones HTTP para Windows Server
+#  Cambios v4: Apache usa Chocolatey como gestor de paquetes
+#              (segun recomendacion de la tarea)
 # ============================================================
 
-# ============================================================
-# Validar puerto
-# ============================================================
+# ─────────────────────────────────────────────────────────────
+# UTILIDADES COMUNES
+# ─────────────────────────────────────────────────────────────
+
 function Validar-Puerto {
     param([string]$Puerto)
 
     if ($Puerto -notmatch '^\d+$') {
-        Write-Host "Error: El puerto debe ser un numero entero." -ForegroundColor Red
+        Write-Host "Error: El puerto debe ser un numero." -ForegroundColor Red
         return $false
     }
 
     $p = [int]$Puerto
-
     if ($p -lt 1 -or $p -gt 65535) {
         Write-Host "Error: Puerto fuera de rango (1-65535)." -ForegroundColor Red
         return $false
     }
 
-    $reservados = @(22, 25, 53, 3389, 445, 135, 139)
+    $reservados = @(22, 25, 53, 135, 139, 445, 3389)
     if ($reservados -contains $p) {
         Write-Host "Error: Puerto $p reservado por el sistema." -ForegroundColor Red
         return $false
     }
 
-    $enUso = Test-NetConnection -ComputerName localhost -Port $p -WarningAction SilentlyContinue
+    $enUso = Test-NetConnection -ComputerName "127.0.0.1" -Port $p -WarningAction SilentlyContinue -ErrorAction SilentlyContinue
     if ($enUso.TcpTestSucceeded) {
-        Write-Host "Error: El puerto $p ya esta en uso." -ForegroundColor Red
-        return $false
+        Write-Host "Advertencia: El puerto $p ya esta en uso." -ForegroundColor Yellow
     }
 
     return $true
 }
 
-# ============================================================
-# Abrir puerto en firewall y cerrar puertos por defecto libres
-# ============================================================
 function Gestionar-Firewall {
     param([int]$Puerto)
 
-    Write-Host "Configurando firewall para puerto $Puerto..." -ForegroundColor Cyan
-
-    Remove-NetFirewallRule -DisplayName "HTTP-Custom" -ErrorAction SilentlyContinue
-
-    New-NetFirewallRule `
-        -DisplayName "HTTP-Custom" `
-        -Direction Inbound `
-        -LocalPort $Puerto `
-        -Protocol TCP `
-        -Action Allow `
-        | Out-Null
+    $ruleName = "HTTP-Custom"
+    Remove-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
+    New-NetFirewallRule -DisplayName $ruleName -Direction Inbound -Protocol TCP `
+        -LocalPort $Puerto -Action Allow -Profile Any | Out-Null
 
     if ($Puerto -ne 80) {
-        $puerto80 = Test-NetConnection -ComputerName localhost -Port 80 -WarningAction SilentlyContinue
-        if (-not $puerto80.TcpTestSucceeded) {
-            Remove-NetFirewallRule -DisplayName "HTTP-Default-80" -ErrorAction SilentlyContinue
-            New-NetFirewallRule `
-                -DisplayName "HTTP-Default-80" `
-                -Direction Inbound `
-                -LocalPort 80 `
-                -Protocol TCP `
-                -Action Block `
-                | Out-Null
-            Write-Host "Puerto 80 bloqueado (no en uso)." -ForegroundColor Yellow
+        $uso80 = Test-NetConnection -ComputerName "127.0.0.1" -Port 80 `
+            -WarningAction SilentlyContinue -ErrorAction SilentlyContinue
+        if (-not $uso80.TcpTestSucceeded) {
+            Remove-NetFirewallRule -DisplayName "HTTP-Port80" -ErrorAction SilentlyContinue
+            New-NetFirewallRule -DisplayName "HTTP-Port80" -Direction Inbound `
+                -Protocol TCP -LocalPort 80 -Action Block -Profile Any | Out-Null
         }
     }
 
-    Write-Host "Firewall configurado." -ForegroundColor Green
+    Write-Host "Firewall configurado para puerto $Puerto." -ForegroundColor Green
 }
 
-# ============================================================
-# Verificar winget (sin intentar instalarlo en Server Core)
-# ============================================================
 function Verificar-Winget {
     if (Get-Command winget -ErrorAction SilentlyContinue) { return $true }
     return $false
 }
 
-# ============================================================
-# IIS: Listar versiones
-# ============================================================
+# ─────────────────────────────────────────────────────────────
+# CHOCOLATEY — instalacion automatica si no esta presente
+# ─────────────────────────────────────────────────────────────
+
+function Instalar-Chocolatey {
+    if (Get-Command choco -ErrorAction SilentlyContinue) {
+        Write-Host "Chocolatey ya esta instalado." -ForegroundColor Green
+        return $true
+    }
+
+    Write-Host "Instalando Chocolatey (gestor de paquetes)..." -ForegroundColor Cyan
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        Set-ExecutionPolicy Bypass -Scope Process -Force
+        $script = (New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1')
+        Invoke-Expression $script
+        # Recargar PATH para que choco sea accesible
+        $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
+                    [System.Environment]::GetEnvironmentVariable("Path","User")
+        if (Get-Command choco -ErrorAction SilentlyContinue) {
+            Write-Host "Chocolatey instalado correctamente." -ForegroundColor Green
+            return $true
+        }
+    } catch {
+        Write-Host "Error instalando Chocolatey: $($_.Exception.Message)" -ForegroundColor Red
+    }
+    return $false
+}
+
+# ─────────────────────────────────────────────────────────────
+# IIS
+# ─────────────────────────────────────────────────────────────
+
 function Listar-Versiones-IIS {
+    Write-Host ""
+    Write-Host "Consultando version de IIS disponible en Windows Server 2019..." -ForegroundColor Cyan
+
+    $version = "10.0"
+    $inetinfo = "C:\Windows\System32\inetsrv\inetinfo.exe"
+    if (Test-Path $inetinfo) {
+        $v = (Get-Item $inetinfo).VersionInfo.ProductVersion
+        if ($v) { $version = $v }
+    }
+
     Write-Host ""
     Write-Host "Versiones disponibles de IIS:" -ForegroundColor Cyan
     Write-Host ""
+    Write-Host "1) $version  (Latest — incluido en Windows Server 2019)"
+    Write-Host "2) $version  (LTS    — misma version estable)"
+    Write-Host "3) $version  (Oldest — version base del sistema)"
 
-    $iisPath = "C:\Windows\System32\inetsrv\inetinfo.exe"
-    if (Test-Path $iisPath) {
-        $ver = (Get-Item $iisPath).VersionInfo.ProductVersion
-    } else {
-        $ver = "10.0 (Windows Server 2019)"
-    }
-
-    Write-Host "1) $ver  (Estable - incluida en Windows Server 2019)"
-    Write-Host "2) $ver  (LTS - misma version de sistema)"
-    Write-Host ""
-    Write-Host "Nota: IIS se instala desde roles de Windows. La version depende del OS." -ForegroundColor Yellow
+    $global:IIS_LATEST = $version
+    $global:IIS_LTS    = $version
+    $global:IIS_OLDEST = $version
 }
 
-# ============================================================
-# IIS: Instalar y configurar
-# ============================================================
 function Instalar-IIS {
-    param(
-        [string]$Version,
-        [int]$Puerto
-    )
+    param([string]$Version, [int]$Puerto)
 
-    Write-Host "Instalando IIS (Internet Information Services)..." -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "Instalando IIS $Version en puerto $Puerto..." -ForegroundColor Cyan
 
-    Install-WindowsFeature -Name Web-Server -IncludeManagementTools | Out-Null
-    Install-WindowsFeature -Name Web-Http-Redirect, Web-Http-Logging, Web-Security | Out-Null
-
-    $iisPath = "C:\Windows\System32\inetsrv\inetinfo.exe"
-    $Version = (Get-Item $iisPath -ErrorAction SilentlyContinue).VersionInfo.ProductVersion
-    if (-not $Version) { $Version = "10.0" }
-
-    Write-Host "Configurando puerto $Puerto..." -ForegroundColor Cyan
+    $feature = Get-WindowsFeature -Name Web-Server -ErrorAction SilentlyContinue
+    if ($feature -and $feature.Installed) {
+        Write-Host "IIS ya esta instalado." -ForegroundColor Green
+    } else {
+        Write-Host "Habilitando rol Web-Server..." -ForegroundColor Gray
+        Install-WindowsFeature -Name Web-Server -IncludeManagementTools | Out-Null
+    }
 
     Import-Module WebAdministration -ErrorAction SilentlyContinue
 
-    $siteName = "Default Web Site"
-    Remove-WebBinding -Name $siteName -ErrorAction SilentlyContinue
-    New-WebBinding -Name $siteName -Protocol "http" -Port $Puerto -IPAddress "*" | Out-Null
+    Write-Host "Configurando puerto $Puerto en IIS..." -ForegroundColor Gray
+    Get-WebBinding -Name "Default Web Site" -ErrorAction SilentlyContinue |
+        Remove-WebBinding -ErrorAction SilentlyContinue
+    New-WebBinding -Name "Default Web Site" -Protocol "http" -Port $Puerto -IPAddress "*" | Out-Null
 
-    Crear-Index -Servicio "IIS" -Version $Version -Puerto $Puerto -Directorio "C:\inetpub\wwwroot"
-
+    $wwwroot = "C:\inetpub\wwwroot"
+    Crear-Index -Directorio $wwwroot -Servidor "IIS" -Version $Version -Puerto $Puerto
     Configurar-Seguridad-IIS
-
-    Crear-Usuario-Restringido -Servicio "IIS" -Directorio "C:\inetpub\wwwroot"
+    Crear-Usuario-Restringido -service "iis" -directorio $wwwroot
 
     iisreset /restart | Out-Null
-
     Gestionar-Firewall -Puerto $Puerto
 
     Write-Host ""
-    Write-Host "=====================================" -ForegroundColor Green
-    Write-Host " INSTALACION COMPLETADA              " -ForegroundColor Green
-    Write-Host "=====================================" -ForegroundColor Green
-    Write-Host "Servidor : IIS"
-    Write-Host "Version  : $Version"
-    Write-Host "Puerto   : $Puerto"
-    Write-Host "=====================================" -ForegroundColor Green
+    Write-Host "IIS $Version instalado y corriendo en puerto $Puerto." -ForegroundColor Green
+    Write-Host "URL: http://localhost:$Puerto" -ForegroundColor Cyan
 }
 
-# ============================================================
-# Seguridad IIS
-# ============================================================
 function Configurar-Seguridad-IIS {
-
-    Import-Module WebAdministration -ErrorAction SilentlyContinue
-
     try {
-        Remove-WebConfigurationProperty `
-            -PSPath "IIS:\" `
+        Import-Module WebAdministration -ErrorAction SilentlyContinue
+        Remove-WebConfigurationProperty -PSPath "MACHINE/WEBROOT/APPHOST" `
             -Filter "system.webServer/httpProtocol/customHeaders" `
-            -Name "." `
-            -AtElement @{name="X-Powered-By"} `
-            -ErrorAction SilentlyContinue
-    } catch {}
-
-    $headers = @{
-        "X-Frame-Options"        = "SAMEORIGIN"
-        "X-Content-Type-Options" = "nosniff"
-    }
-
-    foreach ($h in $headers.GetEnumerator()) {
-        try {
-            Remove-WebConfigurationProperty `
-                -PSPath "IIS:\" `
-                -Filter "system.webServer/httpProtocol/customHeaders" `
-                -Name "." `
-                -AtElement @{name=$h.Key} `
-                -ErrorAction SilentlyContinue
-
-            Add-WebConfigurationProperty `
-                -PSPath "IIS:\" `
-                -Filter "system.webServer/httpProtocol/customHeaders" `
-                -Name "." `
-                -Value @{name=$h.Key; value=$h.Value}
-        } catch {
-            Write-Host "Advertencia: No se pudo agregar header $($h.Key)" -ForegroundColor Yellow
-        }
-    }
-
-    try {
-        Set-WebConfigurationProperty `
-            -PSPath "IIS:\" `
+            -Name "." -AtElement @{name="X-Powered-By"} -ErrorAction SilentlyContinue
+        Set-WebConfigurationProperty -PSPath "MACHINE/WEBROOT/APPHOST" `
+            -Filter "system.webServer/httpProtocol/customHeaders" `
+            -Name "." -Value @{name="X-Frame-Options"; value="SAMEORIGIN"} -ErrorAction SilentlyContinue
+        Set-WebConfigurationProperty -PSPath "MACHINE/WEBROOT/APPHOST" `
+            -Filter "system.webServer/httpProtocol/customHeaders" `
+            -Name "." -Value @{name="X-Content-Type-Options"; value="nosniff"} -ErrorAction SilentlyContinue
+        Set-WebConfigurationProperty -PSPath "MACHINE/WEBROOT/APPHOST" `
             -Filter "system.webServer/security/requestFiltering" `
-            -Name "removeServerHeader" `
-            -Value $true `
-            -ErrorAction SilentlyContinue
-    } catch {}
-
-    $metodosBloquear = @("TRACE","TRACK","DELETE")
-    foreach ($metodo in $metodosBloquear) {
-        try {
-            Add-WebConfigurationProperty `
-                -PSPath "IIS:\" `
-                -Filter "system.webServer/security/requestFiltering/verbs" `
-                -Name "." `
-                -Value @{verb=$metodo; allowed="false"} `
-                -ErrorAction SilentlyContinue
-        } catch {}
+            -Name "removeServerHeader" -Value $true -ErrorAction SilentlyContinue
+        $verbFilter = "system.webServer/security/requestFiltering/verbs"
+        foreach ($verbo in @("TRACE","TRACK","DELETE")) {
+            Add-WebConfigurationProperty -PSPath "MACHINE/WEBROOT/APPHOST" `
+                -Filter $verbFilter -Name "." `
+                -Value @{verb=$verbo; allowed="false"} -ErrorAction SilentlyContinue
+        }
+        Write-Host "Seguridad IIS configurada." -ForegroundColor Green
+    } catch {
+        Write-Host "Advertencia configurando seguridad IIS: $($_.Exception.Message)" -ForegroundColor Yellow
     }
-
-    Write-Host "Seguridad IIS configurada." -ForegroundColor Green
 }
 
-# ============================================================
-# Apache Win64: Listar versiones
-# ============================================================
-function Listar-Versiones-Apache {
+# ─────────────────────────────────────────────────────────────
+# APACHE  (via Chocolatey)
+# ─────────────────────────────────────────────────────────────
 
+function Listar-Versiones-Apache {
     Write-Host ""
     Write-Host "Consultando versiones disponibles de Apache..." -ForegroundColor Cyan
 
-    # URLs verificadas en fossies.org — mirror publico que no bloquea servidores
-    # Fossies aloja los mismos ZIPs de ApacheLounge sin restricciones de IP
-    $global:APACHE_URLS = @{
-        "2.4.63" = "https://fossies.org/windows/www/httpd-2.4.63-250207-win64-VS17.zip"
-        "2.4.62" = "https://fossies.org/windows/www/httpd-2.4.62-240718-win64-VS17.zip"
-        "2.4.61" = "https://fossies.org/windows/www/httpd-2.4.61-240703-win64-VS17.zip"
+    # Versiones disponibles en el repositorio de Chocolatey
+    # choco search muestra versiones; usamos la API publica para listarlas
+    $versiones = @()
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        $apiUrl = "https://community.chocolatey.org/api/v2/FindPackagesById()?id='apache-httpd'&`$orderby=Version+desc&`$top=20"
+        $resp = Invoke-RestMethod -Uri $apiUrl -ErrorAction Stop
+        $versiones = $resp | ForEach-Object { $_.properties.Version } | Where-Object { $_ -match '^\d+\.\d+\.\d+$' } | Select-Object -Unique | Sort-Object {
+            $parts = $_ -split '\.'
+            [int]$parts[0]*10000 + [int]$parts[1]*100 + [int]$parts[2]
+        } -Descending | Select-Object -First 10
+    } catch {
+        Write-Host "No se pudo consultar API de Chocolatey, usando versiones conocidas." -ForegroundColor Gray
     }
 
-    $latest = "2.4.63"
-    $lts    = "2.4.62"
-    $oldest = "2.4.61"
+    # Fallback con versiones conocidas disponibles en Chocolatey
+    if (-not $versiones -or $versiones.Count -lt 3) {
+        $versiones = @("2.4.55", "2.4.54", "2.4.51", "2.4.49", "2.4.48", "2.4.46")
+    }
+
+    $latest = $versiones[0]
+    $lts    = $versiones[1]
+    $oldest = $versiones[-1]
 
     Write-Host ""
-    Write-Host "Versiones disponibles de Apache HTTP Server:" -ForegroundColor Cyan
+    Write-Host "Versiones disponibles de Apache HTTP Server (via Chocolatey):" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "1) $latest  (Latest / Desarrollo)"
     Write-Host "2) $lts     (LTS / Estable)"
@@ -244,143 +223,117 @@ function Listar-Versiones-Apache {
     $global:APACHE_OLDEST = $oldest
 }
 
-# ============================================================
-# Apache Win64: Instalar y configurar
-# ============================================================
 function Instalar-Apache {
-    param(
-        [string]$Version,
-        [int]$Puerto
-    )
+    param([string]$Version, [int]$Puerto)
 
-    Write-Host "Instalando Apache HTTP Server $Version..." -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "Instalando Apache HTTP Server $Version en puerto $Puerto..." -ForegroundColor Cyan
 
-    Stop-Service -Name "Apache*" -ErrorAction SilentlyContinue
-    Stop-Service -Name "httpd*"  -ErrorAction SilentlyContinue
-    taskkill /f /im httpd.exe 2>&1 | Out-Null
+    # Detener instancias previas
+    Get-Service | Where-Object { $_.Name -like "Apache*" } |
+        Stop-Service -Force -ErrorAction SilentlyContinue
+    Get-Process -Name "httpd" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 
-    $apacheBase = "C:\Apache24"
-
-    if (-not (Test-Path "$apacheBase\bin\httpd.exe")) {
-
-        $zipDest = "$env:TEMP\apache.zip"
-        Remove-Item $zipDest -Force -ErrorAction SilentlyContinue
-
-        # Obtener URL desde el mapa global (cargado por Listar-Versiones-Apache)
-        if ($global:APACHE_URLS -and $global:APACHE_URLS.ContainsKey($Version)) {
-            $urlDescarga = $global:APACHE_URLS[$Version]
-        } else {
-            # Fallback si no se ejecuto Listar primero
-            $urlDescarga = "https://fossies.org/windows/www/httpd-$Version-win64-VS17.zip"
-        }
-
-        Write-Host "Descargando Apache $Version..." -ForegroundColor Cyan
-        Write-Host "Desde: $urlDescarga" -ForegroundColor Gray
-
-        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        $descargaOk = $false
-
-        # Intento 1: Invoke-WebRequest
-        try {
-            Invoke-WebRequest -Uri $urlDescarga -OutFile $zipDest -UseBasicParsing -ErrorAction Stop
-            if (Test-Path $zipDest) {
-                $b = [System.IO.File]::ReadAllBytes($zipDest)
-                if ($b.Length -gt 100000 -and $b[0] -eq 0x50 -and $b[1] -eq 0x4B) {
-                    Write-Host "Descarga correcta ($([math]::Round($b.Length/1MB,1)) MB)." -ForegroundColor Green
-                    $descargaOk = $true
-                }
-            }
-        } catch {
-            Write-Host "Invoke-WebRequest fallo, intentando con curl.exe..." -ForegroundColor Gray
-        }
-
-        # Intento 2: curl.exe (incluido en Windows Server 2019)
-        if (-not $descargaOk) {
-            Remove-Item $zipDest -Force -ErrorAction SilentlyContinue
-            try {
-                & curl.exe -L --silent --show-error --fail -o $zipDest $urlDescarga
-                if (Test-Path $zipDest) {
-                    $b = [System.IO.File]::ReadAllBytes($zipDest)
-                    if ($b.Length -gt 100000 -and $b[0] -eq 0x50 -and $b[1] -eq 0x4B) {
-                        Write-Host "Descarga correcta via curl ($([math]::Round($b.Length/1MB,1)) MB)." -ForegroundColor Green
-                        $descargaOk = $true
-                    }
-                }
-            } catch {
-                Write-Host "curl.exe tambien fallo." -ForegroundColor Gray
-            }
-        }
-
-        if (-not $descargaOk) {
-            Write-Host "Error: No se pudo descargar Apache $Version desde fossies.org." -ForegroundColor Red
-            return
-        }
-
-        Write-Host "Extrayendo archivos..." -ForegroundColor Cyan
-        Expand-Archive -Path $zipDest -DestinationPath "$env:TEMP\apache_extract" -Force
-        Remove-Item $zipDest -Force -ErrorAction SilentlyContinue
-
-        $extractedDir = Get-ChildItem "$env:TEMP\apache_extract" -Filter "Apache24" -Directory | Select-Object -First 1
-        if (-not $extractedDir) {
-            $extractedDir = Get-ChildItem "$env:TEMP\apache_extract" -Directory | Select-Object -First 1
-        }
-        if ($extractedDir) {
-            if (Test-Path $apacheBase) { Remove-Item $apacheBase -Recurse -Force }
-            Move-Item $extractedDir.FullName $apacheBase
-        }
-        Remove-Item "$env:TEMP\apache_extract" -Recurse -Force -ErrorAction SilentlyContinue
-
-    } else {
-        Write-Host "Apache ya esta instalado en $apacheBase" -ForegroundColor Yellow
-    }
-
-    if (-not (Test-Path "$apacheBase\bin\httpd.exe")) {
-        Write-Host "Error: No se encontro httpd.exe tras la instalacion." -ForegroundColor Red
+    # ── Instalar o actualizar Chocolatey ──────────────────────
+    $chocoOk = Instalar-Chocolatey
+    if (-not $chocoOk) {
+        Write-Host "Error: No se pudo instalar Chocolatey. Abortando." -ForegroundColor Red
         return
     }
 
-    $confPath  = "$apacheBase\conf\httpd.conf"
-    $apacheExe = "$apacheBase\bin\httpd.exe"
+    # ── Desinstalar version anterior si existe ────────────────
+    $apacheBase = "C:\Apache24"
+    if (Test-Path "$apacheBase\bin\httpd.exe") {
+        Write-Host "Eliminando instalacion anterior de Apache..." -ForegroundColor Gray
+        & "$apacheBase\bin\httpd.exe" -k uninstall -ErrorAction SilentlyContinue
+        Remove-Item $apacheBase -Recurse -Force -ErrorAction SilentlyContinue
+    }
 
-    $versionReal = (& $apacheExe -v 2>&1) | Select-String "Apache/" |
-                   ForEach-Object { ($_.ToString() -split "/")[1] -split " " | Select-Object -First 1 }
-    if ($versionReal) { $Version = $versionReal.Trim() }
+    # ── Instalar via Chocolatey ───────────────────────────────
+    Write-Host "Descargando e instalando Apache $Version via Chocolatey..." -ForegroundColor Cyan
+    $chocoParams = "/installLocation:C:\Apache24 /noService"
 
-    Write-Host "Configurando puerto $Puerto en httpd.conf..." -ForegroundColor Cyan
-    (Get-Content $confPath) -replace "Listen \d+", "Listen $Puerto" | Set-Content $confPath
+    & choco install apache-httpd --version $Version --params $chocoParams -y --no-progress 2>&1 |
+        ForEach-Object { Write-Host $_ -ForegroundColor Gray }
 
-    $webRoot = "$apacheBase\htdocs"
-    Crear-Index -Servicio "Apache" -Version $Version -Puerto $Puerto -Directorio $webRoot
+    # Chocolatey instala en AppData por defecto; buscar httpd.exe donde quedo
+    $posiblesPaths = @(
+        "C:\Apache24\bin\httpd.exe",
+        "$env:APPDATA\Apache24\bin\httpd.exe",
+        "C:\tools\Apache24\bin\httpd.exe"
+    )
 
-    Configurar-Seguridad-Apache -ApacheBase $apacheBase
+    $httpdExe = $null
+    foreach ($p in $posiblesPaths) {
+        if (Test-Path $p) { $httpdExe = $p; $apacheBase = Split-Path (Split-Path $p); break }
+    }
 
-    Crear-Usuario-Restringido -Servicio "Apache" -Directorio $webRoot
+    # Busqueda exhaustiva si no se encontro
+    if (-not $httpdExe) {
+        $found = Get-ChildItem -Path "C:\" -Filter "httpd.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($found) { $httpdExe = $found.FullName; $apacheBase = Split-Path (Split-Path $httpdExe) }
+    }
 
-    & "$apacheBase\bin\httpd.exe" -k install 2>&1 | Out-Null
-    Start-Service -Name "Apache2.4" -ErrorAction SilentlyContinue
-    if (-not $?) { & "$apacheBase\bin\httpd.exe" -k start 2>&1 | Out-Null }
+    if (-not $httpdExe) {
+        Write-Host "Error: No se encontro httpd.exe tras la instalacion de Chocolatey." -ForegroundColor Red
+        return
+    }
+
+    Write-Host "Apache instalado en: $apacheBase" -ForegroundColor Green
+
+    # ── Normalizar ubicacion a C:\Apache24 ────────────────────
+    if ($apacheBase -ne "C:\Apache24") {
+        Write-Host "Moviendo Apache a C:\Apache24..." -ForegroundColor Gray
+        if (Test-Path "C:\Apache24") { Remove-Item "C:\Apache24" -Recurse -Force }
+        Move-Item $apacheBase "C:\Apache24" -Force
+        $apacheBase = "C:\Apache24"
+        $httpdExe   = "C:\Apache24\bin\httpd.exe"
+    }
+
+    # ── Configurar puerto en httpd.conf ───────────────────────
+    $confFile = "$apacheBase\conf\httpd.conf"
+    if (Test-Path $confFile) {
+        $conf = Get-Content $confFile -Raw
+        $conf = $conf -replace 'Listen \d+', "Listen $Puerto"
+        $conf = $conf -replace 'ServerRoot "[^"]*"', "ServerRoot `"$apacheBase`""
+        Set-Content $confFile $conf -Encoding UTF8
+        Write-Host "Puerto configurado: $Puerto" -ForegroundColor Green
+    }
+
+    # ── Index, seguridad, usuario ─────────────────────────────
+    $docroot = "$apacheBase\htdocs"
+    Crear-Index -Directorio $docroot -Servidor "Apache" -Version $Version -Puerto $Puerto
+    Configurar-Seguridad-Apache -apacheBase $apacheBase
+    Crear-Usuario-Restringido -service "apache" -directorio $docroot
+
+    # ── Registrar e iniciar servicio Windows ──────────────────
+    Write-Host "Registrando servicio Apache..." -ForegroundColor Gray
+    & $httpdExe -k install 2>&1 | Out-Null
+    Start-Service "Apache2.4" -ErrorAction SilentlyContinue
+
+    Start-Sleep -Seconds 3
+    $svc = Get-Service "Apache2.4" -ErrorAction SilentlyContinue
+    if ($svc -and $svc.Status -eq "Running") {
+        Write-Host "Apache $Version corriendo en puerto $Puerto." -ForegroundColor Green
+    } else {
+        Write-Host "Advertencia: Servicio Apache no inicio. Revisando logs..." -ForegroundColor Yellow
+        $errorLog = "$apacheBase\logs\error.log"
+        if (Test-Path $errorLog) {
+            Get-Content $errorLog -Tail 10 | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+        }
+    }
 
     Gestionar-Firewall -Puerto $Puerto
-
     Write-Host ""
-    Write-Host "=====================================" -ForegroundColor Green
-    Write-Host " INSTALACION COMPLETADA              " -ForegroundColor Green
-    Write-Host "=====================================" -ForegroundColor Green
-    Write-Host "Servidor : Apache HTTP Server"
-    Write-Host "Version  : $Version"
-    Write-Host "Puerto   : $Puerto"
-    Write-Host "=====================================" -ForegroundColor Green
+    Write-Host "URL: http://localhost:$Puerto" -ForegroundColor Cyan
 }
 
-# ============================================================
-# Seguridad Apache Windows
-# ============================================================
 function Configurar-Seguridad-Apache {
-    param([string]$ApacheBase)
+    param([string]$apacheBase)
 
-    $secConf = "$ApacheBase\conf\extra\httpd-security.conf"
-
-    @"
+    $secConf = "$apacheBase\conf\extra\httpd-security.conf"
+    $contenido = @"
+# Seguridad Apache — generado automaticamente
 ServerTokens Prod
 ServerSignature Off
 TraceEnable Off
@@ -388,40 +341,46 @@ TraceEnable Off
 <IfModule mod_headers.c>
     Header always set X-Frame-Options "SAMEORIGIN"
     Header always set X-Content-Type-Options "nosniff"
+    Header always set X-XSS-Protection "1; mode=block"
+    Header unset X-Powered-By
 </IfModule>
 
 <LimitExcept GET POST HEAD>
-    Deny from all
+    deny from all
 </LimitExcept>
-"@ | Set-Content $secConf -Encoding UTF8
+"@
 
-    $confPath = "$ApacheBase\conf\httpd.conf"
-    if (-not (Select-String -Path $confPath -Pattern "httpd-security.conf" -Quiet)) {
-        Add-Content $confPath "`nInclude conf/extra/httpd-security.conf"
+    Set-Content -Path $secConf -Value $contenido -Encoding UTF8
+
+    $confFile = "$apacheBase\conf\httpd.conf"
+    if (Test-Path $confFile) {
+        $conf = Get-Content $confFile -Raw
+        $includeLinea = "Include conf/extra/httpd-security.conf"
+        if ($conf -notmatch [regex]::Escape($includeLinea)) {
+            Add-Content -Path $confFile -Value "`n$includeLinea"
+        }
+        # Descomentar mod_headers si esta comentado
+        $conf = $conf -replace '#(LoadModule headers_module)', '$1'
+        Set-Content $confFile $conf -Encoding UTF8
     }
-
-    (Get-Content $confPath) -replace "#LoadModule headers_module", "LoadModule headers_module" |
-        Set-Content $confPath
-
     Write-Host "Seguridad Apache configurada." -ForegroundColor Green
 }
 
-# ============================================================
-# Nginx Windows: Listar versiones
-# ============================================================
-function Listar-Versiones-Nginx {
+# ─────────────────────────────────────────────────────────────
+# NGINX  (descarga directa desde nginx.org — nunca ha bloqueado)
+# ─────────────────────────────────────────────────────────────
 
+function Listar-Versiones-Nginx {
     Write-Host ""
     Write-Host "Consultando versiones disponibles de Nginx..." -ForegroundColor Cyan
 
-    $latest = ""
-
+    $latest = ""; $lts = ""; $oldest = ""
     $wingetOk = Verificar-Winget
     if ($wingetOk) {
         try {
             $raw = winget show Nginx.Nginx 2>&1 | Out-String
-            $versionLine = ($raw -split "`n") | Where-Object { $_ -match "Version\s*:" } | Select-Object -First 1
-            if ($versionLine -match ":\s*(.+)") { $latest = $matches[1].Trim() }
+            $vline = ($raw -split "`n") | Where-Object { $_ -match "Version\s*:" } | Select-Object -First 1
+            if ($vline -match ":\s*(.+)") { $latest = $matches[1].Trim() }
         } catch {}
     }
 
@@ -441,259 +400,165 @@ function Listar-Versiones-Nginx {
     $global:NGINX_OLDEST = $oldest
 }
 
-# ============================================================
-# Nginx Windows: Instalar y configurar
-# ============================================================
 function Instalar-Nginx {
-    param(
-        [string]$Version,
-        [int]$Puerto
-    )
+    param([string]$Version, [int]$Puerto)
 
-    Write-Host "Instalando Nginx $Version..." -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "Instalando Nginx $Version en puerto $Puerto..." -ForegroundColor Cyan
 
-    taskkill /f /im nginx.exe 2>&1 | Out-Null
-    Stop-Service -Name "nginx" -ErrorAction SilentlyContinue
+    # Detener instancias previas
+    Get-Process -Name "nginx" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Milliseconds 500
 
-    $nginxBase = "C:\nginx"
-
-    # Verificar si la version instalada coincide con la solicitada
-    $versionInstalada = ""
-    if (Test-Path "$nginxBase\nginx.exe") {
-        $vOut = (& "$nginxBase\nginx.exe" -v 2>&1) | Out-String
-        if ($vOut -match "nginx/(.+)") { $versionInstalada = $matches[1].Trim() }
+    # Verificar si ya esta instalada la version correcta
+    $nginxExe = "C:\nginx\nginx.exe"
+    if (Test-Path $nginxExe) {
+        $verActual = & $nginxExe -v 2>&1 | Out-String
+        if ($verActual -match $Version) {
+            Write-Host "Nginx $Version ya esta instalado." -ForegroundColor Green
+        } else {
+            Remove-Item "C:\nginx" -Recurse -Force -ErrorAction SilentlyContinue
+        }
     }
 
-    $necesitaInstalar = (-not (Test-Path "$nginxBase\nginx.exe")) -or ($versionInstalada -ne $Version)
-
-    if ($necesitaInstalar) {
-        if ($versionInstalada) {
-            Write-Host "Version instalada ($versionInstalada) difiere de la solicitada ($Version). Reinstalando..." -ForegroundColor Yellow
-            taskkill /f /im nginx.exe 2>&1 | Out-Null
-            Start-Sleep -Seconds 1
-            Remove-Item $nginxBase -Recurse -Force -ErrorAction SilentlyContinue
-        }
-
-        $zipName = "nginx-$Version.zip"
-        $zipUrl  = "https://nginx.org/download/$zipName"
+    if (-not (Test-Path $nginxExe)) {
+        $url     = "https://nginx.org/download/nginx-$Version.zip"
         $zipDest = "$env:TEMP\nginx.zip"
 
         Write-Host "Descargando Nginx $Version desde nginx.org..." -ForegroundColor Cyan
-        Write-Host "(Esto puede tardar unos segundos)" -ForegroundColor Yellow
+        Write-Host "URL: $url" -ForegroundColor Gray
 
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-
         try {
             $wc = New-Object System.Net.WebClient
-            $wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-            $wc.DownloadFile($zipUrl, $zipDest)
+            $wc.Headers.Add("User-Agent", "PowerShell/WindowsServer")
+            $wc.DownloadFile($url, $zipDest)
         } catch {
-            Invoke-WebRequest -Uri $zipUrl -OutFile $zipDest -UseBasicParsing -ErrorAction Stop
+            Invoke-WebRequest -Uri $url -OutFile $zipDest -UseBasicParsing
         }
 
-        Write-Host "Extrayendo archivos..." -ForegroundColor Cyan
+        # Validar ZIP
+        $bytes = [System.IO.File]::ReadAllBytes($zipDest)
+        if ($bytes.Length -lt 100000 -or $bytes[0] -ne 0x50 -or $bytes[1] -ne 0x4B) {
+            Write-Host "Error: ZIP de Nginx invalido." -ForegroundColor Red
+            return
+        }
+        Write-Host "Descarga correcta ($([math]::Round($bytes.Length/1MB,1)) MB)." -ForegroundColor Green
+
         Expand-Archive -Path $zipDest -DestinationPath "$env:TEMP\nginx_extract" -Force
-        Remove-Item $zipDest -Force -ErrorAction SilentlyContinue
-
-        $extractedDir = Get-ChildItem "$env:TEMP\nginx_extract" -Directory | Select-Object -First 1
-        if ($extractedDir) {
-            if (Test-Path $nginxBase) { Remove-Item $nginxBase -Recurse -Force }
-            Move-Item $extractedDir.FullName $nginxBase
-        }
+        $carpeta = Get-ChildItem "$env:TEMP\nginx_extract" | Where-Object { $_.PSIsContainer } | Select-Object -First 1
+        Move-Item $carpeta.FullName "C:\nginx" -Force
         Remove-Item "$env:TEMP\nginx_extract" -Recurse -Force -ErrorAction SilentlyContinue
-
-    } else {
-        Write-Host "Nginx $Version ya esta instalado en $nginxBase" -ForegroundColor Green
     }
 
-    if (-not (Test-Path "$nginxBase\nginx.exe")) {
-        Write-Host "Error: No se encontro nginx.exe tras la instalacion." -ForegroundColor Red
-        return
-    }
-
-    $nginxExe    = "$nginxBase\nginx.exe"
-    $versionReal = (& $nginxExe -v 2>&1) | ForEach-Object { ($_.ToString() -split "/")[1] }
-    if ($versionReal) { $Version = $versionReal.Trim() }
-
-    $confPath = "$nginxBase\conf\nginx.conf"
-    $webRoot  = "$nginxBase\html"
-
-    Write-Host "Configurando puerto $Puerto..." -ForegroundColor Cyan
-
+    # ── Escribir nginx.conf SIN BOM ───────────────────────────
     $nginxConf = @"
 worker_processes  1;
-
-events {
-    worker_connections  1024;
-}
-
+events { worker_connections 1024; }
 http {
     include       mime.types;
     default_type  application/octet-stream;
-    sendfile        on;
-    keepalive_timeout  65;
-
     server_tokens off;
-
+    sendfile      on;
     server {
         listen       $Puerto;
-        server_name  _;
+        server_name  localhost;
         root         html;
-
-        location / {
-            index  index.html index.htm;
-        }
-
+        index        index.html;
         add_header X-Frame-Options "SAMEORIGIN";
         add_header X-Content-Type-Options "nosniff";
+        location / { try_files `$uri `$uri/ =404; }
     }
 }
 "@
-    # Sin BOM para que nginx pueda leer el archivo correctamente
+    $confPath = "C:\nginx\conf\nginx.conf"
     [System.IO.File]::WriteAllText($confPath, $nginxConf, [System.Text.UTF8Encoding]::new($false))
 
-    Crear-Index -Servicio "Nginx" -Version $Version -Puerto $Puerto -Directorio $webRoot
+    Crear-Index -Directorio "C:\nginx\html" -Servidor "Nginx" -Version $Version -Puerto $Puerto
 
-    Crear-Usuario-Restringido -Servicio "Nginx" -Directorio $webRoot
-
-    # Iniciar nginx y verificar que responde
-    taskkill /f /im nginx.exe 2>&1 | Out-Null
-    Start-Sleep -Seconds 1
-    Start-Process -FilePath $nginxExe -WorkingDirectory $nginxBase -WindowStyle Hidden
+    # ── Iniciar Nginx ─────────────────────────────────────────
+    Start-Process -FilePath "C:\nginx\nginx.exe" -WorkingDirectory "C:\nginx" -WindowStyle Hidden
     Start-Sleep -Seconds 3
 
-    $escuchando = Test-NetConnection -ComputerName localhost -Port $Puerto -WarningAction SilentlyContinue
-    if ($escuchando.TcpTestSucceeded) {
-        Write-Host "Nginx escuchando en puerto $Puerto." -ForegroundColor Green
+    $test = Test-NetConnection -ComputerName "127.0.0.1" -Port $Puerto -WarningAction SilentlyContinue
+    if ($test.TcpTestSucceeded) {
+        Write-Host "Nginx $Version corriendo en puerto $Puerto." -ForegroundColor Green
     } else {
-        Write-Host "Advertencia: Nginx no responde en el puerto $Puerto." -ForegroundColor Yellow
-        $logPath = "$nginxBase\logs\error.log"
-        if (Test-Path $logPath) {
-            Write-Host "Ultimas lineas del log de error:" -ForegroundColor Yellow
-            Get-Content $logPath -Tail 5 | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
+        Write-Host "Advertencia: Nginx no responde en puerto $Puerto." -ForegroundColor Yellow
+        $errorLog = "C:\nginx\logs\error.log"
+        if (Test-Path $errorLog) {
+            Get-Content $errorLog -Tail 5 | ForEach-Object { Write-Host "  $_" -ForegroundColor Red }
         }
-        Write-Host "Reintentando inicio de Nginx..." -ForegroundColor Cyan
-        & $nginxExe -p $nginxBase 2>&1 | Out-Null
-        Start-Sleep -Seconds 2
     }
 
     Gestionar-Firewall -Puerto $Puerto
-
-    Write-Host ""
-    Write-Host "=====================================" -ForegroundColor Green
-    Write-Host " INSTALACION COMPLETADA              " -ForegroundColor Green
-    Write-Host "=====================================" -ForegroundColor Green
-    Write-Host "Servidor : Nginx"
-    Write-Host "Version  : $Version"
-    Write-Host "Puerto   : $Puerto"
-    Write-Host "=====================================" -ForegroundColor Green
+    Write-Host "URL: http://localhost:$Puerto" -ForegroundColor Cyan
 }
 
-# ============================================================
-# Crear pagina index.html personalizada
-# ============================================================
-function Crear-Index {
-    param(
-        [string]$Servicio,
-        [string]$Version,
-        [int]$Puerto,
-        [string]$Directorio
-    )
+# ─────────────────────────────────────────────────────────────
+# COMPARTIDAS
+# ─────────────────────────────────────────────────────────────
 
-    if (-not (Test-Path $Directorio)) {
-        New-Item -ItemType Directory -Path $Directorio -Force | Out-Null
-    }
+function Crear-Index {
+    param([string]$Directorio, [string]$Servidor, [string]$Version, [int]$Puerto)
+
+    if (-not (Test-Path $Directorio)) { New-Item -ItemType Directory -Path $Directorio -Force | Out-Null }
 
     $html = @"
 <!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<title>Servidor HTTP</title>
-</head>
-<body>
-<h1>Servidor: $Servicio</h1>
-<h2>Version: $Version</h2>
-<h3>Puerto: $Puerto</h3>
-</body>
-</html>
+<html lang="es">
+<head><meta charset="UTF-8"><title>$Servidor $Version</title>
+<style>body{font-family:Arial,sans-serif;background:#1a1a2e;color:#eee;display:flex;justify-content:center;align-items:center;height:100vh;margin:0}
+.card{background:#16213e;border-radius:12px;padding:40px;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,.5)}
+h1{color:#0f3460;font-size:2em}p{color:#a8b2d8}span{color:#e94560;font-weight:bold}</style></head>
+<body><div class="card">
+<h1>$Servidor HTTP Server</h1>
+<p>Version: <span>$Version</span></p>
+<p>Puerto: <span>$Puerto</span></p>
+<p>Servidor: <span>Windows Server 2019</span></p>
+<p style="color:#4CAF50;margin-top:20px">&#10003; Servicio activo</p>
+</div></body></html>
 "@
-
-    $html | Set-Content "$Directorio\index.html" -Encoding UTF8
-    Write-Host "index.html creado en $Directorio" -ForegroundColor Green
+    Set-Content -Path "$Directorio\index.html" -Value $html -Encoding UTF8
 }
 
-# ============================================================
-# Crear usuario dedicado con permisos restringidos (NTFS)
-# ============================================================
 function Crear-Usuario-Restringido {
-    param(
-        [string]$Servicio,
-        [string]$Directorio
-    )
+    param([string]$service, [string]$directorio)
 
-    $usuario = "svc_$($Servicio.ToLower())"
+    $usuario = "svc_$service"
+    $chars   = ([char[]]'abcdefghijkmnpqrstuvwxyz') +
+               ([char[]]'ABCDEFGHJKLMNPQRSTUVWXYZ') +
+               ([char[]]'23456789') +
+               ([char[]]'!@#$%')
+    $pwd = -join (1..16 | ForEach-Object { $chars | Get-Random })
+    $secPwd = ConvertTo-SecureString $pwd -AsPlainText -Force
 
-    $chars    = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%"
-    $password = -join ((1..16) | ForEach-Object { $chars[(Get-Random -Maximum $chars.Length)] })
-    $secPwd   = ConvertTo-SecureString $password -AsPlainText -Force
+    # Eliminar si ya existe
+    Remove-LocalUser -Name $usuario -ErrorAction SilentlyContinue
+    New-LocalUser -Name $usuario -Password $secPwd -PasswordNeverExpires `
+        -UserMayNotChangePassword -Description "Cuenta servicio $service" | Out-Null
 
-    if (-not (Get-LocalUser -Name $usuario -ErrorAction SilentlyContinue)) {
-        New-LocalUser `
-            -Name $usuario `
-            -Password $secPwd `
-            -PasswordNeverExpires `
-            -UserMayNotChangePassword `
-            -Description "Cuenta de servicio para $Servicio" `
-            | Out-Null
-        Write-Host "Usuario $usuario creado." -ForegroundColor Green
-    }
+    # ACL sobre el directorio
+    $acl = Get-Acl $directorio -ErrorAction SilentlyContinue
+    if ($acl) {
+        $acl.SetAccessRuleProtection($true, $false)  # deshabilitar herencia
 
-    if (Test-Path $Directorio) {
-        $acl = Get-Acl $Directorio
-
-        $acl.SetAccessRuleProtection($true, $false)
-        $acl.Access | ForEach-Object { $acl.RemoveAccessRule($_) | Out-Null }
-
-        $hostname     = $env:COMPUTERNAME
-        $usuarioLocal = "$hostname\$usuario"
-
-        $reglaServicio = New-Object System.Security.AccessControl.FileSystemAccessRule(
-            $usuarioLocal,
-            "ReadAndExecute",
-            "ContainerInherit,ObjectInherit",
-            "None",
-            "Allow"
+        $permisos = @(
+            @("SYSTEM",                        "FullControl"),
+            @("BUILTIN\Administrators",        "FullControl"),
+            @("IUSR",                          "ReadAndExecute"),
+            @("IIS_IUSRS",                     "ReadAndExecute"),
+            @("$env:COMPUTERNAME\$usuario",    "ReadAndExecute")
         )
-
-        foreach ($cuenta in @("NT AUTHORITY\SYSTEM", "BUILTIN\Administrators")) {
-            $regla = New-Object System.Security.AccessControl.FileSystemAccessRule(
-                $cuenta,
-                "FullControl",
-                "ContainerInherit,ObjectInherit",
-                "None",
-                "Allow"
-            )
-            $acl.AddAccessRule($regla)
-        }
-
-        foreach ($cuenta in @("IUSR", "IIS_IUSRS")) {
+        foreach ($p in $permisos) {
             try {
-                $reglaIIS = New-Object System.Security.AccessControl.FileSystemAccessRule(
-                    $cuenta,
-                    "ReadAndExecute",
-                    "ContainerInherit,ObjectInherit",
-                    "None",
-                    "Allow"
-                )
-                $acl.AddAccessRule($reglaIIS)
-            } catch {
-                Write-Host "Advertencia: No se pudo agregar $cuenta a la ACL." -ForegroundColor Yellow
-            }
+                $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
+                    $p[0], $p[1], "ContainerInherit,ObjectInherit", "None", "Allow")
+                $acl.AddAccessRule($rule)
+            } catch { }
         }
-
-        $acl.AddAccessRule($reglaServicio)
-        Set-Acl $Directorio $acl
-        Write-Host "Permisos NTFS aplicados en $Directorio para usuario $usuarioLocal." -ForegroundColor Green
+        Set-Acl -Path $directorio -AclObject $acl -ErrorAction SilentlyContinue
     }
+
+    Write-Host "Usuario restringido '$usuario' creado para $service." -ForegroundColor Green
 }
