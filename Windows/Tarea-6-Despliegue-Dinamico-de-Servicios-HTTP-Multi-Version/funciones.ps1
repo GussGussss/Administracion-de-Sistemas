@@ -231,6 +231,8 @@ function Listar-Versiones-Apache {
             $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
                         [System.Environment]::GetEnvironmentVariable("Path","User")
             Write-Host "Chocolatey instalado correctamente." -ForegroundColor Green
+            Write-Host "Reiniciando computadora..."
+            Restart-Computer -Force
         } catch {
             Write-Host "No se pudo instalar Chocolatey: $($_.Exception.Message)" -ForegroundColor Red
         }
