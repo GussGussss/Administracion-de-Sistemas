@@ -4,9 +4,6 @@
 # Windows Server 2019 Core (sin GUI) - PowerShell
 # Ejecutar como Administrador
 # ============================================================
-param(
-    [string]$AutoResume = ""   # Valor: "Apache" para continuar tras reinicio por Chocolatey
-)
 
 # Verificar que se ejecuta como Administrador
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
@@ -18,40 +15,6 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 # Cargar funciones
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 . "$scriptDir\funciones.ps1"
-
-# ── Reanudacion automatica tras reinicio ──────────────────────────────────
-# Si se llamo con -AutoResume Apache (por la tarea programada post-reinicio),
-# saltar directamente a la instalacion de Apache sin mostrar el menu.
-if ($AutoResume -eq "Apache") {
-
-    # Eliminar la tarea programada para que no se repita
-    Unregister-ScheduledTask -TaskName "HTTP-Deploy-Resume-Apache" -Confirm:$false -ErrorAction SilentlyContinue
-
-    Write-Host ""
-    Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host " Reanudando instalacion de Apache...   " -ForegroundColor Cyan
-    Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host ""
-
-    # Listar versiones (Chocolatey ya esta instalado tras el reinicio)
-    Listar-Versiones-Apache
-
-    $verNum = Leer-Opcion -Prompt "Seleccione numero de version [1-3]: " -Validas @("1","2","3")
-
-    $version = Resolver-Version `
-        -Seleccion $verNum `
-        -Latest  $global:APACHE_LATEST `
-        -Lts     $global:APACHE_LTS `
-        -Oldest  $global:APACHE_OLDEST
-
-    $puerto = Leer-Puerto
-
-    Instalar-Apache -Version $version -Puerto $puerto
-
-    Write-Host ""
-    Write-Host "Presione Enter para continuar al menu principal..." -NoNewline
-    Read-Host
-}
 
 # ============================================================
 # Funcion auxiliar: leer opcion validada (sin caracteres especiales)
