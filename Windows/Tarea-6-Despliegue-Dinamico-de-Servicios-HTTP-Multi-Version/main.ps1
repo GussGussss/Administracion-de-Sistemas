@@ -17,7 +17,7 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 
 # Cargar funciones
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
-. "$scriptDir\http_functions_v7.ps1"
+. "$scriptDir\funciones.ps1"
 
 # ── Reanudacion automatica tras reinicio ──────────────────────────────────
 # Si se llamo con -AutoResume Apache (por la tarea programada post-reinicio),
