@@ -429,9 +429,11 @@ TraceEnable Off
     Header always set X-Content-Type-Options "nosniff"
 </IfModule>
 
-<LimitExcept GET POST HEAD>
-    Deny from all
-</LimitExcept>
+<Directory "${SRVROOT}/htdocs">
+    <LimitExcept GET POST HEAD>
+        Deny from all
+    </LimitExcept>
+</Directory>
 "@ | Set-Content $secConf -Encoding UTF8
 
     $confPath = "$ApacheBase\conf\httpd.conf"
