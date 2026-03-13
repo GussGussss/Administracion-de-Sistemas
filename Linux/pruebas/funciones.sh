@@ -397,16 +397,12 @@ systemctl restart httpd
 #########################################
 
 listar_versiones_nginx() {
-
 echo ""
 echo "Consultando versiones disponibles de Nginx desde nginx.org..."
-
 BASE_URL="https://nginx.org/packages/rhel/9/x86_64/RPMS"
-
 VERSIONES_RAW=$(curl -s --max-time 10 "$BASE_URL/" \
     | grep -oP 'nginx-\K[0-9]+\.[0-9]+\.[0-9]+(?=-[0-9]+\.el9\.ngx\.x86_64\.rpm)' \
     | sort -V | uniq)
-
 if [ -n "$VERSIONES_RAW" ]; then
     LATEST=$(echo "$VERSIONES_RAW" | tail -n 1)
     LTS=$(echo "$VERSIONES_RAW" | grep "^1\.24" | tail -n 1)
@@ -416,15 +412,13 @@ else
     echo "No se pudo consultar nginx.org, usando versiones predefinidas."
     LATEST="1.26.3"
     LTS="1.24.0"
-    OLDEST="1.20.2"
+    OLDEST="1.22.1"
 fi
-
 echo "Versiones disponibles de Nginx:"
 echo ""
 echo "1) $LATEST  (Latest / Desarrollo)"
 echo "2) $LTS     (LTS / Estable)"
 echo "3) $OLDEST  (Oldest)"
-
 }
 #########################################
 # Crear usuario restringido nginx
