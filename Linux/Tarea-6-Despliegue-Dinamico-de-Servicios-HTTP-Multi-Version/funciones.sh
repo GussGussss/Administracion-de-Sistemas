@@ -147,14 +147,44 @@ instalar_apache() {
 
 VERSION=$1
 PUERTO=$2
+
 detener_servicios_http
+
+# Detectar si Apache ya está instalado
+VERSION_INSTALADA=$(rpm -q httpd --qf "%{VERSION}-%{RELEASE}" 2>/dev/null)
+
+if [ -n "$VERSION_INSTALADA" ]; then
+    echo ""
+    echo "Apache ya está instalado (versión $VERSION_INSTALADA)"
+    echo "Se omite la instalación y se procede solo a cambiar el puerto a $PUERTO"
+    echo ""
+
+    gestionar_puerto $PUERTO || return 1
+    permitir_puerto_selinux $PUERTO
+
+    echo "Actualizando puerto en httpd.conf..."
+    sed -i "s/^Listen .*/Listen $PUERTO/" /etc/httpd/conf/httpd.conf
+
+    systemctl restart httpd
+
+    crear_index "Apache" "$VERSION_INSTALADA" "$PUERTO" "/var/www/html"
+
+    echo ""
+    echo "====================================="
+    echo " PUERTO ACTUALIZADO "
+    echo "====================================="
+    echo "Servidor: Apache"
+    echo "Versión:  $VERSION_INSTALADA"
+    echo "Puerto:   $PUERTO"
+    echo "====================================="
+    return 0
+fi
+
 echo "Instalando Apache versión $VERSION..."
 
 dnf install -y httpd-$VERSION
 
 activar_headers_apache
-
-echo "Configurando puerto $PUERTO..."
 
 gestionar_puerto $PUERTO || return 1
 permitir_puerto_selinux $PUERTO
@@ -348,6 +378,36 @@ PUERTO=$2
 
 detener_servicios_http
 
+# Detectar si Nginx ya está instalado
+if command -v nginx >/dev/null 2>&1; then
+    VERSION_INSTALADA=$(nginx -v 2>&1 | cut -d'/' -f2)
+    echo ""
+    echo "Nginx ya está instalado (versión $VERSION_INSTALADA)"
+    echo "Se omite la instalación y se procede solo a cambiar el puerto a $PUERTO"
+    echo ""
+
+    gestionar_puerto $PUERTO || return 1
+    permitir_puerto_selinux $PUERTO
+
+    echo "Actualizando puerto en configuración de Nginx..."
+    configurar_puerto_nginx $PUERTO
+
+    nginx -t || { echo "Error en configuración de Nginx"; return 1; }
+    systemctl restart nginx
+
+    crear_index "Nginx" "$VERSION_INSTALADA" "$PUERTO" "/usr/share/nginx/html"
+
+    echo ""
+    echo "====================================="
+    echo " PUERTO ACTUALIZADO "
+    echo "====================================="
+    echo "Servidor: Nginx"
+    echo "Versión:  $VERSION_INSTALADA"
+    echo "Puerto:   $PUERTO"
+    echo "====================================="
+    return 0
+fi
+
 gestionar_puerto $PUERTO || return 1
 
 echo "Instalando Nginx versión $VERSION..."
@@ -429,7 +489,8 @@ configurar_puerto_tomcat() {
 
 PUERTO=$1
 
-sed -i "s/Connector port=\"8080\"/Connector port=\"$PUERTO\"/" /opt/tomcat/conf/server.xml
+# Reemplaza cualquier puerto que ya tenga el Connector, no solo 8080
+sed -i "s/Connector port=\"[0-9]*\"/Connector port=\"$PUERTO\"/" /opt/tomcat/conf/server.xml
 
 }
 
@@ -439,13 +500,57 @@ sed -i "s/Connector port=\"8080\"/Connector port=\"$PUERTO\"/" /opt/tomcat/conf/
 
 instalar_tomcat() {
 
-# instalar java
-dnf install -y java-21-openjdk java-21-openjdk-devel
-
 VERSION=$1
 PUERTO=$2
 
 detener_servicios_http
+
+# Detectar si Tomcat ya está instalado
+if [ -d "/opt/tomcat" ] && [ -f "/opt/tomcat/bin/version.sh" ]; then
+    VERSION_INSTALADA=$(sudo -u tomcatsvc /opt/tomcat/bin/version.sh 2>/dev/null | grep "Server version" | cut -d'/' -f2)
+    echo ""
+    echo "Tomcat ya está instalado (versión $VERSION_INSTALADA)"
+    echo "Se omite la instalación y se procede solo a cambiar el puerto a $PUERTO"
+    echo ""
+
+    gestionar_puerto $PUERTO || return 1
+    permitir_puerto_selinux $PUERTO
+
+    echo "Deteniendo Tomcat..."
+    pkill -f tomcat 2>/dev/null
+    sleep 2
+
+    echo "Actualizando puerto en server.xml..."
+    configurar_puerto_tomcat $PUERTO
+
+    crear_index "Tomcat" "$VERSION_INSTALADA" "$PUERTO" "/opt/tomcat/webapps/ROOT"
+
+    echo "Iniciando Tomcat en el nuevo puerto..."
+    JAVA_HOME=/usr/lib/jvm/java-21-openjdk
+    sudo -u tomcatsvc env JAVA_HOME=$JAVA_HOME CATALINA_HOME=/opt/tomcat /opt/tomcat/bin/startup.sh
+
+    echo "Esperando a que Tomcat inicie..."
+    for i in {1..20}; do
+        if ss -tuln | grep -q ":$PUERTO "; then
+            echo "Tomcat iniciado correctamente"
+            break
+        fi
+        sleep 1
+    done
+
+    echo ""
+    echo "====================================="
+    echo " PUERTO ACTUALIZADO "
+    echo "====================================="
+    echo "Servidor: Tomcat"
+    echo "Versión:  $VERSION_INSTALADA"
+    echo "Puerto:   $PUERTO"
+    echo "====================================="
+    return 0
+fi
+
+# instalar java
+dnf install -y java-21-openjdk java-21-openjdk-devel
 
 gestionar_puerto $PUERTO || return 1
 
