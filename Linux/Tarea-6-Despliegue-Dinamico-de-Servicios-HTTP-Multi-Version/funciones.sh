@@ -6,11 +6,11 @@
 preparar_repositorios() {
 
 # instalar utilidades necesarias
-dnf install -y dnf-plugins-core yum-utils epel-release
+dnf install -y dnf-plugins-core yum-utils epel-release > /dev/null 2>&1
 
 # limpiar cache
-dnf clean all
-dnf makecache
+dnf clean all > /dev/null 2>&1
+dnf makecache > /dev/null 2>&1
 
 }
 
@@ -73,8 +73,8 @@ abrir_firewall() {
 
 PUERTO=$1
 
-firewall-cmd --permanent --add-port=${PUERTO}/tcp
-firewall-cmd --reload
+firewall-cmd --permanent --add-port=${PUERTO}/tcp > /dev/null 2>&1
+firewall-cmd --reload > /dev/null 2>&1
 
 }
 
@@ -112,27 +112,19 @@ systemctl stop nginx 2>/dev/null
 
 listar_versiones_apache() {
 
-echo "Buscando versiones disponibles de Apache en los repositorios..."
+echo "Versiones disponibles de Apache:"
 echo ""
 
-echo "[dnf] Consultando: dnf list --showduplicates httpd"
 VERSIONES=$(dnf list --showduplicates httpd \
 | grep httpd.x86_64 \
 | awk '{print $2}' \
 | sort -V \
 | uniq)
 
-echo ""
-echo "Versiones encontradas en el repositorio:"
-echo "$VERSIONES"
-echo ""
-
 OLDEST=$(echo "$VERSIONES" | head -n 1)
 LATEST=$(echo "$VERSIONES" | tail -n 1)
 LTS=$(echo "$VERSIONES" | sed -n '2p')
 
-echo "Versiones disponibles de Apache:"
-echo ""
 echo "1) $LATEST  (Latest / Desarrollo)"
 echo "2) $LTS     (LTS / Estable)"
 echo "3) $OLDEST  (Oldest)"
@@ -147,44 +139,14 @@ instalar_apache() {
 
 VERSION=$1
 PUERTO=$2
-
 detener_servicios_http
-
-# Detectar si Apache ya está instalado
-VERSION_INSTALADA=$(rpm -q httpd --qf "%{VERSION}-%{RELEASE}" 2>/dev/null)
-
-if [ -n "$VERSION_INSTALADA" ]; then
-    echo ""
-    echo "Apache ya está instalado (versión $VERSION_INSTALADA)"
-    echo "Se omite la instalación y se procede solo a cambiar el puerto a $PUERTO"
-    echo ""
-
-    gestionar_puerto $PUERTO || return 1
-    permitir_puerto_selinux $PUERTO
-
-    echo "Actualizando puerto en httpd.conf..."
-    sed -i "s/^Listen .*/Listen $PUERTO/" /etc/httpd/conf/httpd.conf
-
-    systemctl restart httpd
-
-    crear_index "Apache" "$VERSION_INSTALADA" "$PUERTO" "/var/www/html"
-
-    echo ""
-    echo "====================================="
-    echo " PUERTO ACTUALIZADO "
-    echo "====================================="
-    echo "Servidor: Apache"
-    echo "Versión:  $VERSION_INSTALADA"
-    echo "Puerto:   $PUERTO"
-    echo "====================================="
-    return 0
-fi
-
 echo "Instalando Apache versión $VERSION..."
 
-dnf install -y httpd-$VERSION
+dnf install -y httpd-$VERSION > /dev/null 2>&1
 
 activar_headers_apache
+
+echo "Configurando puerto $PUERTO..."
 
 gestionar_puerto $PUERTO || return 1
 permitir_puerto_selinux $PUERTO
@@ -193,8 +155,8 @@ echo "Configurando puerto $PUERTO..."
 
 sed -i "s/Listen 80/Listen $PUERTO/g" /etc/httpd/conf/httpd.conf
 
-systemctl enable httpd
-systemctl restart httpd
+systemctl enable httpd > /dev/null 2>&1
+systemctl restart httpd > /dev/null 2>&1
 
 crear_index "Apache" "$VERSION" "$PUERTO" "/var/www/html"
 
@@ -217,7 +179,7 @@ echo "====================================="
 
 activar_headers_apache() {
 
-dnf install -y mod_headers
+dnf install -y mod_headers > /dev/null 2>&1
 
 }
 
@@ -254,7 +216,7 @@ TraceEnable Off
 
 EOF
 
-systemctl restart httpd
+systemctl restart httpd > /dev/null 2>&1
 
 }
 
@@ -264,13 +226,11 @@ systemctl restart httpd
 
 listar_versiones_nginx() {
 
-echo "Buscando versiones disponibles de Nginx en los repositorios..."
+echo "Versiones disponibles de Nginx:"
 echo ""
 
 preparar_repositorios
 
-echo ""
-echo "[dnf] Consultando: dnf repoquery --showduplicates nginx"
 VERSIONES=$(dnf repoquery --showduplicates nginx \
 | awk '{print $1}' \
 | awk -F'-' '{print $2}' \
@@ -281,23 +241,11 @@ COUNT=$(echo "$VERSIONES" | wc -l)
 
 if [ "$COUNT" -lt 3 ]; then
 
-echo "Repositorio con pocas versiones disponibles ($COUNT encontradas)."
-echo "Usando versiones conocidas como fallback:"
-echo "  Latest: 1.26.3"
-echo "  LTS:    1.24.0"
-echo "  Oldest: 1.20.1"
-echo ""
-
 LATEST="1.26.3"
 LTS="1.24.0"
 OLDEST="1.20.1"
 
 else
-
-echo ""
-echo "Versiones encontradas en el repositorio:"
-echo "$VERSIONES"
-echo ""
 
 OLDEST=$(echo "$VERSIONES" | head -n 1)
 LATEST=$(echo "$VERSIONES" | tail -n 1)
@@ -305,8 +253,6 @@ LTS=$(echo "$VERSIONES" | sed -n '2p')
 
 fi
 
-echo "Versiones disponibles de Nginx:"
-echo ""
 echo "1) $LATEST  (Latest / Desarrollo)"
 echo "2) $LTS     (LTS / Estable)"
 echo "3) $OLDEST  (Oldest)"
@@ -378,41 +324,11 @@ PUERTO=$2
 
 detener_servicios_http
 
-# Detectar si Nginx ya está instalado
-if command -v nginx >/dev/null 2>&1; then
-    VERSION_INSTALADA=$(nginx -v 2>&1 | cut -d'/' -f2)
-    echo ""
-    echo "Nginx ya está instalado (versión $VERSION_INSTALADA)"
-    echo "Se omite la instalación y se procede solo a cambiar el puerto a $PUERTO"
-    echo ""
-
-    gestionar_puerto $PUERTO || return 1
-    permitir_puerto_selinux $PUERTO
-
-    echo "Actualizando puerto en configuración de Nginx..."
-    configurar_puerto_nginx $PUERTO
-
-    nginx -t || { echo "Error en configuración de Nginx"; return 1; }
-    systemctl restart nginx
-
-    crear_index "Nginx" "$VERSION_INSTALADA" "$PUERTO" "/usr/share/nginx/html"
-
-    echo ""
-    echo "====================================="
-    echo " PUERTO ACTUALIZADO "
-    echo "====================================="
-    echo "Servidor: Nginx"
-    echo "Versión:  $VERSION_INSTALADA"
-    echo "Puerto:   $PUERTO"
-    echo "====================================="
-    return 0
-fi
-
 gestionar_puerto $PUERTO || return 1
 
 echo "Instalando Nginx versión $VERSION..."
 
-dnf install -y nginx
+dnf install -y nginx > /dev/null 2>&1
 
 VERSION_REAL=$(nginx -v 2>&1 | cut -d'/' -f2)
 VERSION=$VERSION_REAL
@@ -425,8 +341,8 @@ configurar_puerto_nginx $PUERTO
 
 nginx -t || { echo "Error en configuración de Nginx"; return 1; }
 
-systemctl enable nginx
-systemctl restart nginx
+systemctl enable nginx > /dev/null 2>&1
+systemctl restart nginx > /dev/null 2>&1
 
 crear_index "Nginx" "$VERSION" "$PUERTO" "/usr/share/nginx/html"
 
@@ -460,7 +376,6 @@ sed -i 's|protocol="org.apache.coyote.http11.Http11NioProtocol"|protocol="org.ap
 listar_versiones_tomcat() {
 
 echo "Versiones disponibles de Tomcat:"
-echo "(Tomcat no está en repositorios dnf, se descarga directo desde archive.apache.org)"
 echo ""
 
 echo "1) 10.1.28  (Latest / Desarrollo)"
@@ -489,8 +404,7 @@ configurar_puerto_tomcat() {
 
 PUERTO=$1
 
-# Reemplaza cualquier puerto que ya tenga el Connector, no solo 8080
-sed -i "s/Connector port=\"[0-9]*\"/Connector port=\"$PUERTO\"/" /opt/tomcat/conf/server.xml
+sed -i "s/Connector port=\"8080\"/Connector port=\"$PUERTO\"/" /opt/tomcat/conf/server.xml
 
 }
 
@@ -500,57 +414,13 @@ sed -i "s/Connector port=\"[0-9]*\"/Connector port=\"$PUERTO\"/" /opt/tomcat/con
 
 instalar_tomcat() {
 
+# instalar java
+dnf install -y java-21-openjdk java-21-openjdk-devel > /dev/null 2>&1
+
 VERSION=$1
 PUERTO=$2
 
 detener_servicios_http
-
-# Detectar si Tomcat ya está instalado
-if [ -d "/opt/tomcat" ] && [ -f "/opt/tomcat/bin/version.sh" ]; then
-    VERSION_INSTALADA=$(sudo -u tomcatsvc /opt/tomcat/bin/version.sh 2>/dev/null | grep "Server version" | cut -d'/' -f2)
-    echo ""
-    echo "Tomcat ya está instalado (versión $VERSION_INSTALADA)"
-    echo "Se omite la instalación y se procede solo a cambiar el puerto a $PUERTO"
-    echo ""
-
-    gestionar_puerto $PUERTO || return 1
-    permitir_puerto_selinux $PUERTO
-
-    echo "Deteniendo Tomcat..."
-    pkill -f tomcat 2>/dev/null
-    sleep 2
-
-    echo "Actualizando puerto en server.xml..."
-    configurar_puerto_tomcat $PUERTO
-
-    crear_index "Tomcat" "$VERSION_INSTALADA" "$PUERTO" "/opt/tomcat/webapps/ROOT"
-
-    echo "Iniciando Tomcat en el nuevo puerto..."
-    JAVA_HOME=/usr/lib/jvm/java-21-openjdk
-    sudo -u tomcatsvc env JAVA_HOME=$JAVA_HOME CATALINA_HOME=/opt/tomcat /opt/tomcat/bin/startup.sh
-
-    echo "Esperando a que Tomcat inicie..."
-    for i in {1..20}; do
-        if ss -tuln | grep -q ":$PUERTO "; then
-            echo "Tomcat iniciado correctamente"
-            break
-        fi
-        sleep 1
-    done
-
-    echo ""
-    echo "====================================="
-    echo " PUERTO ACTUALIZADO "
-    echo "====================================="
-    echo "Servidor: Tomcat"
-    echo "Versión:  $VERSION_INSTALADA"
-    echo "Puerto:   $PUERTO"
-    echo "====================================="
-    return 0
-fi
-
-# instalar java
-dnf install -y java-21-openjdk java-21-openjdk-devel
 
 gestionar_puerto $PUERTO || return 1
 
@@ -560,7 +430,7 @@ cd /tmp
 
 MAJOR=$(echo $VERSION | cut -d'.' -f1)
 
-wget https://archive.apache.org/dist/tomcat/tomcat-$MAJOR/v$VERSION/bin/apache-tomcat-$VERSION.tar.gz
+wget https://archive.apache.org/dist/tomcat/tomcat-$MAJOR/v$VERSION/bin/apache-tomcat-$VERSION.tar.gz -q
 
 tar -xzf apache-tomcat-$VERSION.tar.gz
 
