@@ -112,19 +112,27 @@ systemctl stop nginx 2>/dev/null
 
 listar_versiones_apache() {
 
-echo "Versiones disponibles de Apache:"
+echo "Buscando versiones disponibles de Apache en los repositorios..."
 echo ""
 
+echo "[dnf] Consultando: dnf list --showduplicates httpd"
 VERSIONES=$(dnf list --showduplicates httpd \
 | grep httpd.x86_64 \
 | awk '{print $2}' \
 | sort -V \
 | uniq)
 
+echo ""
+echo "Versiones encontradas en el repositorio:"
+echo "$VERSIONES"
+echo ""
+
 OLDEST=$(echo "$VERSIONES" | head -n 1)
 LATEST=$(echo "$VERSIONES" | tail -n 1)
 LTS=$(echo "$VERSIONES" | sed -n '2p')
 
+echo "Versiones disponibles de Apache:"
+echo ""
 echo "1) $LATEST  (Latest / Desarrollo)"
 echo "2) $LTS     (LTS / Estable)"
 echo "3) $OLDEST  (Oldest)"
@@ -226,11 +234,13 @@ systemctl restart httpd
 
 listar_versiones_nginx() {
 
-echo "Versiones disponibles de Nginx:"
+echo "Buscando versiones disponibles de Nginx en los repositorios..."
 echo ""
 
 preparar_repositorios
 
+echo ""
+echo "[dnf] Consultando: dnf repoquery --showduplicates nginx"
 VERSIONES=$(dnf repoquery --showduplicates nginx \
 | awk '{print $1}' \
 | awk -F'-' '{print $2}' \
@@ -241,11 +251,23 @@ COUNT=$(echo "$VERSIONES" | wc -l)
 
 if [ "$COUNT" -lt 3 ]; then
 
+echo "Repositorio con pocas versiones disponibles ($COUNT encontradas)."
+echo "Usando versiones conocidas como fallback:"
+echo "  Latest: 1.26.3"
+echo "  LTS:    1.24.0"
+echo "  Oldest: 1.20.1"
+echo ""
+
 LATEST="1.26.3"
 LTS="1.24.0"
 OLDEST="1.20.1"
 
 else
+
+echo ""
+echo "Versiones encontradas en el repositorio:"
+echo "$VERSIONES"
+echo ""
 
 OLDEST=$(echo "$VERSIONES" | head -n 1)
 LATEST=$(echo "$VERSIONES" | tail -n 1)
@@ -253,6 +275,8 @@ LTS=$(echo "$VERSIONES" | sed -n '2p')
 
 fi
 
+echo "Versiones disponibles de Nginx:"
+echo ""
 echo "1) $LATEST  (Latest / Desarrollo)"
 echo "2) $LTS     (LTS / Estable)"
 echo "3) $OLDEST  (Oldest)"
@@ -376,6 +400,7 @@ sed -i 's|protocol="org.apache.coyote.http11.Http11NioProtocol"|protocol="org.ap
 listar_versiones_tomcat() {
 
 echo "Versiones disponibles de Tomcat:"
+echo "(Tomcat no está en repositorios dnf, se descarga directo desde archive.apache.org)"
 echo ""
 
 echo "1) 10.1.28  (Latest / Desarrollo)"
