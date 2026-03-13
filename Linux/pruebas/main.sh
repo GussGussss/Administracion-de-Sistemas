@@ -2,9 +2,7 @@
 source ./funciones.sh
 while true
     do
-    echo "=============================="
-    echo " DESPLIEGUE SERVIDORES HTTP "
-    echo "=============================="
+    echo "************** SERVIDORES HTTP ***********"
     echo "1) Apache"
     echo "2) Nginx"
     echo "3) Tomcat"
