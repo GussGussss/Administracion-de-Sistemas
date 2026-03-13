@@ -1,5 +1,5 @@
 #!/bin/bash
-source ./funciones2.sh
+source ./funciones.sh
 while true
     do
     echo "=============================="
