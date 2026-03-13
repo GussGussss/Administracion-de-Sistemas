@@ -264,10 +264,17 @@ cambiar_puerto_tomcat() {
         sleep 1
     done
 
-    VERSION=$(cat /opt/tomcat/.tomcat_version 2>/dev/null || echo "desconocida")
+    # Leer versión con fallback a version.sh si el archivo no existe
+    VERSION=$(cat /opt/tomcat/.tomcat_version 2>/dev/null)
+    if [ -z "$VERSION" ]; then
+        VERSION=$(JAVA_HOME=/usr/lib/jvm/java-21-openjdk \
+            /opt/tomcat/bin/version.sh 2>/dev/null \
+            | grep -oP 'Server version:.*Tomcat/\K[0-9]+\.[0-9]+\.[0-9]+')
+    fi
+    [ -z "$VERSION" ] && VERSION="10.1.x"
+
     crear_index "Tomcat" "$VERSION" "$PUERTO_NUEVO" "/opt/tomcat/webapps/ROOT"
 }
-
 #########################################
 # Instalar Apache
 #########################################
