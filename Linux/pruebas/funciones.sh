@@ -635,10 +635,36 @@ instalar_tomcat() {
 VERSION=$1
 PUERTO=$2
 
-# Detectar si Tomcat ya está instalado
+# ── Java: siempre verificar/instalar ANTES de cualquier otra decisión ──────────
+echo "Verificando instalación de Java 21..."
+if ! rpm -q java-21-openjdk &>/dev/null; then
+    echo "Instalando Java 21 (requerido por Tomcat)..."
+    dnf install -y java-21-openjdk java-21-openjdk-devel
+else
+    echo "Java 21 ya está instalado."
+fi
+
+# ── Detectar si Tomcat ya está instalado (3 métodos en cascada) ───────────────
 VERSION_INSTALADA=""
 if [ -f /opt/tomcat/bin/startup.sh ]; then
-    VERSION_INSTALADA=$(grep -m1 "Tomcat/" /opt/tomcat/RELEASE-NOTES 2>/dev/null | grep -oP '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+
+    # Método 1: RELEASE-NOTES (presente en instalaciones tar oficiales)
+    VERSION_INSTALADA=$(grep -m1 "Apache Tomcat Version\|Tomcat/" \
+        /opt/tomcat/RELEASE-NOTES 2>/dev/null \
+        | grep -oP '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+
+    # Método 2: version.sh de Catalina
+    if [ -z "$VERSION_INSTALADA" ]; then
+        VERSION_INSTALADA=$(JAVA_HOME=/usr/lib/jvm/java-21-openjdk \
+            /opt/tomcat/bin/version.sh 2>/dev/null \
+            | grep -oP 'Server version:.*Tomcat/\K[0-9]+\.[0-9]+\.[0-9]+')
+    fi
+
+    # Método 3: archivo de versión que este script guarda al instalar
+    if [ -z "$VERSION_INSTALADA" ]; then
+        VERSION_INSTALADA=$(cat /opt/tomcat/.tomcat_version 2>/dev/null)
+    fi
+
     [ -z "$VERSION_INSTALADA" ] && VERSION_INSTALADA="desconocida"
 fi
 
@@ -668,9 +694,7 @@ if [ -n "$VERSION_INSTALADA" ]; then
     fi
 fi
 
-echo "Instalando Java 21 (requerido por Tomcat)..."
-dnf install -y java-21-openjdk java-21-openjdk-devel
-
+# ── Instalación nueva (o reinstalación tras eliminar /opt/tomcat) ─────────────
 detener_servicios_http
 
 gestionar_puerto $PUERTO || return 1
@@ -694,6 +718,9 @@ pkill -f tomcat 2>/dev/null && echo "Proceso Tomcat detenido." || echo "No habí
 echo "Moviendo Tomcat a /opt/tomcat..."
 rm -rf /opt/tomcat
 mv apache-tomcat-$VERSION /opt/tomcat
+
+# Guardar versión instalada para detección futura confiable
+echo "$VERSION" > /opt/tomcat/.tomcat_version
 
 crear_usuario_tomcat
 
