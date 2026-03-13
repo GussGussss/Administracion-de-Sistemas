@@ -588,9 +588,21 @@ detectar_nginx() {
 
 detectar_tomcat() {
     if [ -f /opt/tomcat/bin/startup.sh ]; then
-        PUERTO_ACTUAL=$(grep 'Connector port' /opt/tomcat/conf/server.xml 2>/dev/null | head -1 | grep -oP 'port="\K[^"]+')
-        VERSION_ACTUAL=$(grep 'Server version' /opt/tomcat/logs/catalina.out 2>/dev/null | head -1 | grep -oP 'Tomcat/\K[\d.]+')
-        [ -z "$VERSION_ACTUAL" ] && VERSION_ACTUAL=$(ls /opt/tomcat/lib/catalina.jar 2>/dev/null | xargs -I{} unzip -p {} META-INF/MANIFEST.MF 2>/dev/null | grep "Implementation-Version" | cut -d' ' -f2 | tr -d '\r')
+        # Puerto: buscar el Connector HTTP (no el AJP ni el shutdown)
+        PUERTO_ACTUAL=$(grep 'Connector port' /opt/tomcat/conf/server.xml 2>/dev/null             | grep -v 'AJP\|ajp\|8005'             | head -1             | sed 's/.*port="\([0-9]*\)".*/\1/')
+
+        # Version: buscar en RELEASE-NOTES o en catalina.sh
+        VERSION_ACTUAL=$(cat /opt/tomcat/RELEASE-NOTES 2>/dev/null             | grep -i "Apache Tomcat Version"             | head -1             | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+
+        # Fallback: buscar en catalina.out si existe
+        if [ -z "$VERSION_ACTUAL" ] && [ -f /opt/tomcat/logs/catalina.out ]; then
+            VERSION_ACTUAL=$(grep -oE 'Apache Tomcat/[0-9]+\.[0-9]+\.[0-9]+' /opt/tomcat/logs/catalina.out                 | head -1                 | cut -d'/' -f2)
+        fi
+
+        # Fallback: buscar en el nombre del directorio de trabajo
+        [ -z "$VERSION_ACTUAL" ] && VERSION_ACTUAL="desconocida"
+        [ -z "$PUERTO_ACTUAL" ]  && PUERTO_ACTUAL="desconocido"
+
         echo "instalado"
         return 0
     fi
