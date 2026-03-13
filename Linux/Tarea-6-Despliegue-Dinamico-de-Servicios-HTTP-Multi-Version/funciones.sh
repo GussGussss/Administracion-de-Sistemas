@@ -21,6 +21,7 @@ dnf makecache
 validar_puerto() {
 
 PUERTO=$1
+PUERTO_ACTUAL=${2:-""}   # puerto que el servicio ya ocupa (opcional)
 
 if [[ ! $PUERTO =~ ^[0-9]+$ ]]; then
     echo "Puerto inválido"
@@ -31,13 +32,18 @@ if ((PUERTO < 1 || PUERTO > 65535)); then
     echo "Puerto fuera de rango"
     return 1
 fi
+
 if [[ $PUERTO == 22 || $PUERTO == 25 || $PUERTO == 53 ]]; then
     echo "Puerto reservado por el sistema"
     return 1
 fi
+
+# Solo falla si el puerto está en uso Y no es el puerto actual del propio servicio
 if ss -tuln | grep -q ":$PUERTO "; then
-    echo "El puerto ya está en uso"
-    return 1
+    if [[ "$PUERTO" != "$PUERTO_ACTUAL" ]]; then
+        echo "El puerto ya está en uso"
+        return 1
+    fi
 fi
 
 return 0
@@ -130,6 +136,10 @@ echo ""
 OLDEST=$(echo "$VERSIONES" | head -n 1)
 LATEST=$(echo "$VERSIONES" | tail -n 1)
 LTS=$(echo "$VERSIONES" | sed -n '2p')
+
+export APACHE_LATEST=$LATEST
+export APACHE_LTS=$LTS
+export APACHE_OLDEST=$OLDEST
 
 echo "Versiones disponibles de Apache:"
 echo ""
@@ -304,6 +314,10 @@ LATEST=$(echo "$VERSIONES" | tail -n 1)
 LTS=$(echo "$VERSIONES" | sed -n '2p')
 
 fi
+
+export NGINX_LATEST=$LATEST
+export NGINX_LTS=$LTS
+export NGINX_OLDEST=$OLDEST
 
 echo "Versiones disponibles de Nginx:"
 echo ""
