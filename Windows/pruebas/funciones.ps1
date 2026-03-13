@@ -338,6 +338,8 @@ function Instalar-IIS {
         if (-not (Gestionar-Puerto -Puerto $Puerto)) { return }
         Cambiar-Puerto-IIS -PuertoNuevo $Puerto
 
+        Crear-Index -Servicio "IIS" -Version $versionInstalada -Puerto $Puerto -Directorio "C:\inetpub\wwwroot"
+
         Write-Host ""
         Write-Host "=====================================" -ForegroundColor Green
         Write-Host " PUERTO ACTUALIZADO                  " -ForegroundColor Green
