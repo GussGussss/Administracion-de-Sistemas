@@ -263,6 +263,9 @@ cambiar_puerto_tomcat() {
         echo "  Intento $i/20..."
         sleep 1
     done
+
+    VERSION=$(cat /opt/tomcat/.tomcat_version 2>/dev/null || echo "desconocida")
+    crear_index "Tomcat" "$VERSION" "$PUERTO_NUEVO" "/opt/tomcat/webapps/ROOT"
 }
 
 #########################################
