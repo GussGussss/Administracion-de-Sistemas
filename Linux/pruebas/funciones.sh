@@ -481,9 +481,17 @@ configurar_seguridad_nginx() {
 
 CONF="/etc/nginx/nginx.conf"
 
-echo "Aplicando server_tokens off en nginx.conf..."
-sed -i '/server_tokens/d' $CONF
-echo "server_tokens off;" >> $CONF
+echo "Aplicando server_tokens off en nginx.conf (dentro del bloque http)..."
+
+# Eliminar cualquier server_tokens suelta que haya fuera del bloque http
+sed -i '/^server_tokens/d' $CONF
+
+# Si ya existe dentro del bloque http, actualizarla; si no, insertarla justo después de "http {"
+if grep -q "server_tokens" $CONF; then
+    sed -i "s/.*server_tokens.*/    server_tokens off;/" $CONF
+else
+    sed -i "/^http[[:space:]]*{/a\    server_tokens off;" $CONF
+fi
 
 }
 
