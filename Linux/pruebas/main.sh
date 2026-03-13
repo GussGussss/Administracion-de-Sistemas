@@ -4,7 +4,7 @@ source ./funciones.sh
 while true; do
     echo "=============================="
     echo " DESPLIEGUE SERVIDORES HTTP "
-    echo "   Linux - Rocky/AlmaLinux   "
+    echo "   Linux - Oracle Linux Server   "
     echo "=============================="
     echo "1) Apache"
     echo "2) Nginx"
