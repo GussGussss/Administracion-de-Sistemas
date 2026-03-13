@@ -566,15 +566,13 @@ echo "index.html creado correctamente."
 
 detectar_apache() {
     if rpm -q httpd &>/dev/null || [ -f /etc/httpd/conf/httpd.conf ]; then
-        # Puerto: buscar línea Listen que tenga solo número (no IP:puerto)
-        PUERTO_ACTUAL=$(grep -E "^Listen\s+[0-9]+" /etc/httpd/conf/httpd.conf 2>/dev/null             | awk '{print $2}' | head -1)
-        # Fallback: cualquier línea Listen
-        [ -z "$PUERTO_ACTUAL" ] && PUERTO_ACTUAL=$(grep -i "^Listen" /etc/httpd/conf/httpd.conf 2>/dev/null             | awk '{print $2}' | head -1)
+        # Puerto: buscar línea "Listen NUMERO" — solo dígitos, sin IP ni slash
+        PUERTO_ACTUAL=$(grep -E "^Listen [0-9]+$" /etc/httpd/conf/httpd.conf 2>/dev/null             | awk '{print $2}' | head -1)
+        [ -z "$PUERTO_ACTUAL" ] && PUERTO_ACTUAL="desconocido"
 
-        # Version: solo el número de versión limpio
+        # Version: solo número limpio X.Y.Z
         VERSION_ACTUAL=$(rpm -q httpd --queryformat "%{VERSION}" 2>/dev/null | head -1)
         [ -z "$VERSION_ACTUAL" ] && VERSION_ACTUAL="desconocida"
-        [ -z "$PUERTO_ACTUAL" ]  && PUERTO_ACTUAL="desconocido"
 
         echo "instalado"
         return 0
@@ -632,11 +630,25 @@ cambiar_puerto_apache() {
     PUERTO_VIEJO=$1
     PUERTO_NUEVO=$2
 
+    # Validar que ambos puertos son números antes de tocar cualquier archivo
+    if [[ ! "$PUERTO_NUEVO" =~ ^[0-9]+$ ]]; then
+        echo "Error: puerto nuevo '$PUERTO_NUEVO' no es válido. Abortando."
+        return 1
+    fi
+
     echo "Cambiando puerto Apache: $PUERTO_VIEJO -> $PUERTO_NUEVO..."
 
-    # Modificar httpd.conf — reemplazar cualquier línea Listen con número
-    sed -i -E "s/^Listen\s+[0-9]+/Listen $PUERTO_NUEVO/" /etc/httpd/conf/httpd.conf
+    # Modificar httpd.conf — reemplazar línea exacta "Listen NUMERO" sin tocar comentarios
+    sed -i -E "s/^Listen [0-9]+$/${PUERTO_NUEVO}/" /etc/httpd/conf/httpd.conf
+    sed -i -E "s/^${PUERTO_NUEVO}$/Listen ${PUERTO_NUEVO}/" /etc/httpd/conf/httpd.conf
     echo "httpd.conf actualizado."
+
+    # Verificar que quedó bien
+    if grep -qE "^Listen $PUERTO_NUEVO$" /etc/httpd/conf/httpd.conf; then
+        echo "Verificado: Listen $PUERTO_NUEVO en httpd.conf."
+    else
+        echo "ADVERTENCIA: no se encontró Listen $PUERTO_NUEVO en httpd.conf. Revise manualmente."
+    fi
 
     # Firewall: cerrar viejo solo si es un número válido
     if [[ "$PUERTO_VIEJO" =~ ^[0-9]+$ ]]; then
@@ -663,10 +675,15 @@ cambiar_puerto_nginx() {
     PUERTO_VIEJO=$1
     PUERTO_NUEVO=$2
 
+    if [[ ! "$PUERTO_NUEVO" =~ ^[0-9]+$ ]]; then
+        echo "Error: puerto nuevo '$PUERTO_NUEVO' no es válido. Abortando."
+        return 1
+    fi
+
     echo "Cambiando puerto Nginx: $PUERTO_VIEJO -> $PUERTO_NUEVO..."
 
     # Modificar default.conf
-    sed -i "s/listen $PUERTO_VIEJO;/listen $PUERTO_NUEVO;/" /etc/nginx/conf.d/default.conf
+    sed -i -E "s/listen [0-9]+;/listen ${PUERTO_NUEVO};/" /etc/nginx/conf.d/default.conf
     echo "default.conf actualizado."
 
     # Firewall: cerrar viejo, abrir nuevo
@@ -692,10 +709,15 @@ cambiar_puerto_tomcat() {
     PUERTO_VIEJO=$1
     PUERTO_NUEVO=$2
 
+    if [[ ! "$PUERTO_NUEVO" =~ ^[0-9]+$ ]]; then
+        echo "Error: puerto nuevo '$PUERTO_NUEVO' no es válido. Abortando."
+        return 1
+    fi
+
     echo "Cambiando puerto Tomcat: $PUERTO_VIEJO -> $PUERTO_NUEVO..."
 
-    # Modificar server.xml
-    sed -i "s/Connector port=\"$PUERTO_VIEJO\"/Connector port=\"$PUERTO_NUEVO\"/" /opt/tomcat/conf/server.xml
+    # Modificar server.xml — reemplazar cualquier Connector port HTTP (no AJP ni shutdown)
+    sed -i -E "s/Connector port=\"[0-9]+\"/Connector port=\"${PUERTO_NUEVO}\"/" /opt/tomcat/conf/server.xml
     echo "server.xml actualizado."
 
     # Firewall: cerrar viejo, abrir nuevo
