@@ -42,7 +42,7 @@ if [[ $PUERTO == 22 || $PUERTO == 25 || $PUERTO == 53 ]]; then
 fi
 
 # Puertos privilegiados: requieren root; servicios como Tomcat corren sin privilegios
-if ((PUERTO < 0)); then
+if ((PUERTO < 1024)); then
     echo "Puerto $PUERTO es privilegiado (< 1024). Use un puerto >= 1024 para servicios HTTP."
     return 1
 fi
@@ -263,8 +263,18 @@ cambiar_puerto_tomcat() {
         echo "  Intento $i/20..."
         sleep 1
     done
-}
 
+    # Leer versión con fallback a version.sh si el archivo no existe
+    VERSION=$(cat /opt/tomcat/.tomcat_version 2>/dev/null)
+    if [ -z "$VERSION" ]; then
+        VERSION=$(JAVA_HOME=/usr/lib/jvm/java-21-openjdk \
+            /opt/tomcat/bin/version.sh 2>/dev/null \
+            | grep -oP 'Server version:.*Tomcat/\K[0-9]+\.[0-9]+\.[0-9]+')
+    fi
+    [ -z "$VERSION" ] && VERSION="10.1.x"
+
+    crear_index "Tomcat" "$VERSION" "$PUERTO_NUEVO" "/opt/tomcat/webapps/ROOT"
+}
 #########################################
 # Instalar Apache
 #########################################
@@ -389,27 +399,33 @@ systemctl restart httpd
 listar_versiones_nginx() {
 
 echo ""
-echo "Consultando versiones disponibles de Nginx desde nginx.org..."
+echo "Preparando repositorios para Nginx..."
+preparar_repositorios
 
-BASE_URL="https://nginx.org/packages/rhel/9/x86_64/RPMS"
+echo ""
+echo "Consultando versiones disponibles de Nginx en el repositorio DNF..."
 
-VERSIONES_RAW=$(curl -s --max-time 10 "$BASE_URL/" \
-    | grep -oP 'nginx-\K[0-9]+\.[0-9]+\.[0-9]+(?=-[0-9]+\.el9\.ngx\.x86_64\.rpm)' \
-    | sort -V | uniq)
+VERSIONES=$(dnf repoquery --showduplicates nginx \
+| awk '{print $1}' \
+| awk -F'-' '{print $2}' \
+| sort -V \
+| uniq)
 
-if [ -n "$VERSIONES_RAW" ]; then
-    echo "Versiones encontradas en nginx.org:"
-    echo "$VERSIONES_RAW"
-    echo ""
-    LATEST=$(echo "$VERSIONES_RAW" | tail -n 1)
-    LTS=$(echo "$VERSIONES_RAW" | grep "^1\.24" | tail -n 1)
-    [ -z "$LTS" ] && LTS=$(echo "$VERSIONES_RAW" | tail -n 2 | head -n 1)
-    OLDEST=$(echo "$VERSIONES_RAW" | head -n 1)
-else
-    echo "No se pudo consultar nginx.org, usando versiones predefinidas."
+echo "Versiones encontradas:"
+echo "$VERSIONES"
+echo ""
+
+COUNT=$(echo "$VERSIONES" | wc -l)
+
+if [ "$COUNT" -lt 3 ]; then
+    echo "Pocas versiones en repositorio, usando versiones predefinidas."
     LATEST="1.26.3"
     LTS="1.24.0"
-    OLDEST="1.20.2"
+    OLDEST="1.20.1"
+else
+    OLDEST=$(echo "$VERSIONES" | head -n 1)
+    LATEST=$(echo "$VERSIONES" | tail -n 1)
+    LTS=$(echo "$VERSIONES" | sed -n '2p')
 fi
 
 echo "Versiones disponibles de Nginx:"
@@ -531,43 +547,12 @@ detener_servicios_http
 gestionar_puerto $PUERTO || return 1
 
 echo ""
-echo "Instalando Nginx versión $VERSION desde nginx.org..."
-
-BASE_URL="https://nginx.org/packages/rhel/9/x86_64/RPMS"
-RPM_NAME="nginx-${VERSION}-1.el9.ngx.x86_64.rpm"
-RPM_URL="${BASE_URL}/${RPM_NAME}"
-
-echo "Descargando: $RPM_URL"
-if curl -sSf --max-time 60 "$RPM_URL" -o "/tmp/$RPM_NAME"; then
-    echo "Descarga correcta. Importando clave GPG e instalando RPM..."
-    rpm --import https://nginx.org/keys/nginx_signing.key 2>/dev/null
-    dnf install -y "/tmp/$RPM_NAME" --allowerasing
-    rm -f "/tmp/$RPM_NAME"
-else
-    echo "RPM no encontrado para $VERSION, usando DNF generico..."
-    dnf install -y nginx
-fi
+echo "Instalando Nginx versión $VERSION..."
+dnf install -y nginx
 
 VERSION_REAL=$(nginx -v 2>&1 | cut -d'/' -f2)
 VERSION=$VERSION_REAL
 echo "Versión instalada: $VERSION"
-
-# Corregir owner del PID file — el RPM de nginx.org lo deja como root
-echo "Corrigiendo permisos de PID file y logs..."
-NGINX_USER=$(grep -m1 "^user " /etc/nginx/nginx.conf | awk '{print $2}' | tr -d ';')
-[ -z "$NGINX_USER" ] && NGINX_USER="nginx"
-
-# PID file
-rm -f /run/nginx.pid
-touch /run/nginx.pid
-chown ${NGINX_USER}:${NGINX_USER} /run/nginx.pid
-restorecon /run/nginx.pid 2>/dev/null
-
-# Logs
-mkdir -p /var/log/nginx
-touch /var/log/nginx/error.log /var/log/nginx/access.log
-chown -R ${NGINX_USER}:${NGINX_USER} /var/log/nginx
-restorecon -Rv /var/log/nginx 2>/dev/null
 
 crear_usuario_nginx
 
@@ -660,10 +645,36 @@ instalar_tomcat() {
 VERSION=$1
 PUERTO=$2
 
-# Detectar si Tomcat ya está instalado
+# ── Java: siempre verificar/instalar ANTES de cualquier otra decisión ──────────
+echo "Verificando instalación de Java 21..."
+if ! rpm -q java-21-openjdk &>/dev/null; then
+    echo "Instalando Java 21 (requerido por Tomcat)..."
+    dnf install -y java-21-openjdk java-21-openjdk-devel
+else
+    echo "Java 21 ya está instalado."
+fi
+
+# ── Detectar si Tomcat ya está instalado (3 métodos en cascada) ───────────────
 VERSION_INSTALADA=""
 if [ -f /opt/tomcat/bin/startup.sh ]; then
-    VERSION_INSTALADA=$(grep -m1 "Tomcat/" /opt/tomcat/RELEASE-NOTES 2>/dev/null | grep -oP '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+
+    # Método 1: RELEASE-NOTES (presente en instalaciones tar oficiales)
+    VERSION_INSTALADA=$(grep -m1 "Apache Tomcat Version\|Tomcat/" \
+        /opt/tomcat/RELEASE-NOTES 2>/dev/null \
+        | grep -oP '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+
+    # Método 2: version.sh de Catalina
+    if [ -z "$VERSION_INSTALADA" ]; then
+        VERSION_INSTALADA=$(JAVA_HOME=/usr/lib/jvm/java-21-openjdk \
+            /opt/tomcat/bin/version.sh 2>/dev/null \
+            | grep -oP 'Server version:.*Tomcat/\K[0-9]+\.[0-9]+\.[0-9]+')
+    fi
+
+    # Método 3: archivo de versión que este script guarda al instalar
+    if [ -z "$VERSION_INSTALADA" ]; then
+        VERSION_INSTALADA=$(cat /opt/tomcat/.tomcat_version 2>/dev/null)
+    fi
+
     [ -z "$VERSION_INSTALADA" ] && VERSION_INSTALADA="desconocida"
 fi
 
@@ -693,9 +704,7 @@ if [ -n "$VERSION_INSTALADA" ]; then
     fi
 fi
 
-echo "Instalando Java 21 (requerido por Tomcat)..."
-dnf install -y java-21-openjdk java-21-openjdk-devel
-
+# ── Instalación nueva (o reinstalación tras eliminar /opt/tomcat) ─────────────
 detener_servicios_http
 
 gestionar_puerto $PUERTO || return 1
@@ -719,6 +728,9 @@ pkill -f tomcat 2>/dev/null && echo "Proceso Tomcat detenido." || echo "No habí
 echo "Moviendo Tomcat a /opt/tomcat..."
 rm -rf /opt/tomcat
 mv apache-tomcat-$VERSION /opt/tomcat
+
+# Guardar versión instalada para detección futura confiable
+echo "$VERSION" > /opt/tomcat/.tomcat_version
 
 crear_usuario_tomcat
 
