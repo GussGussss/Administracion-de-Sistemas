@@ -566,8 +566,16 @@ echo "index.html creado correctamente."
 
 detectar_apache() {
     if rpm -q httpd &>/dev/null || [ -f /etc/httpd/conf/httpd.conf ]; then
-        PUERTO_ACTUAL=$(grep "^Listen" /etc/httpd/conf/httpd.conf 2>/dev/null | awk '{print $2}')
-        VERSION_ACTUAL=$(rpm -q httpd --queryformat "%{VERSION}-%{RELEASE}" 2>/dev/null | head -1)
+        # Puerto: buscar línea Listen que tenga solo número (no IP:puerto)
+        PUERTO_ACTUAL=$(grep -E "^Listen\s+[0-9]+" /etc/httpd/conf/httpd.conf 2>/dev/null             | awk '{print $2}' | head -1)
+        # Fallback: cualquier línea Listen
+        [ -z "$PUERTO_ACTUAL" ] && PUERTO_ACTUAL=$(grep -i "^Listen" /etc/httpd/conf/httpd.conf 2>/dev/null             | awk '{print $2}' | head -1)
+
+        # Version: solo el número de versión limpio
+        VERSION_ACTUAL=$(rpm -q httpd --queryformat "%{VERSION}" 2>/dev/null | head -1)
+        [ -z "$VERSION_ACTUAL" ] && VERSION_ACTUAL="desconocida"
+        [ -z "$PUERTO_ACTUAL" ]  && PUERTO_ACTUAL="desconocido"
+
         echo "instalado"
         return 0
     fi
@@ -577,8 +585,14 @@ detectar_apache() {
 
 detectar_nginx() {
     if rpm -q nginx &>/dev/null || [ -f /etc/nginx/nginx.conf ]; then
-        PUERTO_ACTUAL=$(grep -E "^\s*listen" /etc/nginx/conf.d/default.conf 2>/dev/null | awk '{print $2}' | tr -d ';' | head -1)
-        VERSION_ACTUAL=$(nginx -v 2>&1 | cut -d'/' -f2)
+        PUERTO_ACTUAL=$(grep -E "listen\s+[0-9]+" /etc/nginx/conf.d/default.conf 2>/dev/null             | awk '{print $2}' | tr -d ';' | head -1)
+        [ -z "$PUERTO_ACTUAL" ] && PUERTO_ACTUAL=$(grep -E "listen" /etc/nginx/conf.d/default.conf 2>/dev/null             | awk '{print $2}' | tr -d ';' | head -1)
+
+        VERSION_ACTUAL=$(nginx -v 2>&1 | cut -d'/' -f2 | tr -d '
+')
+        [ -z "$VERSION_ACTUAL" ] && VERSION_ACTUAL="desconocida"
+        [ -z "$PUERTO_ACTUAL" ]  && PUERTO_ACTUAL="desconocido"
+
         echo "instalado"
         return 0
     fi
@@ -620,13 +634,17 @@ cambiar_puerto_apache() {
 
     echo "Cambiando puerto Apache: $PUERTO_VIEJO -> $PUERTO_NUEVO..."
 
-    # Modificar httpd.conf
-    sed -i "s/^Listen $PUERTO_VIEJO/Listen $PUERTO_NUEVO/" /etc/httpd/conf/httpd.conf
+    # Modificar httpd.conf — reemplazar cualquier línea Listen con número
+    sed -i -E "s/^Listen\s+[0-9]+/Listen $PUERTO_NUEVO/" /etc/httpd/conf/httpd.conf
     echo "httpd.conf actualizado."
 
-    # Firewall: cerrar viejo, abrir nuevo
-    echo "Cerrando puerto $PUERTO_VIEJO en firewall..."
-    firewall-cmd --permanent --remove-port=${PUERTO_VIEJO}/tcp
+    # Firewall: cerrar viejo solo si es un número válido
+    if [[ "$PUERTO_VIEJO" =~ ^[0-9]+$ ]]; then
+        echo "Cerrando puerto $PUERTO_VIEJO en firewall..."
+        firewall-cmd --permanent --remove-port=${PUERTO_VIEJO}/tcp 2>/dev/null
+    else
+        echo "Puerto anterior no identificado, omitiendo cierre en firewall."
+    fi
     abrir_firewall $PUERTO_NUEVO
     permitir_puerto_selinux $PUERTO_NUEVO
 
