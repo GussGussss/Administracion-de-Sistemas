@@ -554,6 +554,21 @@ VERSION_REAL=$(nginx -v 2>&1 | cut -d'/' -f2)
 VERSION=$VERSION_REAL
 echo "Versión instalada: $VERSION"
 
+# Corregir permisos que el RPM de nginx.org deja incorrectos en Oracle Linux
+echo "Corrigiendo permisos de directorios nginx..."
+mkdir -p /var/log/nginx /var/run
+touch /var/log/nginx/error.log /var/log/nginx/access.log
+chown -R nginx:nginx /var/log/nginx
+chmod -R 755 /var/log/nginx
+
+# El PID file lo maneja systemd — asegurarse que nginx puede escribirlo
+NGINX_USER=$(grep "^user" /etc/nginx/nginx.conf 2>/dev/null | awk '{print $2}' | tr -d ';')
+[ -z "$NGINX_USER" ] && NGINX_USER="nginx"
+chown $NGINX_USER:$NGINX_USER /var/log/nginx /var/log/nginx/error.log /var/log/nginx/access.log 2>/dev/null
+
+# Corregir SELinux context en los logs
+restorecon -Rv /var/log/nginx 2>/dev/null
+
 crear_usuario_nginx
 
 permitir_puerto_selinux $PUERTO
