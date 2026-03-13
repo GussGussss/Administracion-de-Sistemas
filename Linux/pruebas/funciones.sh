@@ -389,33 +389,28 @@ systemctl restart httpd
 listar_versiones_nginx() {
 
 echo ""
-echo "Preparando repositorios para Nginx..."
-preparar_repositorios
+echo "Consultando versiones disponibles de Nginx desde nginx.org..."
 
-echo ""
-echo "Consultando versiones disponibles de Nginx en el repositorio DNF..."
+# nginx.org publica RPMs oficiales por version para RHEL — consultamos el indice
+BASE_URL="https://nginx.org/packages/rhel/9/x86_64/RPMS"
 
-VERSIONES=$(dnf repoquery --showduplicates nginx \
-| awk '{print $1}' \
-| awk -F'-' '{print $2}' \
-| sort -V \
-| uniq)
+VERSIONES_RAW=$(curl -s "$BASE_URL/" | grep -oP 'nginx-\K[0-9]+\.[0-9]+\.[0-9]+(?=-[0-9]+\.el9\.ngx\.x86_64\.rpm)' | sort -V | uniq)
 
-echo "Versiones encontradas:"
-echo "$VERSIONES"
-echo ""
-
-COUNT=$(echo "$VERSIONES" | wc -l)
-
-if [ "$COUNT" -lt 3 ]; then
-    echo "Pocas versiones en repositorio, usando versiones predefinidas."
+if [ -n "$VERSIONES_RAW" ]; then
+    COUNT=$(echo "$VERSIONES_RAW" | wc -l)
+    echo "Versiones encontradas en nginx.org/rhel9: $COUNT"
+    echo "$VERSIONES_RAW"
+    echo ""
+    LATEST=$(echo "$VERSIONES_RAW" | tail -n 1)
+    LTS=$(echo "$VERSIONES_RAW" | grep "^1\.24" | tail -n 1)
+    OLDEST=$(echo "$VERSIONES_RAW" | head -n 1)
+    # Si no hay 1.24.x usar la segunda mas reciente
+    [ -z "$LTS" ] && LTS=$(echo "$VERSIONES_RAW" | tail -n 2 | head -n 1)
+else
+    echo "No se pudo consultar nginx.org, usando versiones predefinidas."
     LATEST="1.26.3"
     LTS="1.24.0"
-    OLDEST="1.20.1"
-else
-    OLDEST=$(echo "$VERSIONES" | head -n 1)
-    LATEST=$(echo "$VERSIONES" | tail -n 1)
-    LTS=$(echo "$VERSIONES" | sed -n '2p')
+    OLDEST="1.20.2"
 fi
 
 echo "Versiones disponibles de Nginx:"
@@ -537,8 +532,23 @@ detener_servicios_http
 gestionar_puerto $PUERTO || return 1
 
 echo ""
-echo "Instalando Nginx versión $VERSION..."
-dnf install -y nginx
+echo "Instalando Nginx versión $VERSION desde nginx.org..."
+
+BASE_URL="https://nginx.org/packages/rhel/9/x86_64/RPMS"
+RPM_NAME="nginx-${VERSION}-1.el9.ngx.x86_64.rpm"
+RPM_URL="${BASE_URL}/${RPM_NAME}"
+
+echo "Descargando: $RPM_URL"
+if curl -sSf "$RPM_URL" -o "/tmp/$RPM_NAME"; then
+    echo "Descarga correcta. Instalando RPM..."
+    # Importar clave GPG de nginx.org para verificar el paquete
+    rpm --import https://nginx.org/keys/nginx_signing.key 2>/dev/null
+    dnf install -y "/tmp/$RPM_NAME" --allowerasing
+    rm -f "/tmp/$RPM_NAME"
+else
+    echo "No se encontró RPM para $VERSION en rhel9, intentando instalacion DNF..."
+    dnf install -y nginx
+fi
 
 VERSION_REAL=$(nginx -v 2>&1 | cut -d'/' -f2)
 VERSION=$VERSION_REAL
