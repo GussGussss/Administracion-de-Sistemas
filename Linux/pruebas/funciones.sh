@@ -562,6 +562,21 @@ crear_usuario_nginx
 
 permitir_puerto_selinux $PUERTO
 
+# Corregir permisos de PID file y logs (RPM de nginx.org los deja como root)
+echo "Corrigiendo permisos de PID file y logs..."
+NGINX_USER=$(grep -m1 "^user " /etc/nginx/nginx.conf | awk '{print $2}' | tr -d ';')
+[ -z "$NGINX_USER" ] && NGINX_USER="nginx"
+
+rm -f /run/nginx.pid
+touch /run/nginx.pid
+chown ${NGINX_USER}:${NGINX_USER} /run/nginx.pid
+restorecon /run/nginx.pid 2>/dev/null
+
+mkdir -p /var/log/nginx
+touch /var/log/nginx/error.log /var/log/nginx/access.log
+chown -R ${NGINX_USER}:${NGINX_USER} /var/log/nginx
+restorecon -Rv /var/log/nginx 2>/dev/null
+
 configurar_puerto_nginx $PUERTO
 
 echo "Validando configuración de Nginx..."
