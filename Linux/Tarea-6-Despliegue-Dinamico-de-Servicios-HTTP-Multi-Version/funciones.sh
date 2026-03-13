@@ -6,11 +6,11 @@
 preparar_repositorios() {
 
 # instalar utilidades necesarias
-dnf install -y dnf-plugins-core yum-utils epel-release > /dev/null 2>&1
+dnf install -y dnf-plugins-core yum-utils epel-release
 
 # limpiar cache
-dnf clean all > /dev/null 2>&1
-dnf makecache > /dev/null 2>&1
+dnf clean all
+dnf makecache
 
 }
 
@@ -73,8 +73,8 @@ abrir_firewall() {
 
 PUERTO=$1
 
-firewall-cmd --permanent --add-port=${PUERTO}/tcp > /dev/null 2>&1
-firewall-cmd --reload > /dev/null 2>&1
+firewall-cmd --permanent --add-port=${PUERTO}/tcp
+firewall-cmd --reload
 
 }
 
@@ -142,7 +142,7 @@ PUERTO=$2
 detener_servicios_http
 echo "Instalando Apache versión $VERSION..."
 
-dnf install -y httpd-$VERSION > /dev/null 2>&1
+dnf install -y httpd-$VERSION
 
 activar_headers_apache
 
@@ -155,8 +155,8 @@ echo "Configurando puerto $PUERTO..."
 
 sed -i "s/Listen 80/Listen $PUERTO/g" /etc/httpd/conf/httpd.conf
 
-systemctl enable httpd > /dev/null 2>&1
-systemctl restart httpd > /dev/null 2>&1
+systemctl enable httpd
+systemctl restart httpd
 
 crear_index "Apache" "$VERSION" "$PUERTO" "/var/www/html"
 
@@ -179,7 +179,7 @@ echo "====================================="
 
 activar_headers_apache() {
 
-dnf install -y mod_headers > /dev/null 2>&1
+dnf install -y mod_headers
 
 }
 
@@ -216,7 +216,7 @@ TraceEnable Off
 
 EOF
 
-systemctl restart httpd > /dev/null 2>&1
+systemctl restart httpd
 
 }
 
@@ -328,7 +328,7 @@ gestionar_puerto $PUERTO || return 1
 
 echo "Instalando Nginx versión $VERSION..."
 
-dnf install -y nginx > /dev/null 2>&1
+dnf install -y nginx
 
 VERSION_REAL=$(nginx -v 2>&1 | cut -d'/' -f2)
 VERSION=$VERSION_REAL
@@ -341,8 +341,8 @@ configurar_puerto_nginx $PUERTO
 
 nginx -t || { echo "Error en configuración de Nginx"; return 1; }
 
-systemctl enable nginx > /dev/null 2>&1
-systemctl restart nginx > /dev/null 2>&1
+systemctl enable nginx
+systemctl restart nginx
 
 crear_index "Nginx" "$VERSION" "$PUERTO" "/usr/share/nginx/html"
 
@@ -415,7 +415,7 @@ sed -i "s/Connector port=\"8080\"/Connector port=\"$PUERTO\"/" /opt/tomcat/conf/
 instalar_tomcat() {
 
 # instalar java
-dnf install -y java-21-openjdk java-21-openjdk-devel > /dev/null 2>&1
+dnf install -y java-21-openjdk java-21-openjdk-devel
 
 VERSION=$1
 PUERTO=$2
@@ -430,7 +430,7 @@ cd /tmp
 
 MAJOR=$(echo $VERSION | cut -d'.' -f1)
 
-wget https://archive.apache.org/dist/tomcat/tomcat-$MAJOR/v$VERSION/bin/apache-tomcat-$VERSION.tar.gz -q
+wget https://archive.apache.org/dist/tomcat/tomcat-$MAJOR/v$VERSION/bin/apache-tomcat-$VERSION.tar.gz
 
 tar -xzf apache-tomcat-$VERSION.tar.gz
 
