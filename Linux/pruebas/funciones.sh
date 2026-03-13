@@ -407,7 +407,7 @@ if [ -n "$VERSIONES_RAW" ]; then
     LATEST=$(echo "$VERSIONES_RAW" | tail -n 1)
     LTS=$(echo "$VERSIONES_RAW" | grep "^1\.24" | tail -n 1)
     [ -z "$LTS" ] && LTS=$(echo "$VERSIONES_RAW" | tail -n 2 | head -n 1)
-    OLDEST=$(echo "$VERSIONES_RAW" | head -n 1)
+    OLDEST=$(echo "$VERSIONES_RAW" | grep -v "^1\.20\." | head -n 1)
 else
     echo "No se pudo consultar nginx.org, usando versiones predefinidas."
     LATEST="1.26.3"
