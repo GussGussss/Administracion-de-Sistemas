@@ -548,7 +548,10 @@ gestionar_puerto $PUERTO || return 1
 
 echo ""
 echo "Instalando Nginx versión $VERSION..."
-dnf install -y nginx
+dnf install -y nginx-$VERSION || dnf install -y "nginx-$VERSION*" || {
+    echo "Advertencia: no se encontró nginx-$VERSION exacto, instalando versión disponible..."
+    dnf install -y nginx
+}
 
 VERSION_REAL=$(nginx -v 2>&1 | cut -d'/' -f2)
 VERSION=$VERSION_REAL
