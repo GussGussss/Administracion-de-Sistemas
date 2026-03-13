@@ -26,23 +26,33 @@ validar_puerto() {
 PUERTO=$1
 
 if [[ ! $PUERTO =~ ^[0-9]+$ ]]; then
-    echo "Puerto inválido"
+    echo "Puerto inválido: debe ser un número"
     return 1
 fi
 
 if ((PUERTO < 1 || PUERTO > 65535)); then
-    echo "Puerto fuera de rango"
-    return 1
-fi
-if [[ $PUERTO == 22 || $PUERTO == 25 || $PUERTO == 53 ]]; then
-    echo "Puerto reservado por el sistema"
-    return 1
-fi
-if ss -tuln | grep -q ":$PUERTO "; then
-    echo "El puerto ya está en uso"
+    echo "Puerto fuera de rango (1-65535)"
     return 1
 fi
 
+# Puertos reservados del sistema
+if [[ $PUERTO == 22 || $PUERTO == 25 || $PUERTO == 53 ]]; then
+    echo "Puerto $PUERTO reservado por el sistema"
+    return 1
+fi
+
+# Puertos privilegiados: requieren root; servicios como Tomcat corren sin privilegios
+if ((PUERTO < 1024)); then
+    echo "Puerto $PUERTO es privilegiado (< 1024). Use un puerto >= 1024 para servicios HTTP."
+    return 1
+fi
+
+if ss -tuln | grep -q ":$PUERTO "; then
+    echo "El puerto $PUERTO ya está en uso"
+    return 1
+fi
+
+echo "Puerto $PUERTO válido."
 return 0
 }
 
@@ -547,4 +557,280 @@ HTMLEOF
 
 echo "index.html creado correctamente."
 
+}
+
+#########################################
+# Detectar si un servicio ya está instalado
+# y obtener su puerto actual
+#########################################
+
+detectar_apache() {
+    if rpm -q httpd &>/dev/null || [ -f /etc/httpd/conf/httpd.conf ]; then
+        PUERTO_ACTUAL=$(grep "^Listen" /etc/httpd/conf/httpd.conf 2>/dev/null | awk '{print $2}')
+        VERSION_ACTUAL=$(rpm -q httpd --queryformat "%{VERSION}-%{RELEASE}" 2>/dev/null | head -1)
+        echo "instalado"
+        return 0
+    fi
+    echo "no_instalado"
+    return 1
+}
+
+detectar_nginx() {
+    if rpm -q nginx &>/dev/null || [ -f /etc/nginx/nginx.conf ]; then
+        PUERTO_ACTUAL=$(grep -E "^\s*listen" /etc/nginx/conf.d/default.conf 2>/dev/null | awk '{print $2}' | tr -d ';' | head -1)
+        VERSION_ACTUAL=$(nginx -v 2>&1 | cut -d'/' -f2)
+        echo "instalado"
+        return 0
+    fi
+    echo "no_instalado"
+    return 1
+}
+
+detectar_tomcat() {
+    if [ -f /opt/tomcat/bin/startup.sh ]; then
+        PUERTO_ACTUAL=$(grep 'Connector port' /opt/tomcat/conf/server.xml 2>/dev/null | head -1 | grep -oP 'port="\K[^"]+')
+        VERSION_ACTUAL=$(grep 'Server version' /opt/tomcat/logs/catalina.out 2>/dev/null | head -1 | grep -oP 'Tomcat/\K[\d.]+')
+        [ -z "$VERSION_ACTUAL" ] && VERSION_ACTUAL=$(ls /opt/tomcat/lib/catalina.jar 2>/dev/null | xargs -I{} unzip -p {} META-INF/MANIFEST.MF 2>/dev/null | grep "Implementation-Version" | cut -d' ' -f2 | tr -d '\r')
+        echo "instalado"
+        return 0
+    fi
+    echo "no_instalado"
+    return 1
+}
+
+#########################################
+# Cambiar solo el puerto (sin reinstalar)
+#########################################
+
+cambiar_puerto_apache() {
+    PUERTO_VIEJO=$1
+    PUERTO_NUEVO=$2
+
+    echo "Cambiando puerto Apache: $PUERTO_VIEJO -> $PUERTO_NUEVO..."
+
+    # Modificar httpd.conf
+    sed -i "s/^Listen $PUERTO_VIEJO/Listen $PUERTO_NUEVO/" /etc/httpd/conf/httpd.conf
+    echo "httpd.conf actualizado."
+
+    # Firewall: cerrar viejo, abrir nuevo
+    echo "Cerrando puerto $PUERTO_VIEJO en firewall..."
+    firewall-cmd --permanent --remove-port=${PUERTO_VIEJO}/tcp
+    abrir_firewall $PUERTO_NUEVO
+    permitir_puerto_selinux $PUERTO_NUEVO
+
+    echo "Reiniciando Apache..."
+    systemctl restart httpd
+
+    # Verificar
+    if ss -tuln | grep -q ":$PUERTO_NUEVO "; then
+        echo "Apache escuchando en puerto $PUERTO_NUEVO correctamente."
+    else
+        echo "ADVERTENCIA: Apache no responde en puerto $PUERTO_NUEVO. Revise los logs."
+    fi
+}
+
+cambiar_puerto_nginx() {
+    PUERTO_VIEJO=$1
+    PUERTO_NUEVO=$2
+
+    echo "Cambiando puerto Nginx: $PUERTO_VIEJO -> $PUERTO_NUEVO..."
+
+    # Modificar default.conf
+    sed -i "s/listen $PUERTO_VIEJO;/listen $PUERTO_NUEVO;/" /etc/nginx/conf.d/default.conf
+    echo "default.conf actualizado."
+
+    # Firewall: cerrar viejo, abrir nuevo
+    echo "Cerrando puerto $PUERTO_VIEJO en firewall..."
+    firewall-cmd --permanent --remove-port=${PUERTO_VIEJO}/tcp
+    abrir_firewall $PUERTO_NUEVO
+    permitir_puerto_selinux $PUERTO_NUEVO
+
+    echo "Validando configuración Nginx..."
+    nginx -t || { echo "Error en configuración. Revirtiendo..."; sed -i "s/listen $PUERTO_NUEVO;/listen $PUERTO_VIEJO;/" /etc/nginx/conf.d/default.conf; return 1; }
+
+    echo "Reiniciando Nginx..."
+    systemctl restart nginx
+
+    if ss -tuln | grep -q ":$PUERTO_NUEVO "; then
+        echo "Nginx escuchando en puerto $PUERTO_NUEVO correctamente."
+    else
+        echo "ADVERTENCIA: Nginx no responde en puerto $PUERTO_NUEVO. Revise los logs."
+    fi
+}
+
+cambiar_puerto_tomcat() {
+    PUERTO_VIEJO=$1
+    PUERTO_NUEVO=$2
+
+    echo "Cambiando puerto Tomcat: $PUERTO_VIEJO -> $PUERTO_NUEVO..."
+
+    # Modificar server.xml
+    sed -i "s/Connector port=\"$PUERTO_VIEJO\"/Connector port=\"$PUERTO_NUEVO\"/" /opt/tomcat/conf/server.xml
+    echo "server.xml actualizado."
+
+    # Firewall: cerrar viejo, abrir nuevo
+    echo "Cerrando puerto $PUERTO_VIEJO en firewall..."
+    firewall-cmd --permanent --remove-port=${PUERTO_VIEJO}/tcp
+    abrir_firewall $PUERTO_NUEVO
+    permitir_puerto_selinux $PUERTO_NUEVO
+
+    # Reiniciar Tomcat
+    echo "Reiniciando Tomcat..."
+    pkill -f tomcat 2>/dev/null
+    sleep 3
+    JAVA_HOME=/usr/lib/jvm/java-21-openjdk
+    sudo -u tomcatsvc env JAVA_HOME=$JAVA_HOME CATALINA_HOME=/opt/tomcat /opt/tomcat/bin/startup.sh
+
+    echo "Esperando a que Tomcat inicie en puerto $PUERTO_NUEVO..."
+    for i in {1..20}; do
+        if ss -tuln | grep -q ":$PUERTO_NUEVO "; then
+            echo "Tomcat escuchando en puerto $PUERTO_NUEVO correctamente."
+            break
+        fi
+        echo "  Intento $i/20..."
+        sleep 1
+    done
+}
+
+#########################################
+# Menús de gestión cuando ya está instalado
+#########################################
+
+gestionar_apache_instalado() {
+    echo ""
+    echo "Apache ya está instalado."
+    echo "  Versión : $VERSION_ACTUAL"
+    echo "  Puerto  : $PUERTO_ACTUAL"
+    echo ""
+    echo "¿Qué desea hacer?"
+    echo "1) Cambiar puerto"
+    echo "2) Reinstalar (misma versión)"
+    echo "3) Cambiar versión"
+    echo "4) Cancelar"
+    read -p "Seleccione una opción: " ACCION
+
+    case $ACCION in
+        1)
+            read -p "Ingrese nuevo puerto: " PUERTO_NUEVO
+            validar_puerto $PUERTO_NUEVO || return 1
+            cambiar_puerto_apache $PUERTO_ACTUAL $PUERTO_NUEVO
+            ;;
+        2)
+            echo "Reinstalando Apache $VERSION_ACTUAL en puerto $PUERTO_ACTUAL..."
+            instalar_apache $VERSION_ACTUAL $PUERTO_ACTUAL
+            ;;
+        3)
+            listar_versiones_apache
+            VERSIONES=$(dnf list --showduplicates httpd | grep httpd.x86_64 | awk '{print $2}' | sort -V | uniq)
+            OLDEST=$(echo "$VERSIONES" | head -n 1)
+            LTS=$(echo "$VERSIONES" | sed -n '2p')
+            LATEST=$(echo "$VERSIONES" | tail -n 1)
+            read -p "Seleccione número de versión: " VERSION_NUM
+            case $VERSION_NUM in
+                1) VERSION=$LATEST ;;
+                2) VERSION=$LTS ;;
+                3) VERSION=$OLDEST ;;
+                *) echo "Opción inválida"; return 1 ;;
+            esac
+            read -p "Ingrese puerto: " PUERTO_NUEVO
+            validar_puerto $PUERTO_NUEVO || return 1
+            instalar_apache $VERSION $PUERTO_NUEVO
+            ;;
+        4)
+            echo "Operación cancelada."
+            ;;
+        *)
+            echo "Opción inválida."
+            ;;
+    esac
+}
+
+gestionar_nginx_instalado() {
+    echo ""
+    echo "Nginx ya está instalado."
+    echo "  Versión : $VERSION_ACTUAL"
+    echo "  Puerto  : $PUERTO_ACTUAL"
+    echo ""
+    echo "¿Qué desea hacer?"
+    echo "1) Cambiar puerto"
+    echo "2) Reinstalar (misma versión)"
+    echo "3) Cambiar versión"
+    echo "4) Cancelar"
+    read -p "Seleccione una opción: " ACCION
+
+    case $ACCION in
+        1)
+            read -p "Ingrese nuevo puerto: " PUERTO_NUEVO
+            validar_puerto $PUERTO_NUEVO || return 1
+            cambiar_puerto_nginx $PUERTO_ACTUAL $PUERTO_NUEVO
+            ;;
+        2)
+            echo "Reinstalando Nginx $VERSION_ACTUAL en puerto $PUERTO_ACTUAL..."
+            instalar_nginx $VERSION_ACTUAL $PUERTO_ACTUAL
+            ;;
+        3)
+            listar_versiones_nginx
+            read -p "Seleccione número de versión: " VERSION_NUM
+            case $VERSION_NUM in
+                1) VERSION=$LATEST ;;
+                2) VERSION=$LTS ;;
+                3) VERSION=$OLDEST ;;
+                *) echo "Opción inválida"; return 1 ;;
+            esac
+            read -p "Ingrese puerto: " PUERTO_NUEVO
+            validar_puerto $PUERTO_NUEVO || return 1
+            instalar_nginx $VERSION $PUERTO_NUEVO
+            ;;
+        4)
+            echo "Operación cancelada."
+            ;;
+        *)
+            echo "Opción inválida."
+            ;;
+    esac
+}
+
+gestionar_tomcat_instalado() {
+    echo ""
+    echo "Tomcat ya está instalado."
+    echo "  Versión : $VERSION_ACTUAL"
+    echo "  Puerto  : $PUERTO_ACTUAL"
+    echo ""
+    echo "¿Qué desea hacer?"
+    echo "1) Cambiar puerto"
+    echo "2) Reinstalar (misma versión)"
+    echo "3) Cambiar versión"
+    echo "4) Cancelar"
+    read -p "Seleccione una opción: " ACCION
+
+    case $ACCION in
+        1)
+            read -p "Ingrese nuevo puerto: " PUERTO_NUEVO
+            validar_puerto $PUERTO_NUEVO || return 1
+            cambiar_puerto_tomcat $PUERTO_ACTUAL $PUERTO_NUEVO
+            ;;
+        2)
+            echo "Reinstalando Tomcat $VERSION_ACTUAL en puerto $PUERTO_ACTUAL..."
+            instalar_tomcat $VERSION_ACTUAL $PUERTO_ACTUAL
+            ;;
+        3)
+            listar_versiones_tomcat
+            read -p "Seleccione número de versión: " opcion
+            case $opcion in
+                1) VERSION="10.1.28" ;;
+                2) VERSION="10.1.26" ;;
+                3) VERSION="9.0.91" ;;
+                *) echo "Opción inválida"; return 1 ;;
+            esac
+            read -p "Ingrese puerto: " PUERTO_NUEVO
+            validar_puerto $PUERTO_NUEVO || return 1
+            instalar_tomcat $VERSION $PUERTO_NUEVO
+            ;;
+        4)
+            echo "Operación cancelada."
+            ;;
+        *)
+            echo "Opción inválida."
+            ;;
+    esac
 }
