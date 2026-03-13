@@ -319,13 +319,22 @@ function Crear-Usuarios {
         $homeDir  = "$FTP_ROOT\users\$nombre"
 
         # Equivalente a: useradd -m -d /ftp/users/$nombre -s /bin/bash -g "$grupo" -G ftpusuarios "$nombre"
-        New-LocalUser -Name $nombre -Password $password `
-            -PasswordNeverExpires $true `
-            -UserMayNotChangePassword $false `
-            -Description "Usuario FTP Tarea5" | Out-Null
+        # Nota: -PasswordNeverExpires y -UserMayNotChangePassword se aplican via Set-LocalUser
+        # para evitar el error "positional parameter cannot be found" en WS2019
+        New-LocalUser -Name $nombre `
+                      -Password $password `
+                      -Description "Usuario FTP Tarea5" | Out-Null
+
+        Set-LocalUser -Name $nombre `
+                      -PasswordNeverExpires $true `
+                      -UserMayChangePassword $false
 
         Add-LocalGroupMember -Group $grupo          -Member $nombre -ErrorAction SilentlyContinue
         Add-LocalGroupMember -Group "ftpusuarios"   -Member $nombre -ErrorAction SilentlyContinue
+
+        # Esperar a que el sistema registre el SID del usuario nuevo
+        # antes de llamar a icacls (evita "No mapping between account names and SIDs")
+        Start-Sleep -Seconds 2
 
         # Equivalente a: mkdir -p /ftp/users/$nombre/{general,$grupo,$nombre}
         New-Item -ItemType Directory -Path "$homeDir\general" -Force | Out-Null
