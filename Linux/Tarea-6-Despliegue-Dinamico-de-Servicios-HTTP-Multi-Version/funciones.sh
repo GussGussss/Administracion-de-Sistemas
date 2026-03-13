@@ -160,10 +160,9 @@ PUERTO=$2
 
 detener_servicios_http
 
-# Detectar si Apache ya está instalado
-VERSION_INSTALADA=$(rpm -q httpd --qf "%{VERSION}-%{RELEASE}" 2>/dev/null)
-
-if [ -n "$VERSION_INSTALADA" ]; then
+# Detectar si Apache ya está instalado (rpm -q retorna 0 si está, 1 si no)
+if rpm -q httpd &>/dev/null; then
+    VERSION_INSTALADA=$(rpm -q httpd --qf "%{VERSION}-%{RELEASE}")
     echo ""
     echo "Apache ya está instalado (versión $VERSION_INSTALADA)"
     echo "Se omite la instalación y se procede solo a cambiar el puerto a $PUERTO"
