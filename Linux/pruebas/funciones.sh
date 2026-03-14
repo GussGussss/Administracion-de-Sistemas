@@ -690,7 +690,20 @@ PUERTO=$2
 # Detectar si Tomcat ya está instalado
 VERSION_INSTALADA=""
 if [ -f /opt/tomcat/bin/startup.sh ]; then
-    VERSION_INSTALADA=$(grep -m1 "Tomcat/" /opt/tomcat/RELEASE-NOTES 2>/dev/null | grep -oP '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+
+    # Método 1: archivo .tomcat_version guardado por este script (más confiable)
+    VERSION_INSTALADA=$(cat /opt/tomcat/.tomcat_version 2>/dev/null)
+
+    # Método 2: RELEASE-NOTES
+    if [ -z "$VERSION_INSTALADA" ]; then
+        VERSION_INSTALADA=$(grep -m1 "Apache Tomcat Version\|Tomcat/"             /opt/tomcat/RELEASE-NOTES 2>/dev/null             | grep -oP '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+    fi
+
+    # Método 3: version.sh de Catalina
+    if [ -z "$VERSION_INSTALADA" ]; then
+        VERSION_INSTALADA=$(JAVA_HOME=/usr/lib/jvm/java-21-openjdk             /opt/tomcat/bin/version.sh 2>/dev/null             | grep -oP 'Server version:.*Tomcat/\K[0-9]+\.[0-9]+\.[0-9]+')
+    fi
+
     [ -z "$VERSION_INSTALADA" ] && VERSION_INSTALADA="desconocida"
 fi
 
@@ -698,7 +711,11 @@ if [ -n "$VERSION_INSTALADA" ]; then
     echo ""
     echo "Tomcat ya está instalado (versión $VERSION_INSTALADA)."
 
-    if [ "$VERSION_INSTALADA" != "$VERSION" ]; then
+    # Comparar solo X.Y.Z igual que Apache y Nginx
+    VERSION_BASE=$(echo "$VERSION" | grep -oP '^\d+\.\d+\.\d+')
+    VERSION_INSTALADA_BASE=$(echo "$VERSION_INSTALADA" | grep -oP '^\d+\.\d+\.\d+')
+
+    if [ "$VERSION_INSTALADA_BASE" != "$VERSION_BASE" ]; then
         echo "Versión solicitada ($VERSION) es diferente a la instalada ($VERSION_INSTALADA)."
         echo "Se reinstalará Tomcat con la versión $VERSION..."
         pkill -f tomcat 2>/dev/null
