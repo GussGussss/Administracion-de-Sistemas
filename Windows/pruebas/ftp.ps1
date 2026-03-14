@@ -121,7 +121,9 @@ function Configurar-FTP {
     Import-Module WebAdministration -ErrorAction SilentlyContinue
 
     $siteName  = "FTP_Tarea5"
-    $ftpPath   = "$FTP_ROOT\public"
+    # Raiz del sitio debe ser C:\ftp (NO \public) para que el aislamiento
+    # de usuarios encuentre C:\ftp\LocalUser\<usuario>\ correctamente
+    $ftpPath   = $FTP_ROOT
     $bindIP    = "*"
     $bindPort  = 21
 
