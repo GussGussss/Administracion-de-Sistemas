@@ -267,8 +267,19 @@ cambiar_puerto_tomcat() {
         sleep 1
     done
 
+    # Detectar version con los mismos 3 metodos que instalar_tomcat
     VERSION_TC=$(cat /opt/tomcat/.tomcat_version 2>/dev/null)
-    [ -z "$VERSION_TC" ] && VERSION_TC="10.1.x"
+    if [ -z "$VERSION_TC" ]; then
+        VERSION_TC=$(grep -m1 "Apache Tomcat Version\|Tomcat/" \
+            /opt/tomcat/RELEASE-NOTES 2>/dev/null \
+            | grep -oP '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+    fi
+    if [ -z "$VERSION_TC" ]; then
+        VERSION_TC=$(JAVA_HOME=/usr/lib/jvm/java-21-openjdk \
+            /opt/tomcat/bin/version.sh 2>/dev/null \
+            | grep -oP 'Server version:.*Tomcat/\K[0-9]+\.[0-9]+\.[0-9]+')
+    fi
+    [ -z "$VERSION_TC" ] && VERSION_TC="desconocida"
     crear_index "Tomcat" "$VERSION_TC" "$PUERTO_NUEVO" "/opt/tomcat/webapps/ROOT"
 }
 
