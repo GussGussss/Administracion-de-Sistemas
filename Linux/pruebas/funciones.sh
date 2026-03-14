@@ -210,7 +210,8 @@ cambiar_puerto_apache() {
 
     echo "Reiniciando Apache..."
     systemctl restart httpd
-    crear_index "Apache" "$(rpm -q httpd --queryformat '%{VERSION}')" "$PUERTO_NUEVO" "/var/www/html"
+    VERSION_ACTUAL=$(rpm -q httpd --queryformat "%{VERSION}-%{RELEASE}" 2>/dev/null | sed 's/\.noarch$//')
+    crear_index "Apache" "$VERSION_ACTUAL" "$PUERTO_NUEVO" "/var/www/html"
     echo "Puerto Apache actualizado a $PUERTO_NUEVO."
 }
 
@@ -332,7 +333,9 @@ echo "Habilitando e iniciando servicio httpd..."
 systemctl enable httpd
 systemctl restart httpd
 
-crear_index "Apache" "$VERSION" "$PUERTO" "/var/www/html"
+VERSION_REAL=$(rpm -q httpd --queryformat "%{VERSION}-%{RELEASE}" 2>/dev/null | sed 's/\.noarch$//')
+    [ -n "$VERSION_REAL" ] && VERSION="$VERSION_REAL"
+    crear_index "Apache" "$VERSION" "$PUERTO" "/var/www/html"
 
 configurar_seguridad_apache
 
