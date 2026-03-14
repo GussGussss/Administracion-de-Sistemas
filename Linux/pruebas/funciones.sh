@@ -210,6 +210,7 @@ cambiar_puerto_apache() {
 
     echo "Reiniciando Apache..."
     systemctl restart httpd
+    crear_index "Apache" "$(rpm -q httpd --queryformat '%{VERSION}')" "$PUERTO_NUEVO" "/var/www/html"
     echo "Puerto Apache actualizado a $PUERTO_NUEVO."
 }
 
@@ -230,6 +231,7 @@ cambiar_puerto_nginx() {
 
     echo "Reiniciando Nginx..."
     systemctl restart nginx
+    crear_index "Nginx" "$(nginx -v 2>&1 | cut -d'/' -f2)" "$PUERTO_NUEVO" "/usr/share/nginx/html"
     echo "Puerto Nginx actualizado a $PUERTO_NUEVO."
 }
 
@@ -263,6 +265,10 @@ cambiar_puerto_tomcat() {
         echo "  Intento $i/20..."
         sleep 1
     done
+
+    VERSION_TC=$(cat /opt/tomcat/.tomcat_version 2>/dev/null)
+    [ -z "$VERSION_TC" ] && VERSION_TC="10.1.x"
+    crear_index "Tomcat" "$VERSION_TC" "$PUERTO_NUEVO" "/opt/tomcat/webapps/ROOT"
 }
 
 #########################################
