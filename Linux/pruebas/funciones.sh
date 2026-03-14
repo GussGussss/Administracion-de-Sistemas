@@ -263,18 +263,8 @@ cambiar_puerto_tomcat() {
         echo "  Intento $i/20..."
         sleep 1
     done
-
-    # Leer versión con fallback a version.sh si el archivo no existe
-    VERSION=$(cat /opt/tomcat/.tomcat_version 2>/dev/null)
-    if [ -z "$VERSION" ]; then
-        VERSION=$(JAVA_HOME=/usr/lib/jvm/java-21-openjdk \
-            /opt/tomcat/bin/version.sh 2>/dev/null \
-            | grep -oP 'Server version:.*Tomcat/\K[0-9]+\.[0-9]+\.[0-9]+')
-    fi
-    [ -z "$VERSION" ] && VERSION="10.1.x"
-
-    crear_index "Tomcat" "$VERSION" "$PUERTO_NUEVO" "/opt/tomcat/webapps/ROOT"
 }
+
 #########################################
 # Instalar Apache
 #########################################
@@ -291,7 +281,11 @@ if [ -n "$VERSION_INSTALADA" ]; then
     echo ""
     echo "Apache ya está instalado (versión $VERSION_INSTALADA)."
 
-    if [ "$VERSION_INSTALADA" != "$VERSION" ]; then
+    # Comparar solo X.Y.Z ignorando sufijos de release como -4.0.1.el110_1.3
+    VERSION_BASE=$(echo "$VERSION" | grep -oP '^\d+\.\d+\.\d+')
+    VERSION_INSTALADA_BASE=$(echo "$VERSION_INSTALADA" | grep -oP '^\d+\.\d+\.\d+')
+
+    if [ "$VERSION_INSTALADA_BASE" != "$VERSION_BASE" ]; then
         echo "Versión solicitada ($VERSION) es diferente a la instalada ($VERSION_INSTALADA)."
         echo "Se reinstalará Apache con la versión $VERSION..."
         systemctl stop httpd 2>/dev/null
@@ -397,29 +391,39 @@ systemctl restart httpd
 #########################################
 
 listar_versiones_nginx() {
+
 echo ""
 echo "Consultando versiones disponibles de Nginx desde nginx.org..."
+
 BASE_URL="https://nginx.org/packages/rhel/9/x86_64/RPMS"
+
 VERSIONES_RAW=$(curl -s --max-time 10 "$BASE_URL/" \
     | grep -oP 'nginx-\K[0-9]+\.[0-9]+\.[0-9]+(?=-[0-9]+\.el9\.ngx\.x86_64\.rpm)' \
     | sort -V | uniq)
+
 if [ -n "$VERSIONES_RAW" ]; then
+    echo "Versiones encontradas en nginx.org:"
+    echo "$VERSIONES_RAW"
+    echo ""
     LATEST=$(echo "$VERSIONES_RAW" | tail -n 1)
     LTS=$(echo "$VERSIONES_RAW" | grep "^1\.24" | tail -n 1)
     [ -z "$LTS" ] && LTS=$(echo "$VERSIONES_RAW" | tail -n 2 | head -n 1)
-    OLDEST=$(echo "$VERSIONES_RAW" | grep -v "^1\.20\." | head -n 1)
+    OLDEST=$(echo "$VERSIONES_RAW" | head -n 1)
 else
     echo "No se pudo consultar nginx.org, usando versiones predefinidas."
     LATEST="1.26.3"
     LTS="1.24.0"
-    OLDEST="1.22.1"
+    OLDEST="1.20.2"
 fi
+
 echo "Versiones disponibles de Nginx:"
 echo ""
 echo "1) $LATEST  (Latest / Desarrollo)"
 echo "2) $LTS     (LTS / Estable)"
 echo "3) $OLDEST  (Oldest)"
+
 }
+
 #########################################
 # Crear usuario restringido nginx
 #########################################
@@ -505,7 +509,11 @@ if [ -n "$VERSION_INSTALADA" ]; then
     echo ""
     echo "Nginx ya está instalado (versión $VERSION_INSTALADA)."
 
-    if [ "$VERSION_INSTALADA" != "$VERSION" ]; then
+    # Comparar solo X.Y.Z ignorando sufijos de release
+    VERSION_BASE=$(echo "$VERSION" | grep -oP '^\d+\.\d+\.\d+')
+    VERSION_INSTALADA_BASE=$(echo "$VERSION_INSTALADA" | grep -oP '^\d+\.\d+\.\d+')
+
+    if [ "$VERSION_INSTALADA_BASE" != "$VERSION_BASE" ]; then
         echo "Versión solicitada ($VERSION) es diferente a la instalada ($VERSION_INSTALADA)."
         echo "Se reinstalará Nginx con la versión $VERSION..."
         systemctl stop nginx 2>/dev/null
@@ -552,24 +560,26 @@ VERSION_REAL=$(nginx -v 2>&1 | cut -d'/' -f2)
 VERSION=$VERSION_REAL
 echo "Versión instalada: $VERSION"
 
-crear_usuario_nginx
-
-permitir_puerto_selinux $PUERTO
-
-# Corregir permisos de PID file y logs (RPM de nginx.org los deja como root)
+# Corregir owner del PID file — el RPM de nginx.org lo deja como root
 echo "Corrigiendo permisos de PID file y logs..."
 NGINX_USER=$(grep -m1 "^user " /etc/nginx/nginx.conf | awk '{print $2}' | tr -d ';')
 [ -z "$NGINX_USER" ] && NGINX_USER="nginx"
 
+# PID file
 rm -f /run/nginx.pid
 touch /run/nginx.pid
 chown ${NGINX_USER}:${NGINX_USER} /run/nginx.pid
 restorecon /run/nginx.pid 2>/dev/null
 
+# Logs
 mkdir -p /var/log/nginx
 touch /var/log/nginx/error.log /var/log/nginx/access.log
 chown -R ${NGINX_USER}:${NGINX_USER} /var/log/nginx
 restorecon -Rv /var/log/nginx 2>/dev/null
+
+crear_usuario_nginx
+
+permitir_puerto_selinux $PUERTO
 
 configurar_puerto_nginx $PUERTO
 
@@ -658,36 +668,10 @@ instalar_tomcat() {
 VERSION=$1
 PUERTO=$2
 
-# ── Java: siempre verificar/instalar ANTES de cualquier otra decisión ──────────
-echo "Verificando instalación de Java 21..."
-if ! rpm -q java-21-openjdk &>/dev/null; then
-    echo "Instalando Java 21 (requerido por Tomcat)..."
-    dnf install -y java-21-openjdk java-21-openjdk-devel
-else
-    echo "Java 21 ya está instalado."
-fi
-
-# ── Detectar si Tomcat ya está instalado (3 métodos en cascada) ───────────────
+# Detectar si Tomcat ya está instalado
 VERSION_INSTALADA=""
 if [ -f /opt/tomcat/bin/startup.sh ]; then
-
-    # Método 1: RELEASE-NOTES (presente en instalaciones tar oficiales)
-    VERSION_INSTALADA=$(grep -m1 "Apache Tomcat Version\|Tomcat/" \
-        /opt/tomcat/RELEASE-NOTES 2>/dev/null \
-        | grep -oP '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-
-    # Método 2: version.sh de Catalina
-    if [ -z "$VERSION_INSTALADA" ]; then
-        VERSION_INSTALADA=$(JAVA_HOME=/usr/lib/jvm/java-21-openjdk \
-            /opt/tomcat/bin/version.sh 2>/dev/null \
-            | grep -oP 'Server version:.*Tomcat/\K[0-9]+\.[0-9]+\.[0-9]+')
-    fi
-
-    # Método 3: archivo de versión que este script guarda al instalar
-    if [ -z "$VERSION_INSTALADA" ]; then
-        VERSION_INSTALADA=$(cat /opt/tomcat/.tomcat_version 2>/dev/null)
-    fi
-
+    VERSION_INSTALADA=$(grep -m1 "Tomcat/" /opt/tomcat/RELEASE-NOTES 2>/dev/null | grep -oP '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
     [ -z "$VERSION_INSTALADA" ] && VERSION_INSTALADA="desconocida"
 fi
 
@@ -717,7 +701,9 @@ if [ -n "$VERSION_INSTALADA" ]; then
     fi
 fi
 
-# ── Instalación nueva (o reinstalación tras eliminar /opt/tomcat) ─────────────
+echo "Instalando Java 21 (requerido por Tomcat)..."
+dnf install -y java-21-openjdk java-21-openjdk-devel
+
 detener_servicios_http
 
 gestionar_puerto $PUERTO || return 1
@@ -741,9 +727,6 @@ pkill -f tomcat 2>/dev/null && echo "Proceso Tomcat detenido." || echo "No habí
 echo "Moviendo Tomcat a /opt/tomcat..."
 rm -rf /opt/tomcat
 mv apache-tomcat-$VERSION /opt/tomcat
-
-# Guardar versión instalada para detección futura confiable
-echo "$VERSION" > /opt/tomcat/.tomcat_version
 
 crear_usuario_tomcat
 
