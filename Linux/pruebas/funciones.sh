@@ -555,14 +555,24 @@ RPM_NAME="nginx-${VERSION}-1.el9.ngx.x86_64.rpm"
 RPM_URL="${BASE_URL}/${RPM_NAME}"
 
 echo "Descargando: $RPM_URL"
+INSTALADO=0
 if curl -sSf --max-time 60 "$RPM_URL" -o "/tmp/$RPM_NAME"; then
     echo "Descarga correcta. Importando clave GPG e instalando RPM..."
     rpm --import https://nginx.org/keys/nginx_signing.key 2>/dev/null
     dnf install -y "/tmp/$RPM_NAME" --allowerasing
     rm -f "/tmp/$RPM_NAME"
-else
-    echo "RPM no encontrado para $VERSION, usando DNF generico..."
-    dnf install -y nginx
+    command -v nginx &>/dev/null && INSTALADO=1
+fi
+
+# Fallback DNF solo si nginx.org fallo Y dnf tiene nginx disponible
+if [ $INSTALADO -eq 0 ]; then
+    echo "Intentando instalacion via DNF como fallback..."
+    dnf install -y nginx && INSTALADO=1
+fi
+
+if [ $INSTALADO -eq 0 ]; then
+    echo "Error: No se pudo instalar Nginx $VERSION por ninguna via."
+    return 1
 fi
 
 VERSION_REAL=$(nginx -v 2>&1 | cut -d'/' -f2)
