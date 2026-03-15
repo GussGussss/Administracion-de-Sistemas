@@ -187,7 +187,7 @@ function Configurar-FTP {
 
     Set-ItemProperty "IIS:\Sites\$ftpSite" `
         -Name ftpServer.userIsolation.mode `
-        -Value 3
+        -Value 1
 
     # SSL opcional: SslAllow evita el error 534 en WS2019
     Set-ItemProperty "IIS:\Sites\$ftpSite" `
