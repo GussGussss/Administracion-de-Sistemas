@@ -189,6 +189,14 @@ function Configurar-FTP {
         -Name ftpServer.userIsolation.mode `
         -Value 3
 
+    # SSL opcional: SslAllow evita el error 534 en WS2019
+    Set-ItemProperty "IIS:\Sites\$ftpSite" `
+        -Name ftpServer.security.ssl.controlChannelPolicy `
+        -Value "SslAllow"
+    Set-ItemProperty "IIS:\Sites\$ftpSite" `
+        -Name ftpServer.security.ssl.dataChannelPolicy `
+        -Value "SslAllow"
+
     Set-ItemProperty "IIS:\Sites\$ftpSite" `
         -Name ftpServer.security.authentication.anonymousAuthentication.enabled `
         -Value $true
