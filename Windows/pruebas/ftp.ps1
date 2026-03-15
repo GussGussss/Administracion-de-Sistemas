@@ -3,12 +3,8 @@
 # Windows Server 2016 / 2019 / 2022
 # ============================================================
 
-Import-Module ServerManager -ErrorAction SilentlyContinue
-
-# Cargar WebAdministration solo si existe
-if (Get-Module -ListAvailable -Name WebAdministration) {
-    Import-Module WebAdministration
-}
+Import-Module ServerManager
+Import-Module WebAdministration
 
 $ftpRoot = "C:\FTP"
 $ftpSite = "FTP_SERVER"
@@ -31,8 +27,7 @@ function Log {
 # ------------------------------------------------------------
 function Instalar-FTP {
 
-    Write-Host ""
-    Write-Host "Verificando instalacion de IIS + FTP..." -ForegroundColor Cyan
+    Write-Host "Instalando IIS + FTP..."
 
     $features = @(
         "Web-Server",
@@ -42,33 +37,16 @@ function Instalar-FTP {
     )
 
     foreach ($f in $features) {
-
-        $feature = Get-WindowsFeature $f
-
-        if ($feature.Installed -eq $false) {
-
-            Write-Host "Instalando $f ..."
+        if (!(Get-WindowsFeature $f).Installed) {
             Install-WindowsFeature $f -IncludeManagementTools
-
-        }
-        else {
-
-            Write-Host "$f ya esta instalado"
-
         }
     }
 
-    # Cargar modulo IIS despues de instalar
-    Import-Module WebAdministration -ErrorAction SilentlyContinue
-
-    Start-Service W3SVC -ErrorAction SilentlyContinue
-    Start-Service ftpsvc -ErrorAction SilentlyContinue
-
+    Start-Service W3SVC
+    Start-Service ftpsvc
     Set-Service ftpsvc -StartupType Automatic
 
-    Write-Host ""
-    Write-Host "IIS + FTP instalados correctamente" -ForegroundColor Green
-
+    Write-Host "FTP instalado."
     Log "FTP instalado"
 }
 
@@ -195,22 +173,6 @@ function Permisos {
     Log "Permisos aplicados"
 }
 
-function Verificar-IIS {
-
-    if (!(Get-Module -ListAvailable -Name WebAdministration)) {
-
-        Write-Host ""
-        Write-Host "ERROR: IIS / FTP no esta instalado." -ForegroundColor Red
-        Write-Host "Ejecute primero la opcion 1 (Instalar FTP)." -ForegroundColor Yellow
-        Write-Host ""
-
-        return $false
-    }
-
-    Import-Module WebAdministration
-    return $true
-}
-
 # ------------------------------------------------------------
 # CONFIGURAR FTP
 # Modo aislamiento 1 = IsolateAllDirectories (compatible)
@@ -218,7 +180,6 @@ function Verificar-IIS {
 # ------------------------------------------------------------
 function Configurar-FTP {
 
-    if (!(Verificar-IIS)) { return }
     # Eliminar sitio previo si existe
     if (Get-WebSite $ftpSite -ErrorAction SilentlyContinue) {
         Remove-WebSite $ftpSite
@@ -411,18 +372,8 @@ function Ver-Usuarios {
 # REINICIAR FTP
 # ------------------------------------------------------------
 function Reiniciar-FTP {
-
-    if (Get-Service ftpsvc -ErrorAction SilentlyContinue) {
-
-        Restart-Service ftpsvc
-        Write-Host "FTP reiniciado correctamente" -ForegroundColor Green
-
-    }
-    else {
-
-        Write-Host "Servicio FTP no encontrado" -ForegroundColor Red
-
-    }
+    Restart-Service ftpsvc
+    Write-Host "FTP reiniciado"
 }
 
 # ------------------------------------------------------------
