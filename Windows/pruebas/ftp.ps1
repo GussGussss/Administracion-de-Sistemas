@@ -1,14 +1,7 @@
 # ==============================================================================
 #  Tarea 5: Automatizacion de Servidor FTP - Windows Server 2019 (Sin GUI)
-#  Replica exacta del script de referencia (WS2022 ES) -> WS2019 EN
-#  Diferencias adaptadas:
-#    - "Administradores" -> "Administrators"
-#    - Read-Host -AsSecureString en lugar de texto plano
-#    - Web-Ftp-Ext agregado a la instalacion
+#  Replica del script de referencia adaptada a WS2019 EN
 # ==============================================================================
-
-Import-Module ServerManager
-Import-Module WebAdministration
 
 $ftpRoot = "C:\FTP"
 $ftpSite = "FTP_SERVER"
@@ -16,15 +9,23 @@ $logFile = "C:\FTP\ftp_log.txt"
 
 # ------------------------------------------------------------
 # LOG
+# Se crea C:\FTP si no existe antes de escribir el log
 # ------------------------------------------------------------
 function Log {
     param($msg)
     $fecha = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    if (-not (Test-Path $ftpRoot)) {
+        New-Item $ftpRoot -ItemType Directory -Force | Out-Null
+    }
     Add-Content $logFile "$fecha - $msg"
 }
 
 # ------------------------------------------------------------
 # INSTALAR FTP
+# Diferencia WS2019: W3SVC no existe en Core sin Web-Server
+# Se verifica antes de intentar iniciarlo
+# WebAdministration solo esta disponible DESPUES de instalar IIS
+# Por eso se importa dentro de Configurar-FTP y no al inicio
 # ------------------------------------------------------------
 function Instalar-FTP {
     Write-Host "Instalando IIS + FTP..."
@@ -42,11 +43,20 @@ function Instalar-FTP {
         }
     }
 
-    Start-Service W3SVC
-    Start-Service ftpsvc
+    # W3SVC puede no existir hasta reiniciar en WS2019 Core
+    # Se intenta iniciar solo si el servicio existe
+    $w3 = Get-Service -Name W3SVC -ErrorAction SilentlyContinue
+    if ($w3) {
+        Start-Service W3SVC
+    }
+
+    Start-Service ftpsvc -ErrorAction SilentlyContinue
     Set-Service ftpsvc -StartupType Automatic
 
     Write-Host "FTP instalado."
+    Write-Host ""
+    Write-Host "IMPORTANTE: Cierre y vuelva a abrir PowerShell antes de ejecutar la opcion 6 (Configurar FTP)"
+    Write-Host "Esto es necesario para que el modulo WebAdministration quede disponible."
     Log "FTP instalado"
 }
 
@@ -84,6 +94,8 @@ function Crear-Grupos {
         if (!(Get-LocalGroup $g -ErrorAction SilentlyContinue)) {
             New-LocalGroup $g
             Write-Host "Grupo $g creado"
+        } else {
+            Write-Host "Grupo $g ya existe"
         }
     }
 
@@ -94,13 +106,18 @@ function Crear-Grupos {
 # ESTRUCTURA
 # ------------------------------------------------------------
 function Crear-Estructura {
-    New-Item $ftpRoot        -ItemType Directory -Force
-    New-Item "$ftpRoot\general"      -ItemType Directory -Force
-    New-Item "$ftpRoot\reprobados"   -ItemType Directory -Force
-    New-Item "$ftpRoot\recursadores" -ItemType Directory -Force
+    New-Item $ftpRoot                    -ItemType Directory -Force
+    New-Item "$ftpRoot\general"          -ItemType Directory -Force
+    New-Item "$ftpRoot\reprobados"       -ItemType Directory -Force
+    New-Item "$ftpRoot\recursadores"     -ItemType Directory -Force
     New-Item "$ftpRoot\Data\Usuarios"    -ItemType Directory -Force
     New-Item "$ftpRoot\LocalUser\Public" -ItemType Directory -Force
 
+    # Junction para acceso anonimo a carpeta general
+    $jTarget = "$ftpRoot\LocalUser\Public\general"
+    if (Test-Path $jTarget) {
+        cmd /c "rmdir `"$jTarget`"" | Out-Null
+    }
     cmd /c mklink /J "$ftpRoot\LocalUser\Public\general" "$ftpRoot\general"
 
     Write-Host "Estructura creada"
@@ -109,6 +126,7 @@ function Crear-Estructura {
 
 # ------------------------------------------------------------
 # PERMISOS
+# Diferencia WS2019 EN: "Administrators" en lugar de "Administradores"
 # ------------------------------------------------------------
 function Permisos {
     # ROOT
@@ -141,8 +159,22 @@ function Permisos {
 
 # ------------------------------------------------------------
 # CONFIGURAR FTP
+# WebAdministration se importa aqui adentro para que solo
+# se cargue cuando IIS ya esta instalado
 # ------------------------------------------------------------
 function Configurar-FTP {
+    # Intentar importar el modulo. Si falla significa que IIS
+    # aun no esta disponible y hay que reiniciar PowerShell.
+    try {
+        Import-Module WebAdministration -ErrorAction Stop
+    } catch {
+        Write-Host ""
+        Write-Host "ERROR: El modulo WebAdministration no esta disponible." -ForegroundColor Red
+        Write-Host "Cierre PowerShell, vuelva a abrirlo como Administrador y ejecute el script de nuevo." -ForegroundColor Yellow
+        Write-Host "Luego vaya directo a la opcion 6." -ForegroundColor Yellow
+        return
+    }
+
     if (Get-WebSite $ftpSite -ErrorAction SilentlyContinue) {
         Remove-WebSite $ftpSite
     }
@@ -223,7 +255,7 @@ function Crear-Usuario {
 
         $userHome = "$ftpRoot\LocalUser\$usuario"
 
-        New-Item $userHome                           -ItemType Directory -Force
+        New-Item $userHome                          -ItemType Directory -Force
         New-Item "$ftpRoot\Data\Usuarios\$usuario"  -ItemType Directory -Force
 
         cmd /c mklink /J "$userHome\general"  "$ftpRoot\general"
@@ -231,6 +263,8 @@ function Crear-Usuario {
         cmd /c mklink /J "$userHome\$usuario" "$ftpRoot\Data\Usuarios\$usuario"
 
         icacls "$ftpRoot\Data\Usuarios\$usuario" /grant "${usuario}:(OI)(CI)F"
+
+        Write-Host "Usuario $usuario creado correctamente"
     }
 
     Restart-Service ftpsvc
@@ -246,13 +280,13 @@ function Eliminar-Usuario {
 
     Remove-LocalUser $usuario
 
-    Remove-Item "$ftpRoot\LocalUser\$usuario" -Recurse -Force -ErrorAction SilentlyContinue
-    Remove-Item "$ftpRoot\Data\Usuarios\$usuario" -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item "$ftpRoot\LocalUser\$usuario"      -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item "$ftpRoot\Data\Usuarios\$usuario"  -Recurse -Force -ErrorAction SilentlyContinue
 
     Restart-Service ftpsvc
 
     Write-Host "Usuario eliminado"
-    Log "Usuario eliminado"
+    Log "Usuario eliminado: $usuario"
 }
 
 # ------------------------------------------------------------
@@ -269,14 +303,15 @@ function Cambiar-Grupo {
 
     $userHome = "$ftpRoot\LocalUser\$usuario"
 
-    if (Test-Path "$userHome\reprobados")   { Remove-Item "$userHome\reprobados"   -Force }
-    if (Test-Path "$userHome\recursadores") { Remove-Item "$userHome\recursadores" -Force }
+    if (Test-Path "$userHome\reprobados")   { cmd /c "rmdir `"$userHome\reprobados`""   | Out-Null }
+    if (Test-Path "$userHome\recursadores") { cmd /c "rmdir `"$userHome\recursadores`"" | Out-Null }
 
     cmd /c mklink /J "$userHome\$grupo" "$ftpRoot\$grupo"
 
     iisreset
 
     Write-Host "Grupo cambiado correctamente"
+    Log "Grupo cambiado: $usuario -> $grupo"
 }
 
 # ------------------------------------------------------------
@@ -314,8 +349,12 @@ function Estado {
 
 # ------------------------------------------------------------
 # MENU
+# ServerManager se importa aqui. WebAdministration se importa
+# solo dentro de Configurar-FTP para evitar el error al inicio
 # ------------------------------------------------------------
 function Menu {
+    Import-Module ServerManager -ErrorAction SilentlyContinue
+
     while ($true) {
         Write-Host ""
         Write-Host "========= ADMIN FTP ========="
@@ -336,19 +375,19 @@ function Menu {
         $op = Read-Host "Opcion"
 
         switch ($op) {
-            "1"  { Instalar-FTP      }
-            "2"  { Configurar-Firewall }
-            "3"  { Crear-Grupos      }
-            "4"  { Crear-Estructura  }
-            "5"  { Permisos          }
-            "6"  { Configurar-FTP    }
-            "7"  { Crear-Usuario     }
-            "8"  { Eliminar-Usuario  }
-            "9"  { Cambiar-Grupo     }
-            "10" { Ver-Usuarios      }
-            "11" { Estado            }
-            "12" { Reiniciar-FTP     }
-            "0"  { break             }
+            "1"  { Instalar-FTP        }
+            "2"  { Configurar-Firewall  }
+            "3"  { Crear-Grupos        }
+            "4"  { Crear-Estructura    }
+            "5"  { Permisos            }
+            "6"  { Configurar-FTP      }
+            "7"  { Crear-Usuario       }
+            "8"  { Eliminar-Usuario    }
+            "9"  { Cambiar-Grupo       }
+            "10" { Ver-Usuarios        }
+            "11" { Estado              }
+            "12" { Reiniciar-FTP       }
+            "0"  { break               }
         }
     }
 }
