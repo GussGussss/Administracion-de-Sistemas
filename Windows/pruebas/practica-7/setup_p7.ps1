@@ -128,6 +128,64 @@ function Usuario-Repo-Existe {
 }
 
 # ============================================================
+# FUNCION: Verificar y reparar junction link "http" en el
+# home FTP de un usuario. Sin este link el usuario ve su home
+# pero no puede navegar a /http/Windows/ y el script de P7
+# recibe error 550 al intentar listar ese directorio.
+# ============================================================
+function Verificar-Junction-HTTP {
+    param([string]$Usuario)
+
+    $serverName  = $env:COMPUTERNAME
+    $userHome    = "C:\Users\$serverName\$Usuario"
+    $linkHttp    = "$userHome\http"
+    $destino     = "C:\FTP_Data\http"
+
+    # Si el destino del repositorio no existe aun, no hacer nada
+    if (-not (Test-Path $destino)) {
+        Write-Host "  Advertencia: $destino no existe todavia. Se creara en el Paso 2." -ForegroundColor Yellow
+        return
+    }
+
+    # Verificar si el home del usuario existe
+    if (-not (Test-Path $userHome)) {
+        Write-Host "  Advertencia: Home del usuario '$Usuario' no encontrado en $userHome" -ForegroundColor Yellow
+        return
+    }
+
+    # Comprobar si el junction ya existe y apunta correctamente
+    $junctionOk = $false
+    if (Test-Path $linkHttp) {
+        $item = Get-Item $linkHttp -ErrorAction SilentlyContinue
+        # Un junction valido tiene el atributo ReparsePoint
+        if ($item -and ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+            $junctionOk = $true
+        } else {
+            # Existe pero no es un junction (carpeta normal o enlace roto)
+            Write-Host "  Detectado enlace http roto o incorrecto. Reparando..." -ForegroundColor Yellow
+            Remove-Item $linkHttp -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    if ($junctionOk) {
+        Write-Host "  Junction http OK: $linkHttp -> $destino" -ForegroundColor Green
+    } else {
+        Write-Host "  Creando junction http para '$Usuario'..." -ForegroundColor Cyan
+        $resultado = cmd /c mklink /J "$linkHttp" "$destino" 2>&1
+        if (Test-Path $linkHttp) {
+            Write-Host "  Junction creado: $linkHttp -> $destino" -ForegroundColor Green
+        } else {
+            Write-Host "  ERROR al crear junction: $resultado" -ForegroundColor Red
+        }
+    }
+
+    # Asegurar permisos de lectura sobre la carpeta http para el usuario
+    icacls $destino /grant "${Usuario}:(OI)(CI)RX" 2>&1 | Out-Null
+
+    Restart-Service ftpsvc -ErrorAction SilentlyContinue
+}
+
+# ============================================================
 # BIENVENIDA
 # ============================================================
 Clear-Host
@@ -272,6 +330,12 @@ $usuarioRepo = "ftprepo"
 
 if (Usuario-Repo-Existe -Usuario $usuarioRepo) {
     Write-Host "  Usuario '$usuarioRepo' ya existe." -ForegroundColor Green
+
+    # Verificar que el junction link "http" este correctamente creado
+    # Este es el enlace que permite al usuario FTP navegar a /http/Windows/
+    Write-Host "  Verificando acceso FTP al repositorio..." -ForegroundColor Cyan
+    Verificar-Junction-HTTP -Usuario $usuarioRepo
+
 } else {
     Write-Host "  El usuario '$usuarioRepo' no existe." -ForegroundColor Yellow
     Write-Host "  Este usuario es necesario para que P7 pueda conectarse al FTP privado." -ForegroundColor Gray
@@ -317,6 +381,10 @@ if (Usuario-Repo-Existe -Usuario $usuarioRepo) {
             Write-Host "  Usuario '$usuarioRepo' creado correctamente." -ForegroundColor Green
             Write-Host "  IMPORTANTE: Anote la contrasena, la necesitara en el Paso 3." -ForegroundColor Yellow
 
+            # Verificar junction http (puede que el repositorio ya exista de una ejecucion anterior)
+            Write-Host "  Verificando acceso FTP al repositorio..." -ForegroundColor Cyan
+            Verificar-Junction-HTTP -Usuario $usuarioRepo
+
             # Guardar usuario en estado para que P7 lo pueda sugerir
             Add-Content $estadoFile "USUARIO_REPO=$usuarioRepo"
         }
@@ -357,6 +425,12 @@ else {
                 Marcar-Completado -Paso "PASO2"
             }
         }
+
+        # En ambos casos reverificar el junction http del usuario repo
+        # (puede haberse creado antes de que existiera C:\FTP_Data\http)
+        Write-Host ""
+        Write-Host "  Reverificando acceso FTP al repositorio para '$usuarioRepo'..." -ForegroundColor Cyan
+        Verificar-Junction-HTTP -Usuario $usuarioRepo
     }
     else {
         Write-Host "  El repositorio no esta listo. Se ejecutara preparar_repositorio.ps1" -ForegroundColor Yellow
@@ -377,6 +451,11 @@ else {
         else {
             Write-Host "  Paso 2 omitido por el usuario." -ForegroundColor Yellow
         }
+
+        # Reverificar junction http tras preparar el repositorio
+        Write-Host ""
+        Write-Host "  Verificando acceso FTP al repositorio para '$usuarioRepo'..." -ForegroundColor Cyan
+        Verificar-Junction-HTTP -Usuario $usuarioRepo
     }
 }
 
