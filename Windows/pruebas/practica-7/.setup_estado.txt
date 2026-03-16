@@ -1,3 +1,0 @@
-PASO1
-USUARIO_REPO=gustavo
-PASO2
