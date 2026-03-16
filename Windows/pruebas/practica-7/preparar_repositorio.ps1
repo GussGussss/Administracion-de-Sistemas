@@ -36,9 +36,10 @@ $logFile    = "$ftpData\repo_preparacion.log"
 $servicios = @(
     @{
         Nombre   = "Apache"
-        UrlLTS   = "https://www.apachelounge.com/download/VS17/binaries/httpd-2.4.63-250207-win64-VS17.zip"
-        ArchivoLTS = "apache_2.4.63_win64.zip"
-        UrlLatest   = "https://www.apachelounge.com/download/VS17/binaries/httpd-2.4.63-250207-win64-VS17.zip"
+        # Apache Haus: distribución oficial para Windows, ZIPs validos y sin antivirus
+        UrlLTS      = "https://www.apachehaus.com/cgi-bin/download.plx/datas/httpd-2.4.62-o111s-x64-vs17.zip"
+        ArchivoLTS  = "apache_2.4.62_win64.zip"
+        UrlLatest   = "https://www.apachehaus.com/cgi-bin/download.plx/datas/httpd-2.4.63-o111s-x64-vs17.zip"
         ArchivoLatest = "apache_2.4.63_win64_latest.zip"
     },
     @{
