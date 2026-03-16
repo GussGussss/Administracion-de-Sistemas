@@ -32,28 +32,27 @@ $tmpDir     = "$env:TEMP\repo_p7"
 $logFile    = "$ftpData\repo_preparacion.log"
 
 # ── Servicios a preparar ──────────────────────────────────────────────────────
-# Cada entrada: Nombre, URL de descarga, nombre del archivo local
 $servicios = @(
     @{
-        Nombre   = "Apache"
-        # Apache Haus: distribución oficial para Windows, ZIPs validos y sin antivirus
-        UrlLTS      = "https://www.apachehaus.com/cgi-bin/download.plx/datas/httpd-2.4.62-o111s-x64-vs17.zip"
-        ArchivoLTS  = "apache_2.4.62_win64.zip"
-        UrlLatest   = "https://www.apachehaus.com/cgi-bin/download.plx/datas/httpd-2.4.63-o111s-x64-vs17.zip"
+        Nombre        = "Apache"
+        Metodo        = "chocolatey"   # Se instala via choco y se reempaqueta como ZIP
+        ArchivoLTS    = "apache_2.4.62_win64.zip"
         ArchivoLatest = "apache_2.4.63_win64_latest.zip"
+        VersionLTS    = "2.4.62"
+        VersionLatest = "2.4.63"
     },
     @{
-        Nombre   = "Nginx"
-        UrlLTS   = "https://nginx.org/download/nginx-1.24.0.zip"
-        ArchivoLTS = "nginx_1.24.0_win64.zip"
-        UrlLatest   = "https://nginx.org/download/nginx-1.26.2.zip"
+        Nombre        = "Nginx"
+        Metodo        = "url"
+        UrlLTS        = "https://nginx.org/download/nginx-1.24.0.zip"
+        ArchivoLTS    = "nginx_1.24.0_win64.zip"
+        UrlLatest     = "https://nginx.org/download/nginx-1.26.2.zip"
         ArchivoLatest = "nginx_1.26.2_win64.zip"
     },
     @{
-        Nombre   = "IIS"
-        UrlLTS      = $null   # IIS no tiene MSI descargable, se genera uno de prueba
-        ArchivoLTS  = "iis_10.0_placeholder.zip"
-        UrlLatest   = $null
+        Nombre        = "IIS"
+        Metodo        = "placeholder"
+        ArchivoLTS    = "iis_10.0_placeholder.zip"
         ArchivoLatest = "iis_10.0_latest_placeholder.zip"
     }
 )
@@ -172,6 +171,84 @@ Servidor: $env:COMPUTERNAME
 }
 
 # ============================================================
+# INSTALAR CHOCOLATEY SI NO ESTA DISPONIBLE
+# ============================================================
+function Asegurar-Chocolatey {
+    if (Get-Command choco -ErrorAction SilentlyContinue) { return $true }
+
+    Write-Host "  Instalando Chocolatey (necesario para descargar Apache)..." -ForegroundColor Yellow
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        Set-ExecutionPolicy Bypass -Scope Process -Force
+        Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+        $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
+                    [System.Environment]::GetEnvironmentVariable("Path","User")
+        if (Get-Command choco -ErrorAction SilentlyContinue) {
+            Write-Host "  Chocolatey instalado." -ForegroundColor Green
+            return $true
+        }
+    } catch {
+        Write-Host "  No se pudo instalar Chocolatey: $($_.Exception.Message)" -ForegroundColor Red
+    }
+    return $false
+}
+
+# ============================================================
+# DESCARGAR APACHE VIA CHOCOLATEY Y REEMPAQUETAR COMO ZIP
+# ============================================================
+function Descargar-Apache-Choco {
+    param([string]$Version, [string]$Destino)
+
+    Write-Host "  Descargando Apache $Version via Chocolatey..." -ForegroundColor Gray
+
+    if (-not (Asegurar-Chocolatey)) {
+        Write-Host "  ERROR: Chocolatey no disponible, no se puede descargar Apache." -ForegroundColor Red
+        return $false
+    }
+
+    $tmpApache = "$tmpDir\apache_$Version"
+    New-Item $tmpApache -ItemType Directory -Force | Out-Null
+
+    # Descargar Apache con Chocolatey al directorio temporal
+    $chocoOut = choco install apache-httpd `
+        --version $Version `
+        --params "/installLocation:$tmpApache\Apache24 /noService" `
+        --yes --no-progress --accept-license --force `
+        2>&1
+
+    # Buscar donde quedo httpd.exe
+    $httpdExe = Get-ChildItem $tmpApache -Filter "httpd.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $httpdExe) {
+        # Buscar en la ruta estandar de Chocolatey
+        $httpdExe = Get-ChildItem "C:\Apache24" -Filter "httpd.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($httpdExe) { $tmpApache = "C:\" }
+    }
+
+    if (-not $httpdExe) {
+        Write-Host "  ERROR: httpd.exe no encontrado tras instalacion con Chocolatey." -ForegroundColor Red
+        return $false
+    }
+
+    $apacheDir = Split-Path (Split-Path $httpdExe.FullName -Parent) -Parent
+
+    # Reempaquetar como ZIP para el repositorio FTP
+    Write-Host "  Empaquetando Apache en ZIP para el repositorio..." -ForegroundColor Gray
+    try {
+        Compress-Archive -Path $apacheDir -DestinationPath $Destino -Force
+        Write-Host "  Apache $Version empaquetado: $(Split-Path $Destino -Leaf) ($('{0:N1} MB' -f ((Get-Item $Destino).Length/1MB)))" -ForegroundColor Green
+
+        # Desinstalar para no dejar Apache corriendo
+        choco uninstall apache-httpd --yes --no-progress 2>&1 | Out-Null
+        Remove-Item $tmpApache -Recurse -Force -ErrorAction SilentlyContinue
+
+        return $true
+    } catch {
+        Write-Host "  ERROR al empaquetar Apache: $($_.Exception.Message)" -ForegroundColor Red
+        return $false
+    }
+}
+
+# ============================================================
 # DESCARGAR E INSTALAR ARCHIVOS POR SERVICIO
 # ============================================================
 function Poblar-Repositorio {
@@ -181,48 +258,65 @@ function Poblar-Repositorio {
     foreach ($svc in $servicios) {
         $rutaSvc = "$repoBase\$($svc.Nombre)"
         Write-Host ""
-        Write-Host "  --- $($svc.Nombre) ---" -ForegroundColor Yellow
+        Write-Host "  --- $($svc.Nombre) (metodo: $($svc.Metodo)) ---" -ForegroundColor Yellow
 
-        # ── Versión LTS ───────────────────────────────────────────────────────
-        $destLTS = "$rutaSvc\$($svc.ArchivoLTS)"
+        switch ($svc.Metodo) {
 
-        if ($svc.UrlLTS) {
-            $ok = Descargar-Archivo -Url $svc.UrlLTS -Destino $destLTS -Nombre $svc.ArchivoLTS
-            if (-not $ok) {
-                # Fallback: crear placeholder si la descarga falla
-                Write-Host "  Fallback: creando placeholder para $($svc.Nombre) LTS..." -ForegroundColor Yellow
-                Crear-Placeholder-IIS -Destino $destLTS -Nombre $svc.ArchivoLTS -Version "LTS"
+            "chocolatey" {
+                # ── Apache: descargar via Chocolatey y empaquetar ─────────────
+                $destLTS    = "$rutaSvc\$($svc.ArchivoLTS)"
+                $destLatest = "$rutaSvc\$($svc.ArchivoLatest)"
+
+                $okLTS = Descargar-Apache-Choco -Version $svc.VersionLTS -Destino $destLTS
+                if (-not $okLTS) {
+                    Write-Host "  Fallback: creando placeholder Apache LTS..." -ForegroundColor Yellow
+                    Crear-Placeholder-IIS -Destino $destLTS -Nombre $svc.ArchivoLTS -Version $svc.VersionLTS
+                }
+                if (Test-Path $destLTS) { Generar-SHA256 -Archivo $destLTS }
+
+                $okLatest = Descargar-Apache-Choco -Version $svc.VersionLatest -Destino $destLatest
+                if (-not $okLatest) {
+                    Write-Host "  Fallback: copiando LTS como Latest..." -ForegroundColor Yellow
+                    Copy-Item $destLTS $destLatest -Force -ErrorAction SilentlyContinue
+                }
+                if (Test-Path $destLatest) { Generar-SHA256 -Archivo $destLatest }
+            }
+
+            "url" {
+                # ── Nginx y otros: descarga directa por URL ───────────────────
+                $destLTS    = "$rutaSvc\$($svc.ArchivoLTS)"
+                $destLatest = "$rutaSvc\$($svc.ArchivoLatest)"
+
+                $okLTS = Descargar-Archivo -Url $svc.UrlLTS -Destino $destLTS -Nombre $svc.ArchivoLTS
+                if (-not $okLTS) {
+                    Crear-Placeholder-IIS -Destino $destLTS -Nombre $svc.ArchivoLTS -Version "LTS"
+                }
+                if (Test-Path $destLTS) { Generar-SHA256 -Archivo $destLTS }
+
+                if ($svc.UrlLatest -ne $svc.UrlLTS) {
+                    $okLatest = Descargar-Archivo -Url $svc.UrlLatest -Destino $destLatest -Nombre $svc.ArchivoLatest
+                    if (-not $okLatest) {
+                        Copy-Item $destLTS $destLatest -Force -ErrorAction SilentlyContinue
+                    }
+                } else {
+                    Copy-Item $destLTS $destLatest -Force
+                    Write-Host "  Latest copiado desde LTS: $($svc.ArchivoLatest)" -ForegroundColor Gray
+                }
+                if (Test-Path $destLatest) { Generar-SHA256 -Archivo $destLatest }
+            }
+
+            "placeholder" {
+                # ── IIS: solo placeholders ────────────────────────────────────
+                $destLTS    = "$rutaSvc\$($svc.ArchivoLTS)"
+                $destLatest = "$rutaSvc\$($svc.ArchivoLatest)"
+
+                Crear-Placeholder-IIS -Destino $destLTS    -Nombre $svc.ArchivoLTS    -Version "10.0-LTS"
+                Crear-Placeholder-IIS -Destino $destLatest -Nombre $svc.ArchivoLatest -Version "10.0-Latest"
+
+                if (Test-Path $destLTS)    { Generar-SHA256 -Archivo $destLTS }
+                if (Test-Path $destLatest) { Generar-SHA256 -Archivo $destLatest }
             }
         }
-        else {
-            Crear-Placeholder-IIS -Destino $destLTS -Nombre $svc.ArchivoLTS -Version "10.0-LTS"
-        }
-
-        if (Test-Path $destLTS) { Generar-SHA256 -Archivo $destLTS }
-
-        # ── Versión Latest ────────────────────────────────────────────────────
-        $destLatest = "$rutaSvc\$($svc.ArchivoLatest)"
-
-        # Evitar descargar dos veces si LTS y Latest son el mismo archivo
-        if ($svc.UrlLatest -and ($svc.UrlLatest -ne $svc.UrlLTS)) {
-            $ok = Descargar-Archivo -Url $svc.UrlLatest -Destino $destLatest -Nombre $svc.ArchivoLatest
-            if (-not $ok) {
-                Write-Host "  Fallback: copiando LTS como Latest para $($svc.Nombre)..." -ForegroundColor Yellow
-                Copy-Item $destLTS $destLatest -Force -ErrorAction SilentlyContinue
-            }
-        }
-        elseif (-not $svc.UrlLatest) {
-            Crear-Placeholder-IIS -Destino $destLatest -Nombre $svc.ArchivoLatest -Version "10.0-Latest"
-        }
-        else {
-            # Misma URL: copiar el ya descargado
-            if (Test-Path $destLTS) {
-                Copy-Item $destLTS $destLatest -Force
-                Write-Host "  Latest es igual a LTS, copiado como: $($svc.ArchivoLatest)" -ForegroundColor Gray
-            }
-        }
-
-        if (Test-Path $destLatest) { Generar-SHA256 -Archivo $destLatest }
 
         Escribir-Log "$($svc.Nombre): archivos colocados en $rutaSvc"
     }
