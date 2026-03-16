@@ -323,73 +323,124 @@ else {
     }
 }
 
+# ============================================================
 # Verificar usuario del repositorio
+# Busca si ya se guardo uno en el estado, si no pregunta cual usar
+# ============================================================
 Write-Host ""
 Write-Host "  Verificando usuario FTP para el repositorio..." -ForegroundColor Cyan
-$usuarioRepo = "ftprepo"
 
-if (Usuario-Repo-Existe -Usuario $usuarioRepo) {
-    Write-Host "  Usuario '$usuarioRepo' ya existe." -ForegroundColor Green
+# Intentar recuperar usuario guardado de una ejecucion anterior
+$usuarioRepo = ""
+if (Test-Path $estadoFile) {
+    $lineaGuardada = Get-Content $estadoFile | Where-Object { $_ -match "^USUARIO_REPO=" }
+    if ($lineaGuardada) { $usuarioRepo = $lineaGuardada.Split("=")[1].Trim() }
+}
 
-    # Verificar que el junction link "http" este correctamente creado
-    # Este es el enlace que permite al usuario FTP navegar a /http/Windows/
-    Write-Host "  Verificando acceso FTP al repositorio..." -ForegroundColor Cyan
-    Verificar-Junction-HTTP -Usuario $usuarioRepo
+# Si no hay usuario guardado, listar los usuarios del grupo ftpusuarios y preguntar
+if ([string]::IsNullOrWhiteSpace($usuarioRepo)) {
 
-} else {
-    Write-Host "  El usuario '$usuarioRepo' no existe." -ForegroundColor Yellow
-    Write-Host "  Este usuario es necesario para que P7 pueda conectarse al FTP privado." -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  Necesita indicar que usuario FTP se usara para acceder al repositorio privado." -ForegroundColor Yellow
+    Write-Host "  Este usuario debe existir en el servidor FTP y pertenecer al grupo ftpusuarios." -ForegroundColor Gray
     Write-Host ""
 
-    if (Confirmar-Paso -Pregunta "¿Desea crear el usuario '$usuarioRepo' ahora") {
+    # Mostrar usuarios FTP existentes como sugerencia
+    $usuariosFTP = Get-LocalGroupMember "ftpusuarios" -ErrorAction SilentlyContinue |
+                   ForEach-Object { $_.Name.Split("\")[-1] }
 
+    if ($usuariosFTP) {
+        Write-Host "  Usuarios FTP disponibles en este servidor:" -ForegroundColor Cyan
+        $usuariosFTP | ForEach-Object { Write-Host "    - $_" -ForegroundColor Gray }
         Write-Host ""
-        Write-Host "  Ingrese la contrasena para '$usuarioRepo':" -NoNewline
-        $secPass = Read-Host -AsSecureString
+    }
 
-        try {
-            New-LocalUser $usuarioRepo -Password $secPass -PasswordNeverExpires -ErrorAction Stop
+    Write-Host "  Usuario FTP para el repositorio: " -NoNewline -ForegroundColor Yellow
+    $usuarioRepo = Read-Host
+    $usuarioRepo = $usuarioRepo.Trim()
 
-            # Agregar a grupos necesarios para acceder al FTP
-            foreach ($g in @("ftpusuarios", "reprobados")) {
-                Add-LocalGroupMember $g -Member $usuarioRepo -ErrorAction SilentlyContinue
-            }
+    if ([string]::IsNullOrWhiteSpace($usuarioRepo)) {
+        Write-Host "  No se indico usuario. Se omite la verificacion del repositorio." -ForegroundColor Yellow
+    }
+}
+else {
+    Write-Host "  Usuario del repositorio (guardado): $usuarioRepo" -ForegroundColor Gray
+}
 
-            # Crear home del usuario en la estructura de P5
-            $serverName = $env:COMPUTERNAME
-            $userHome   = "C:\Users\$serverName\$usuarioRepo"
-            New-Item $userHome -ItemType Directory -Force | Out-Null
+# Procesar segun si el usuario existe o no
+if (-not [string]::IsNullOrWhiteSpace($usuarioRepo)) {
 
-            # Junction links estandar de P5
-            $ftpData = "C:\FTP_Data"
-            foreach ($link in @("general", "reprobados", $usuarioRepo)) {
-                if (Test-Path "$userHome\$link") { cmd /c rmdir "$userHome\$link" | Out-Null }
-            }
-            cmd /c mklink /J "$userHome\general"       "$ftpData\general"      | Out-Null
-            cmd /c mklink /J "$userHome\reprobados"    "$ftpData\reprobados"   | Out-Null
+    if (Usuario-Repo-Existe -Usuario $usuarioRepo) {
+        Write-Host "  Usuario '$usuarioRepo' encontrado." -ForegroundColor Green
 
-            New-Item "$ftpData\usuarios\$usuarioRepo" -ItemType Directory -Force | Out-Null
-            cmd /c mklink /J "$userHome\$usuarioRepo" "$ftpData\usuarios\$usuarioRepo" | Out-Null
+        # Verificar que pertenece a ftpusuarios, si no agregarlo
+        $esMiembro = Get-LocalGroupMember "ftpusuarios" -ErrorAction SilentlyContinue |
+                     Where-Object { $_.Name -like "*$usuarioRepo" }
+        if (-not $esMiembro) {
+            Write-Host "  El usuario no pertenece a ftpusuarios. Agregando..." -ForegroundColor Yellow
+            Add-LocalGroupMember "ftpusuarios" -Member $usuarioRepo -ErrorAction SilentlyContinue
+        }
 
-            # Permisos NTFS
-            icacls $userHome                              /grant "${usuarioRepo}:(OI)(CI)RX" | Out-Null
-            icacls "$ftpData\usuarios\$usuarioRepo"       /grant "${usuarioRepo}:(OI)(CI)F"  | Out-Null
+        # Verificar y crear junction http
+        Write-Host "  Verificando acceso FTP al repositorio..." -ForegroundColor Cyan
+        Verificar-Junction-HTTP -Usuario $usuarioRepo
 
-            Restart-Service ftpsvc -ErrorAction SilentlyContinue
-
-            Write-Host ""
-            Write-Host "  Usuario '$usuarioRepo' creado correctamente." -ForegroundColor Green
-            Write-Host "  IMPORTANTE: Anote la contrasena, la necesitara en el Paso 3." -ForegroundColor Yellow
-
-            # Verificar junction http (puede que el repositorio ya exista de una ejecucion anterior)
-            Write-Host "  Verificando acceso FTP al repositorio..." -ForegroundColor Cyan
-            Verificar-Junction-HTTP -Usuario $usuarioRepo
-
-            # Guardar usuario en estado para que P7 lo pueda sugerir
+        # Guardar para uso posterior
+        $lineaExistente = Get-Content $estadoFile -ErrorAction SilentlyContinue | Where-Object { $_ -match "^USUARIO_REPO=" }
+        if (-not $lineaExistente) {
             Add-Content $estadoFile "USUARIO_REPO=$usuarioRepo"
         }
-        catch {
-            Write-Host "  ERROR al crear usuario: $($_.Exception.Message)" -ForegroundColor Red
+
+    } else {
+        Write-Host "  El usuario '$usuarioRepo' no existe en este servidor." -ForegroundColor Yellow
+        Write-Host ""
+
+        if (Confirmar-Paso -Pregunta "  ¿Desea crear el usuario '$usuarioRepo' ahora") {
+
+            Write-Host ""
+            Write-Host "  Ingrese la contrasena para '$usuarioRepo': " -NoNewline
+            $secPass = Read-Host -AsSecureString
+
+            try {
+                New-LocalUser $usuarioRepo -Password $secPass -PasswordNeverExpires -ErrorAction Stop
+
+                # Agregar a grupos
+                foreach ($g in @("ftpusuarios", "reprobados")) {
+                    Add-LocalGroupMember $g -Member $usuarioRepo -ErrorAction SilentlyContinue
+                }
+
+                # Crear home en estructura de P5
+                $srvName  = $env:COMPUTERNAME
+                $userHome = "C:\Users\$srvName\$usuarioRepo"
+                $ftpData  = "C:\FTP_Data"
+                New-Item $userHome -ItemType Directory -Force | Out-Null
+
+                foreach ($link in @("general", "reprobados", $usuarioRepo)) {
+                    if (Test-Path "$userHome\$link") { cmd /c rmdir "$userHome\$link" | Out-Null }
+                }
+                cmd /c mklink /J "$userHome\general"       "$ftpData\general"               | Out-Null
+                cmd /c mklink /J "$userHome\reprobados"    "$ftpData\reprobados"             | Out-Null
+                New-Item "$ftpData\usuarios\$usuarioRepo"  -ItemType Directory -Force        | Out-Null
+                cmd /c mklink /J "$userHome\$usuarioRepo"  "$ftpData\usuarios\$usuarioRepo"  | Out-Null
+
+                icacls $userHome                             /grant "${usuarioRepo}:(OI)(CI)RX" | Out-Null
+                icacls "$ftpData\usuarios\$usuarioRepo"      /grant "${usuarioRepo}:(OI)(CI)F"  | Out-Null
+
+                Restart-Service ftpsvc -ErrorAction SilentlyContinue
+
+                Write-Host ""
+                Write-Host "  Usuario '$usuarioRepo' creado correctamente." -ForegroundColor Green
+                Write-Host "  IMPORTANTE: Anote la contrasena, la necesitara en el Paso 3." -ForegroundColor Yellow
+
+                Verificar-Junction-HTTP -Usuario $usuarioRepo
+                Add-Content $estadoFile "USUARIO_REPO=$usuarioRepo"
+            }
+            catch {
+                Write-Host "  ERROR al crear usuario: $($_.Exception.Message)" -ForegroundColor Red
+            }
+        }
+        else {
+            Write-Host "  Puede crear el usuario manualmente en el script de P5 y volver a ejecutar este script." -ForegroundColor Gray
         }
     }
 }
