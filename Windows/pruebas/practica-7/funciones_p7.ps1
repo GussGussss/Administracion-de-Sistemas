@@ -88,17 +88,41 @@ function Leer-Opcion {
 
 # ============================================================
 # LEER CREDENCIALES FTP
+# Permite reutilizar credenciales ya ingresadas en la sesion
 # ============================================================
 function Leer-Credenciales-FTP {
     Write-Host ""
     Write-Host "--- Credenciales del Servidor FTP Privado ---" -ForegroundColor Cyan
-    $global:FTP_IP   = Leer-Texto -Prompt "IP del servidor FTP: "
-    $global:FTP_USER = Leer-Texto -Prompt "Usuario FTP: "
-    Write-Host "Contrasena FTP: " -NoNewline
+
+    # Reutilizar IP si ya fue ingresada antes en esta sesion
+    if ([string]::IsNullOrWhiteSpace($global:FTP_IP)) {
+        $global:FTP_IP = Leer-Texto -Prompt "IP del servidor FTP: "
+    } else {
+        Write-Host "  IP FTP    : $($global:FTP_IP) (reutilizando sesion anterior)" -ForegroundColor Gray
+        $cambiar = Leer-Opcion -Prompt "  ¿Cambiar IP? [S/N]: " -Validas @("S","N","s","n")
+        if ($cambiar -match "^[Ss]$") {
+            $global:FTP_IP = Leer-Texto -Prompt "  Nueva IP del servidor FTP: "
+        }
+    }
+
+    # Siempre pedir usuario (puede cambiar entre llamadas)
+    Write-Host "  Usuario FTP (Enter = usar el mismo de antes '$($global:FTP_USER)'): " -NoNewline -ForegroundColor Yellow
+    $nuevoUsuario = Read-Host
+    if (-not [string]::IsNullOrWhiteSpace($nuevoUsuario)) {
+        $global:FTP_USER = $nuevoUsuario.Trim()
+    }
+    if ([string]::IsNullOrWhiteSpace($global:FTP_USER)) {
+        $global:FTP_USER = Leer-Texto -Prompt "  Usuario FTP: "
+    }
+
+    # Siempre pedir contrasena (seguridad)
+    Write-Host "  Contrasena FTP: " -NoNewline
     $secPass = Read-Host -AsSecureString
     $bstr    = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secPass)
     $global:FTP_PASS = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
     [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+
+    Write-Host "  Conectando como '$($global:FTP_USER)' a $($global:FTP_IP)..." -ForegroundColor Gray
 }
 
 # ============================================================
@@ -326,10 +350,106 @@ function Instalar-Binario {
             Start-Process $Archivo -ArgumentList "/S /quiet /norestart" -Wait -NoNewWindow
         }
         ".zip" {
-            Write-Host "Extrayendo ZIP en C:\$Servicio ..." -ForegroundColor Cyan
-            $destDir = "C:\$Servicio"
-            Expand-Archive -Path $Archivo -DestinationPath $destDir -Force
-            Write-Host "Extraido en $destDir" -ForegroundColor Green
+            Write-Host "Extrayendo ZIP..." -ForegroundColor Cyan
+
+            $tmpExtract = "$env:TEMP\zip_extract_$(Get-Random)"
+            New-Item $tmpExtract -ItemType Directory -Force | Out-Null
+
+            try {
+                Expand-Archive -Path $Archivo -DestinationPath $tmpExtract -Force
+            } catch {
+                Write-Host "Error al extraer ZIP: $($_.Exception.Message)" -ForegroundColor Red
+                Write-Host "El archivo puede estar corrupto. Intente descargarlo de nuevo." -ForegroundColor Yellow
+                Remove-Item $tmpExtract -Recurse -Force -ErrorAction SilentlyContinue
+                return
+            }
+
+            # Detectar estructura interna del ZIP para colocarlo correctamente
+            $contenido = Get-ChildItem $tmpExtract
+
+            # Caso Apache: contiene carpeta Apache24 dentro
+            $apacheDir = Get-ChildItem $tmpExtract -Recurse -Directory -Filter "Apache24" -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($apacheDir) {
+                $destDir = "C:\Apache24"
+                if (Test-Path $destDir) { Remove-Item $destDir -Recurse -Force -ErrorAction SilentlyContinue }
+                Move-Item $apacheDir.FullName $destDir
+                Write-Host "Apache extraido en $destDir" -ForegroundColor Green
+            }
+            # Caso Nginx: contiene carpeta nginx-X.X.X dentro
+            elseif ($contenido.Count -eq 1 -and $contenido[0].PSIsContainer -and $contenido[0].Name -match "nginx") {
+                $destDir = "C:\nginx"
+                if (Test-Path $destDir) { Remove-Item $destDir -Recurse -Force -ErrorAction SilentlyContinue }
+                Move-Item $contenido[0].FullName $destDir
+                Write-Host "Nginx extraido en $destDir" -ForegroundColor Green
+            }
+            # Caso generico: extraer en C:\<Servicio>
+            else {
+                $destDir = "C:\$Servicio"
+                if (Test-Path $destDir) { Remove-Item $destDir -Recurse -Force -ErrorAction SilentlyContinue }
+                Move-Item $tmpExtract $destDir
+                $tmpExtract = $null   # ya fue movido, no borrar
+                Write-Host "Extraido en $destDir" -ForegroundColor Green
+            }
+
+            if ($tmpExtract -and (Test-Path $tmpExtract)) {
+                Remove-Item $tmpExtract -Recurse -Force -ErrorAction SilentlyContinue
+            }
+
+            # Si es Apache, registrar e iniciar el servicio
+            if ($apacheDir -and (Test-Path "C:\Apache24\bin\httpd.exe")) {
+                Write-Host "Registrando servicio Apache..." -ForegroundColor Cyan
+                & "C:\Apache24\bin\httpd.exe" -k install 2>&1 | Out-Null
+                Start-Service "Apache2.4" -ErrorAction SilentlyContinue
+                Write-Host "Servicio Apache iniciado." -ForegroundColor Green
+            }
+
+            # Si es Nginx, iniciarlo
+            if ((Test-Path "C:\nginx\nginx.exe") -and $Servicio -eq "Nginx") {
+                Write-Host "Iniciando Nginx..." -ForegroundColor Cyan
+                # Detectar puerto libre: si 80 esta ocupado usar 8080
+                $puerto = 80
+                $test80 = Test-NetConnection -ComputerName localhost -Port 80 -WarningAction SilentlyContinue
+                if ($test80.TcpTestSucceeded) {
+                    $puerto = 8080
+                    Write-Host "Puerto 80 ocupado (IIS). Nginx usara puerto $puerto." -ForegroundColor Yellow
+                }
+
+                # Escribir nginx.conf con el puerto correcto
+                $nginxConf = @"
+worker_processes  1;
+events { worker_connections 1024; }
+http {
+    include       mime.types;
+    default_type  application/octet-stream;
+    server_tokens off;
+    server {
+        listen $puerto;
+        server_name _;
+        root html;
+        location / { index index.html index.htm; }
+        add_header X-Frame-Options "SAMEORIGIN";
+        add_header X-Content-Type-Options "nosniff";
+    }
+}
+"@
+                [System.IO.File]::WriteAllText("C:\nginx\conf\nginx.conf", $nginxConf, [System.Text.UTF8Encoding]::new($false))
+
+                # Abrir puerto en firewall
+                Remove-NetFirewallRule -DisplayName "HTTP-Nginx-$puerto" -ErrorAction SilentlyContinue
+                New-NetFirewallRule -DisplayName "HTTP-Nginx-$puerto" -Direction Inbound -Protocol TCP -LocalPort $puerto -Action Allow | Out-Null
+
+                taskkill /f /im nginx.exe 2>&1 | Out-Null
+                Start-Sleep -Seconds 1
+                Start-Process -FilePath "C:\nginx\nginx.exe" -WorkingDirectory "C:\nginx" -WindowStyle Hidden
+                Start-Sleep -Seconds 2
+
+                $test = Test-NetConnection -ComputerName localhost -Port $puerto -WarningAction SilentlyContinue
+                if ($test.TcpTestSucceeded) {
+                    Write-Host "Nginx escuchando en puerto $puerto." -ForegroundColor Green
+                } else {
+                    Write-Host "Advertencia: Nginx no responde en puerto $puerto." -ForegroundColor Yellow
+                }
+            }
         }
         default {
             Write-Host "Extension '$ext' no reconocida. El archivo queda en: $Archivo" -ForegroundColor Yellow
