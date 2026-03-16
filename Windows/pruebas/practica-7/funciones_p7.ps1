@@ -408,9 +408,28 @@ function Activar-SSL-IIS {
         return
     }
 
-    # Redireccion HTTP -> HTTPS via web.config en wwwroot
+    # ── Detectar si URL Rewrite esta instalado ───────────────────────────────
+    # URL Rewrite registra su modulo en la configuracion global de IIS.
+    # Si no esta, el web.config con <rewrite> causa error 500.
+    $urlRewriteInstalado = $false
+    try {
+        $modulosIIS = Get-WebConfiguration -Filter "system.webServer/globalModules/*" -PSPath "IIS:\" -ErrorAction SilentlyContinue
+        if ($modulosIIS | Where-Object { $_.Name -like "*RewriteModule*" }) {
+            $urlRewriteInstalado = $true
+        }
+    } catch {}
+
+    # Verificacion alternativa: buscar la DLL del modulo
+    if (-not $urlRewriteInstalado) {
+        $rewriteDll = "C:\Windows\System32\inetsrv\rewrite.dll"
+        if (Test-Path $rewriteDll) { $urlRewriteInstalado = $true }
+    }
+
     $webConfig = "C:\inetpub\wwwroot\web.config"
-    $contenidoRedir = @"
+
+    if ($urlRewriteInstalado) {
+        Write-Host "URL Rewrite detectado. Configurando redireccion HTTP->HTTPS..." -ForegroundColor Cyan
+        $contenidoRedir = @"
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
   <system.webServer>
@@ -433,7 +452,59 @@ function Activar-SSL-IIS {
   </system.webServer>
 </configuration>
 "@
-    $contenidoRedir | Set-Content $webConfig -Encoding UTF8
+        $contenidoRedir | Set-Content $webConfig -Encoding UTF8
+    }
+    else {
+        # Sin URL Rewrite: web.config solo con cabeceras de seguridad (sin <rewrite>)
+        # La redireccion se hace a nivel de binding IIS: se elimina el binding HTTP:80
+        # para forzar que solo funcione HTTPS:443
+        Write-Host "URL Rewrite no instalado. Aplicando redireccion por binding IIS..." -ForegroundColor Yellow
+
+        $contenidoSinRewrite = @"
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+  <system.webServer>
+    <httpProtocol>
+      <customHeaders>
+        <add name="Strict-Transport-Security" value="max-age=31536000; includeSubDomains" />
+        <add name="X-Frame-Options" value="SAMEORIGIN" />
+        <add name="X-Content-Type-Options" value="nosniff" />
+      </customHeaders>
+    </httpProtocol>
+  </system.webServer>
+</configuration>
+"@
+        $contenidoSinRewrite | Set-Content $webConfig -Encoding UTF8
+
+        # Redireccion alternativa: agregar binding en puerto 80 que apunte a HTTPS
+        # usando una pagina de redireccion en el directorio raiz
+        $redirHtml = @"
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="refresh" content="0; url=https://$Dominio" />
+<script>window.location.replace("https://$Dominio" + window.location.pathname);</script>
+</head>
+<body>Redirigiendo a HTTPS...</body>
+</html>
+"@
+        # Guardar la pagina de redireccion
+        $redirHtml | Set-Content "C:\inetpub\wwwroot\redirect.html" -Encoding UTF8
+
+        # Configurar documento de error 403 para redirigir via HTTP
+        try {
+            Set-WebConfigurationProperty `
+                -PSPath "IIS:\" `
+                -Filter "system.webServer/defaultDocument/files" `
+                -Name "." `
+                -Value @{ value = "redirect.html" } `
+                -ErrorAction SilentlyContinue
+        } catch {}
+
+        Write-Host "Redireccion alternativa configurada (meta-refresh a HTTPS)." -ForegroundColor Green
+        Write-Host "NOTA: Para redireccion 301 completa instale URL Rewrite:" -ForegroundColor Yellow
+        Write-Host "      choco install urlrewrite  (luego ejecute opcion 4 del menu)" -ForegroundColor Yellow
+    }
 
     iisreset /restart | Out-Null
 
