@@ -56,7 +56,7 @@ function Flujo-Servicio-HTTP {
             "IIS" {
                 if (Get-Command Listar-Versiones-IIS -ErrorAction SilentlyContinue) {
                     Listar-Versiones-IIS
-                    $verNum  = Leer-Opcion -Prompt "Seleccione version [1-2]: " -Validas @("1","2")
+                    $verNum  = Leer-Opcion -Prompt "Seleccione version [1-3]: " -Validas @("1","2","3")
                     $version = "10.0"
                     $puerto  = Leer-Puerto-P7
                     Instalar-IIS -Version $version -Puerto $puerto
