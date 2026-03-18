@@ -258,16 +258,58 @@ function Preparar-Repositorio-FTP {
     }
 
     # APACHE
-    Escribir-SubTitulo "Apache (apachehaus.com)"
+    # apachehaus.com bloquea descargas automatizadas.
+    # Se instala Apache via Chocolatey, se empaqueta como ZIP y se coloca en el repositorio.
+    Escribir-SubTitulo "Apache (Chocolatey -> ZIP para repositorio)"
     $aLTS    = "$repoBase\Apache\apache_2.4.62_win64.zip"
     $aLatest = "$repoBase\Apache\apache_2.4.63_win64.zip"
+    $apacheOk = $false
 
-    $ok = Descargar-URL-Directa -Url "https://www.apachehaus.com/cgi-bin/download.plx/datas/httpd-2.4.62-o111s-x64-vs17.zip" -Destino $aLTS -Nombre "apache_2.4.62_win64.zip"
-    if (-not $ok) { Crear-Placeholder-ZIP -Destino $aLTS -Info "Apache 2.4.62 Win64" }
+    if (Get-Command choco -ErrorAction SilentlyContinue) {
+        Write-Host "  Instalando Apache via Chocolatey para empaquetar en repositorio..." -ForegroundColor Cyan
+        Write-Host "  (Puede tardar varios minutos)" -ForegroundColor Yellow
+
+        $apacheRepo = "C:\Apache24_repo"
+        if (Test-Path $apacheRepo) { Remove-Item $apacheRepo -Recurse -Force -ErrorAction SilentlyContinue }
+
+        choco install apache-httpd --params "/installLocation:$apacheRepo /noService" -y --no-progress --force 2>&1 | Out-Null
+
+        # Buscar httpd.exe si choco lo instalo en otra ubicacion
+        if (-not (Test-Path "$apacheRepo\bin\httpd.exe")) {
+            $enc = Get-ChildItem "C:\" -Filter "httpd.exe" -Recurse -Depth 5 -ErrorAction SilentlyContinue |
+                   Where-Object { $_.FullName -notlike "*Apache24\*" } | Select-Object -First 1
+            if ($enc) { $apacheRepo = Split-Path $enc.DirectoryName -Parent }
+        }
+
+        if (Test-Path "$apacheRepo\bin\httpd.exe") {
+            $vOut    = (& "$apacheRepo\bin\httpd.exe" -v 2>&1) | Out-String
+            $version = if ($vOut -match "Apache/([0-9.]+)") { $matches[1] } else { "2.4" }
+            Write-Host "  Apache $version instalado. Empaquetando como ZIP..." -ForegroundColor Cyan
+
+            Compress-Archive -Path "$apacheRepo\*" -DestinationPath $aLTS -Force
+            Copy-Item $aLTS $aLatest -Force
+
+            # Limpiar instalacion temporal del repositorio
+            & "$apacheRepo\bin\httpd.exe" -k uninstall 2>&1 | Out-Null
+            Remove-Item $apacheRepo -Recurse -Force -ErrorAction SilentlyContinue
+
+            Write-Host "  OK: apache_2.4.62_win64.zip generado." -ForegroundColor Green
+            Write-Host "  OK: apache_2.4.63_win64.zip (copia del anterior)." -ForegroundColor Green
+            $apacheOk = $true
+        } else {
+            Write-Host "  ERROR: httpd.exe no encontrado tras instalacion con Chocolatey." -ForegroundColor Red
+        }
+    } else {
+        Write-Host "  Chocolatey no disponible. Instale dependencias primero (opcion 2)." -ForegroundColor Yellow
+    }
+
+    if (-not $apacheOk) {
+        Write-Host "  Creando placeholder. Instale dependencias y repita la opcion 3." -ForegroundColor Yellow
+        Crear-Placeholder-ZIP -Destino $aLTS    -Info "Apache 2.4.62 Win64 - Requiere Chocolatey"
+        Copy-Item $aLTS $aLatest -Force
+    }
+
     Generar-SHA256-Archivo -Archivo $aLTS
-
-    $ok = Descargar-URL-Directa -Url "https://www.apachehaus.com/cgi-bin/download.plx/datas/httpd-2.4.63-o111s-x64-vs17.zip" -Destino $aLatest -Nombre "apache_2.4.63_win64.zip"
-    if (-not $ok) { Copy-Item $aLTS $aLatest -Force; Write-Host "  Usando LTS como latest." -ForegroundColor Yellow }
     Generar-SHA256-Archivo -Archivo $aLatest
 
     # NGINX
