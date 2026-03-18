@@ -1,7 +1,7 @@
 # ============================================================
 # http_functions.ps1
 # Funciones para despliegue de servidores HTTP en Windows
-# Windows Server 2019 Core (sin GUI)
+# Windows Server 2022 Core (sin GUI)
 # ============================================================
 
 
