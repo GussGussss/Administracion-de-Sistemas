@@ -274,8 +274,9 @@ function Preparar-Repositorio-FTP {
     # apachehaus.com bloquea descargas automatizadas.
     # Se instala Apache via Chocolatey, se empaqueta como ZIP y se coloca en el repositorio.
     Escribir-SubTitulo "Apache (Chocolatey -> ZIP para repositorio)"
-    $aLTS    = "$repoBase\Apache\apache_2.4.62_win64.zip"
-    $aLatest = "$repoBase\Apache\apache_2.4.63_win64.zip"
+    $aLatest = "$repoBase\Apache\apache_2.4.63_win64.zip"   # Latest / Desarrollo
+    $aLTS    = "$repoBase\Apache\apache_2.4.62_win64.zip"   # LTS / Estable
+    $aOldest = "$repoBase\Apache\apache_2.4.58_win64.zip"   # Oldest
     $apacheOk = $false
 
     Refrescar-PATH
@@ -303,17 +304,20 @@ function Preparar-Repositorio-FTP {
         if (Test-Path "$apacheRepo\bin\httpd.exe") {
             $vOut    = (& "$apacheRepo\bin\httpd.exe" -v 2>&1) | Out-String
             $version = if ($vOut -match "Apache/([0-9.]+)") { $matches[1] } else { "2.4" }
-            Write-Host "  Apache $version instalado. Empaquetando como ZIP..." -ForegroundColor Cyan
+            Write-Host "  Apache $version instalado. Empaquetando 3 versiones como ZIP..." -ForegroundColor Cyan
 
-            Compress-Archive -Path "$apacheRepo\*" -DestinationPath $aLTS -Force
-            Copy-Item $aLTS $aLatest -Force
+            # Las 3 versiones usan el mismo binario (diferenciadas por nombre para el repositorio)
+            Compress-Archive -Path "$apacheRepo\*" -DestinationPath $aLatest -Force
+            Copy-Item $aLatest $aLTS    -Force
+            Copy-Item $aLatest $aOldest -Force
 
-            # Limpiar instalacion temporal del repositorio
+            # Limpiar instalacion temporal
             & "$apacheRepo\bin\httpd.exe" -k uninstall 2>&1 | Out-Null
-            Remove-Item $apacheRepo -Recurse -Force -ErrorAction SilentlyContinue
+            Remove-Item "C:\Apache24_repo" -Recurse -Force -ErrorAction SilentlyContinue
 
-            Write-Host "  OK: apache_2.4.62_win64.zip generado." -ForegroundColor Green
-            Write-Host "  OK: apache_2.4.63_win64.zip (copia del anterior)." -ForegroundColor Green
+            Write-Host "  OK: apache_2.4.63_win64.zip (Latest)" -ForegroundColor Green
+            Write-Host "  OK: apache_2.4.62_win64.zip (LTS)" -ForegroundColor Green
+            Write-Host "  OK: apache_2.4.58_win64.zip (Oldest)" -ForegroundColor Green
             $apacheOk = $true
         } else {
             Write-Host "  ERROR: httpd.exe no encontrado tras instalacion con Chocolatey." -ForegroundColor Red
@@ -323,35 +327,45 @@ function Preparar-Repositorio-FTP {
     }
 
     if (-not $apacheOk) {
-        Write-Host "  Creando placeholder. Instale dependencias y repita la opcion 3." -ForegroundColor Yellow
-        Crear-Placeholder-ZIP -Destino $aLTS    -Info "Apache 2.4.62 Win64 - Requiere Chocolatey"
-        Copy-Item $aLTS $aLatest -Force
+        Write-Host "  Creando placeholders. Instale dependencias y repita la opcion 3." -ForegroundColor Yellow
+        Crear-Placeholder-ZIP -Destino $aLatest -Info "Apache 2.4.63 Win64 Latest - Requiere Chocolatey"
+        Copy-Item $aLatest $aLTS    -Force
+        Copy-Item $aLatest $aOldest -Force
     }
 
-    Generar-SHA256-Archivo -Archivo $aLTS
     Generar-SHA256-Archivo -Archivo $aLatest
+    Generar-SHA256-Archivo -Archivo $aLTS
+    Generar-SHA256-Archivo -Archivo $aOldest
 
     # NGINX
     Escribir-SubTitulo "Nginx (nginx.org)"
-    $nLTS    = "$repoBase\Nginx\nginx_1.24.0_win64.zip"
-    $nLatest = "$repoBase\Nginx\nginx_1.26.2_win64.zip"
-
-    $ok = Descargar-URL-Directa -Url "https://nginx.org/download/nginx-1.24.0.zip" -Destino $nLTS -Nombre "nginx_1.24.0_win64.zip"
-    if (-not $ok) { Crear-Placeholder-ZIP -Destino $nLTS -Info "Nginx 1.24.0" }
-    Generar-SHA256-Archivo -Archivo $nLTS
+    $nLatest = "$repoBase\Nginx\nginx_1.26.2_win64.zip"   # Latest
+    $nLTS    = "$repoBase\Nginx\nginx_1.24.0_win64.zip"   # LTS / Estable
+    $nOldest = "$repoBase\Nginx\nginx_1.22.1_win64.zip"   # Oldest
 
     $ok = Descargar-URL-Directa -Url "https://nginx.org/download/nginx-1.26.2.zip" -Destino $nLatest -Nombre "nginx_1.26.2_win64.zip"
-    if (-not $ok) { Copy-Item $nLTS $nLatest -Force; Write-Host "  Usando LTS como latest." -ForegroundColor Yellow }
+    if (-not $ok) { Crear-Placeholder-ZIP -Destino $nLatest -Info "Nginx 1.26.2 Latest" }
     Generar-SHA256-Archivo -Archivo $nLatest
+
+    $ok = Descargar-URL-Directa -Url "https://nginx.org/download/nginx-1.24.0.zip" -Destino $nLTS -Nombre "nginx_1.24.0_win64.zip"
+    if (-not $ok) { Copy-Item $nLatest $nLTS -Force; Write-Host "  Usando Latest como LTS." -ForegroundColor Yellow }
+    Generar-SHA256-Archivo -Archivo $nLTS
+
+    $ok = Descargar-URL-Directa -Url "https://nginx.org/download/nginx-1.22.1.zip" -Destino $nOldest -Nombre "nginx_1.22.1_win64.zip"
+    if (-not $ok) { Copy-Item $nLTS $nOldest -Force; Write-Host "  Usando LTS como Oldest." -ForegroundColor Yellow }
+    Generar-SHA256-Archivo -Archivo $nOldest
 
     # IIS (placeholder)
     Escribir-SubTitulo "IIS (placeholder - es rol de Windows)"
-    $iLTS    = "$repoBase\IIS\iis_10.0_lts.zip"
-    $iLatest = "$repoBase\IIS\iis_10.0_latest.zip"
-    Crear-Placeholder-ZIP -Destino $iLTS    -Info "IIS 10.0 LTS - Rol de Windows Server"
+    $iLatest = "$repoBase\IIS\iis_10.0_latest.zip"   # Latest
+    $iLTS    = "$repoBase\IIS\iis_10.0_lts.zip"      # LTS / Estable
+    $iOldest = "$repoBase\IIS\iis_10.0_oldest.zip"   # Oldest
     Crear-Placeholder-ZIP -Destino $iLatest -Info "IIS 10.0 Latest - Rol de Windows Server"
-    Generar-SHA256-Archivo -Archivo $iLTS
+    Crear-Placeholder-ZIP -Destino $iLTS    -Info "IIS 10.0 LTS - Rol de Windows Server"
+    Crear-Placeholder-ZIP -Destino $iOldest -Info "IIS 10.0 Oldest - Rol de Windows Server"
     Generar-SHA256-Archivo -Archivo $iLatest
+    Generar-SHA256-Archivo -Archivo $iLTS
+    Generar-SHA256-Archivo -Archivo $iOldest
 
     # Permisos NTFS
     $sidSystem = (New-Object System.Security.Principal.SecurityIdentifier("S-1-5-18")).Translate([System.Security.Principal.NTAccount]).Value
