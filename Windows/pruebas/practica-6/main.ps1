@@ -1,7 +1,7 @@
 # ============================================================
 # main.ps1
 # Menu principal - Despliegue de servidores HTTP en Windows
-# Windows Server 2019 Core (sin GUI) - PowerShell
+# Windows Server 2022 Core (sin GUI) - PowerShell
 # Ejecutar como Administrador
 # ============================================================
 
@@ -100,7 +100,7 @@ while ($true) {
     Write-Host ""
     Write-Host "==============================" -ForegroundColor Cyan
     Write-Host "  DESPLIEGUE SERVIDORES HTTP  " -ForegroundColor Cyan
-    Write-Host "    Windows Server 2019       " -ForegroundColor Cyan
+    Write-Host "    Windows Server 2022       " -ForegroundColor Cyan
     Write-Host "==============================" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "1) IIS (Internet Information Services) - Obligatorio"
