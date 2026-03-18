@@ -295,6 +295,11 @@ function Preparar-Repositorio-FTP {
             if ($enc) { $apacheRepo = Split-Path $enc.DirectoryName -Parent }
         }
 
+        # Chocolatey puede crear subcarpeta Apache24 dentro del directorio de instalacion
+        if (Test-Path "$apacheRepo\Apache24\bin\httpd.exe") {
+            $apacheRepo = "$apacheRepo\Apache24"
+        }
+
         if (Test-Path "$apacheRepo\bin\httpd.exe") {
             $vOut    = (& "$apacheRepo\bin\httpd.exe" -v 2>&1) | Out-String
             $version = if ($vOut -match "Apache/([0-9.]+)") { $matches[1] } else { "2.4" }
