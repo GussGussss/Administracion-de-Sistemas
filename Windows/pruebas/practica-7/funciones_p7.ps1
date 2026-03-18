@@ -270,6 +270,12 @@ function Preparar-Repositorio-FTP {
         Write-Host "  Carpeta creada: $repoBase\$svc" -ForegroundColor Gray
     }
 
+    # Funcion interna: verificar si un archivo ya existe y tiene contenido real
+    function Archivo-Valido {
+        param([string]$Ruta, [int]$MinBytes = 100)
+        return (Test-Path $Ruta) -and ((Get-Item $Ruta).Length -gt $MinBytes)
+    }
+
     # APACHE
     # apachehaus.com bloquea descargas automatizadas.
     # Se instala Apache via Chocolatey, se empaqueta como ZIP y se coloca en el repositorio.
@@ -279,6 +285,13 @@ function Preparar-Repositorio-FTP {
     $aOldest = "$repoBase\Apache\apache_2.4.58_win64.zip"   # Oldest
     $apacheOk = $false
 
+    # Verificar si las 3 versiones de Apache ya existen
+    if ((Archivo-Valido $aLatest 1000) -and (Archivo-Valido $aLTS 1000) -and (Archivo-Valido $aOldest 1000)) {
+        Write-Host "  Apache ya preparado en el repositorio. Omitiendo descarga." -ForegroundColor Green
+        Write-Host "    $aLatest" -ForegroundColor DarkGray
+        Write-Host "    $aLTS"    -ForegroundColor DarkGray
+        Write-Host "    $aOldest" -ForegroundColor DarkGray
+    } else {
     Refrescar-PATH
     if (Get-Command choco -ErrorAction SilentlyContinue) {
         Write-Host "  Instalando Apache via Chocolatey para empaquetar en repositorio..." -ForegroundColor Cyan
@@ -336,6 +349,7 @@ function Preparar-Repositorio-FTP {
     Generar-SHA256-Archivo -Archivo $aLatest
     Generar-SHA256-Archivo -Archivo $aLTS
     Generar-SHA256-Archivo -Archivo $aOldest
+    } # fin else Apache
 
     # NGINX
     Escribir-SubTitulo "Nginx (nginx.org)"
@@ -343,29 +357,40 @@ function Preparar-Repositorio-FTP {
     $nLTS    = "$repoBase\Nginx\nginx_1.24.0_win64.zip"   # LTS / Estable
     $nOldest = "$repoBase\Nginx\nginx_1.22.1_win64.zip"   # Oldest
 
-    $ok = Descargar-URL-Directa -Url "https://nginx.org/download/nginx-1.26.2.zip" -Destino $nLatest -Nombre "nginx_1.26.2_win64.zip"
-    if (-not $ok) { Crear-Placeholder-ZIP -Destino $nLatest -Info "Nginx 1.26.2 Latest" }
-    Generar-SHA256-Archivo -Archivo $nLatest
+    if ((Archivo-Valido $nLatest 1000) -and (Archivo-Valido $nLTS 1000) -and (Archivo-Valido $nOldest 1000)) {
+        Write-Host "  Nginx ya preparado en el repositorio. Omitiendo descarga." -ForegroundColor Green
+        Write-Host "    $nLatest" -ForegroundColor DarkGray
+        Write-Host "    $nLTS"    -ForegroundColor DarkGray
+        Write-Host "    $nOldest" -ForegroundColor DarkGray
+    } else {
+        $ok = Descargar-URL-Directa -Url "https://nginx.org/download/nginx-1.26.2.zip" -Destino $nLatest -Nombre "nginx_1.26.2_win64.zip"
+        if (-not $ok) { Crear-Placeholder-ZIP -Destino $nLatest -Info "Nginx 1.26.2 Latest" }
+        Generar-SHA256-Archivo -Archivo $nLatest
 
-    $ok = Descargar-URL-Directa -Url "https://nginx.org/download/nginx-1.24.0.zip" -Destino $nLTS -Nombre "nginx_1.24.0_win64.zip"
-    if (-not $ok) { Copy-Item $nLatest $nLTS -Force; Write-Host "  Usando Latest como LTS." -ForegroundColor Yellow }
-    Generar-SHA256-Archivo -Archivo $nLTS
+        $ok = Descargar-URL-Directa -Url "https://nginx.org/download/nginx-1.24.0.zip" -Destino $nLTS -Nombre "nginx_1.24.0_win64.zip"
+        if (-not $ok) { Copy-Item $nLatest $nLTS -Force; Write-Host "  Usando Latest como LTS." -ForegroundColor Yellow }
+        Generar-SHA256-Archivo -Archivo $nLTS
 
-    $ok = Descargar-URL-Directa -Url "https://nginx.org/download/nginx-1.22.1.zip" -Destino $nOldest -Nombre "nginx_1.22.1_win64.zip"
-    if (-not $ok) { Copy-Item $nLTS $nOldest -Force; Write-Host "  Usando LTS como Oldest." -ForegroundColor Yellow }
-    Generar-SHA256-Archivo -Archivo $nOldest
+        $ok = Descargar-URL-Directa -Url "https://nginx.org/download/nginx-1.22.1.zip" -Destino $nOldest -Nombre "nginx_1.22.1_win64.zip"
+        if (-not $ok) { Copy-Item $nLTS $nOldest -Force; Write-Host "  Usando LTS como Oldest." -ForegroundColor Yellow }
+        Generar-SHA256-Archivo -Archivo $nOldest
+    } # fin else Nginx
 
     # IIS (placeholder)
     Escribir-SubTitulo "IIS (placeholder - es rol de Windows)"
     $iLatest = "$repoBase\IIS\iis_10.0_latest.zip"   # Latest
     $iLTS    = "$repoBase\IIS\iis_10.0_lts.zip"      # LTS / Estable
     $iOldest = "$repoBase\IIS\iis_10.0_oldest.zip"   # Oldest
-    Crear-Placeholder-ZIP -Destino $iLatest -Info "IIS 10.0 Latest - Rol de Windows Server"
-    Crear-Placeholder-ZIP -Destino $iLTS    -Info "IIS 10.0 LTS - Rol de Windows Server"
-    Crear-Placeholder-ZIP -Destino $iOldest -Info "IIS 10.0 Oldest - Rol de Windows Server"
-    Generar-SHA256-Archivo -Archivo $iLatest
-    Generar-SHA256-Archivo -Archivo $iLTS
-    Generar-SHA256-Archivo -Archivo $iOldest
+    if ((Archivo-Valido $iLatest) -and (Archivo-Valido $iLTS) -and (Archivo-Valido $iOldest)) {
+        Write-Host "  IIS ya preparado en el repositorio. Omitiendo." -ForegroundColor Green
+    } else {
+        Crear-Placeholder-ZIP -Destino $iLatest -Info "IIS 10.0 Latest - Rol de Windows Server"
+        Crear-Placeholder-ZIP -Destino $iLTS    -Info "IIS 10.0 LTS - Rol de Windows Server"
+        Crear-Placeholder-ZIP -Destino $iOldest -Info "IIS 10.0 Oldest - Rol de Windows Server"
+        Generar-SHA256-Archivo -Archivo $iLatest
+        Generar-SHA256-Archivo -Archivo $iLTS
+        Generar-SHA256-Archivo -Archivo $iOldest
+    } # fin else IIS
 
     # Permisos NTFS
     $sidSystem = (New-Object System.Security.Principal.SecurityIdentifier("S-1-5-18")).Translate([System.Security.Principal.NTAccount]).Value
@@ -1065,6 +1090,19 @@ function Pedir-Dominio {
 
 function Generar-Certificado-Windows {
     param([string]$Dominio)
+
+    # Verificar si ya existe un certificado valido para este dominio
+    $certExistente = Get-ChildItem Cert:\LocalMachine\My |
+        Where-Object { $_.Subject -like "*$Dominio*" -and $_.NotAfter -gt (Get-Date) } |
+        Select-Object -First 1
+
+    if ($certExistente) {
+        Write-Host "  Certificado para '$Dominio' ya existe y es valido." -ForegroundColor Green
+        Write-Host "    Thumbprint : $($certExistente.Thumbprint)" -ForegroundColor Gray
+        Write-Host "    Expira     : $($certExistente.NotAfter)"   -ForegroundColor Gray
+        return $certExistente.Thumbprint
+    }
+
     Write-Host "  Generando certificado autofirmado para '$Dominio'..." -ForegroundColor Cyan
     Get-ChildItem Cert:\LocalMachine\My | Where-Object { $_.Subject -like "*$Dominio*" } |
         Remove-Item -Force -ErrorAction SilentlyContinue
