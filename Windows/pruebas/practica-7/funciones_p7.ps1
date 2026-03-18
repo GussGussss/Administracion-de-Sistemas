@@ -115,6 +115,20 @@ function Detectar-Puerto-Libre {
 # SECCION 2 - DEPENDENCIAS
 # ================================================================
 
+function Refrescar-PATH {
+    # Refresca el PATH de la sesion actual para que los programas
+    # recien instalados (Chocolatey, OpenSSL) sean encontrados
+    # sin necesidad de cerrar y reabrir PowerShell
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
+                [System.Environment]::GetEnvironmentVariable("Path","User")
+
+    # Ruta especifica de Chocolatey por si acaso
+    $chocoBin = "C:\ProgramData\chocolatey\bin"
+    if ((Test-Path $chocoBin) -and ($env:Path -notlike "*$chocoBin*")) {
+        $env:Path = "$chocoBin;$env:Path"
+    }
+}
+
 function Instalar-Chocolatey {
     if (Get-Command choco -ErrorAction SilentlyContinue) {
         Write-Host "  Chocolatey ya esta instalado." -ForegroundColor Green
@@ -127,8 +141,7 @@ function Instalar-Chocolatey {
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
         Set-ExecutionPolicy Bypass -Scope Process -Force
         Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
-        $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
-                    [System.Environment]::GetEnvironmentVariable("Path","User")
+        Refrescar-PATH
         if (Get-Command choco -ErrorAction SilentlyContinue) {
             Write-Host "  Chocolatey instalado correctamente." -ForegroundColor Green
             Registrar-Resumen -Servicio "Chocolatey" -Accion "Instalacion" -Estado "OK"
@@ -148,6 +161,7 @@ function Instalar-OpenSSL {
         Registrar-Resumen -Servicio "OpenSSL" -Accion "Verificacion" -Estado "OK" -Detalle "Ya instalado"
         return $true
     }
+    Refrescar-PATH
     if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
         Write-Host "  ERROR: Chocolatey no disponible. Instale Chocolatey primero (opcion 1)." -ForegroundColor Red
         return $false
@@ -155,8 +169,7 @@ function Instalar-OpenSSL {
     Write-Host "  Instalando OpenSSL via Chocolatey..." -ForegroundColor Cyan
     Write-Host "  (Esto puede tardar varios minutos)" -ForegroundColor Yellow
     choco install openssl -y --no-progress 2>&1 | Out-Null
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
-                [System.Environment]::GetEnvironmentVariable("Path","User")
+    Refrescar-PATH
     if (Get-Command openssl -ErrorAction SilentlyContinue) {
         Write-Host "  OpenSSL instalado correctamente." -ForegroundColor Green
         Registrar-Resumen -Servicio "OpenSSL" -Accion "Instalacion" -Estado "OK"
@@ -265,6 +278,7 @@ function Preparar-Repositorio-FTP {
     $aLatest = "$repoBase\Apache\apache_2.4.63_win64.zip"
     $apacheOk = $false
 
+    Refrescar-PATH
     if (Get-Command choco -ErrorAction SilentlyContinue) {
         Write-Host "  Instalando Apache via Chocolatey para empaquetar en repositorio..." -ForegroundColor Cyan
         Write-Host "  (Puede tardar varios minutos)" -ForegroundColor Yellow
@@ -803,6 +817,7 @@ function Instalar-Apache-P7 {
         $ok = Instalar-Desde-ZIP -Archivo $ArchivoZip -Servicio "Apache"
         if (-not $ok) { return }
     } else {
+        Refrescar-PATH
         if (-not (Get-Command choco -ErrorAction SilentlyContinue)) {
             Write-Host "  ERROR: Chocolatey no instalado. Use la opcion de dependencias primero." -ForegroundColor Red
             return
