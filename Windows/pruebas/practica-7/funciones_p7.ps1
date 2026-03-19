@@ -709,8 +709,8 @@ function Instalar-Desde-ZIP {
                 # ZIP con contenido directo (bin/, conf/, htdocs/ en raiz)
                 # Verificar que hay bin/httpd.exe en la raiz del ZIP extraido
                 if (Test-Path "$tmpExtract\bin\httpd.exe") {
-                    Move-Item $tmpExtract $destino
-                    $tmpExtract = $null  # ya fue movido
+                    Move-Item $tmpExtract $destino -ErrorAction SilentlyContinue
+                    $tmpExtract = $null  # ya fue movido, no intentar borrar
                 } else {
                     # Intentar con subcarpeta de primer nivel
                     $subDir = Get-ChildItem $tmpExtract -Directory | Select-Object -First 1
@@ -753,7 +753,9 @@ function Instalar-Desde-ZIP {
         }
     }
 
-    Remove-Item $tmpExtract -Recurse -Force -ErrorAction SilentlyContinue
+    if ($tmpExtract -and (Test-Path $tmpExtract)) {
+        Remove-Item $tmpExtract -Recurse -Force -ErrorAction SilentlyContinue
+    }
     return $true
 }
 
