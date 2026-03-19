@@ -1721,15 +1721,36 @@ function Gestionar-Servicios-HTTP {
 function Ver-Estado-Servicios {
     Escribir-Titulo "ESTADO DE SERVICIOS"
 
+    # Detectar puertos reales de cada servicio
+    $puertoIIS = 80
+    try {
+        Import-Module WebAdministration -ErrorAction SilentlyContinue
+        $b = Get-WebBinding -Name "Default Web Site" -Protocol "http" -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($b) { $puertoIIS = [int]($b.bindingInformation -split ":")[-2] }
+    } catch {}
+
+    $puertoApache = 8080
+    try {
+        $apacheBase = Encontrar-Base-Apache-P7
+        $confApache = Get-Content "$apacheBase\conf\httpd.conf" -Raw -ErrorAction SilentlyContinue
+        if ($confApache -match "(?m)^Listen (\d+)") { $puertoApache = [int]$matches[1] }
+    } catch {}
+
+    $puertoNginx = 8181
+    try {
+        $confNginx = Get-Content "C:\nginx\conf\nginx.conf" -Raw -ErrorAction SilentlyContinue
+        if ($confNginx -match "listen\s+(\d+)") { $puertoNginx = [int]$matches[1] }
+    } catch {}
+
     $checks = @(
-        @{ Nombre = "IIS HTTP    "; Puerto = 80   },
-        @{ Nombre = "IIS HTTPS   "; Puerto = 443  },
-        @{ Nombre = "Apache HTTP "; Puerto = 8080 },
-        @{ Nombre = "Apache HTTPS"; Puerto = 443  },
-        @{ Nombre = "Nginx HTTP  "; Puerto = 8181 },
-        @{ Nombre = "Nginx HTTPS "; Puerto = 443  },
-        @{ Nombre = "FTP         "; Puerto = 21   },
-        @{ Nombre = "FTPS        "; Puerto = 990  }
+        @{ Nombre = "IIS HTTP    "; Puerto = $puertoIIS   },
+        @{ Nombre = "IIS HTTPS   "; Puerto = 443          },
+        @{ Nombre = "Apache HTTP "; Puerto = $puertoApache },
+        @{ Nombre = "Apache HTTPS"; Puerto = 443          },
+        @{ Nombre = "Nginx HTTP  "; Puerto = $puertoNginx  },
+        @{ Nombre = "Nginx HTTPS "; Puerto = 443          },
+        @{ Nombre = "FTP         "; Puerto = 21           },
+        @{ Nombre = "FTPS        "; Puerto = 990          }
     )
 
     Write-Host ("  {0,-16} {1,-8} {2}" -f "Servicio","Puerto","Estado") -ForegroundColor Cyan
