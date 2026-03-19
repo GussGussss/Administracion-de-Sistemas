@@ -1549,16 +1549,14 @@ function Gestionar-Servicios-HTTP {
 
     # Apache
     $apacheBase = Encontrar-Base-Apache-P7
-    $apacheEst = if (Test-Path "$apacheBasein\httpd.exe") {
+    $apacheEst = if (Test-Path "$apacheBase\bin\httpd.exe") {
         $svc = Get-Service "Apache2.4" -ErrorAction SilentlyContinue
         if ($svc -and $svc.Status -eq "Running") { "ACTIVO" } else { "DETENIDO" }
     } else { "NO INSTALADO" }
 
     # Nginx
     $nginxProc = Get-Process nginx -ErrorAction SilentlyContinue
-    $nginxEst = if (Test-Path "C:
-ginx
-ginx.exe") {
+    $nginxEst = if (Test-Path "C:\nginx\nginx.exe") {
         if ($nginxProc) { "ACTIVO" } else { "DETENIDO" }
     } else { "NO INSTALADO" }
 
