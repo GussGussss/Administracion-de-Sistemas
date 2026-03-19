@@ -68,13 +68,11 @@ function Leer-Opcion {
 
 function Leer-Puerto {
     param([string]$Prompt = "Puerto de escucha", [int]$Default = 0)
-    $reservados = @(21, 22, 25, 53, 135, 139, 445, 990, 3389)
     while ($true) {
         $raw = Leer-Texto -Prompt $Prompt -Default $(if ($Default) { "$Default" } else { "" })
         if ($raw -notmatch '^\d+$') { Write-Host "  Debe ser un numero entero." -ForegroundColor Red; continue }
         $p = [int]$raw
         if ($p -lt 1 -or $p -gt 65535) { Write-Host "  Rango valido: 1-65535." -ForegroundColor Red; continue }
-        if ($reservados -contains $p)   { Write-Host "  Puerto $p reservado por el sistema." -ForegroundColor Red; continue }
         $enUso = Test-NetConnection -ComputerName localhost -Port $p -WarningAction SilentlyContinue
         if ($enUso.TcpTestSucceeded) {
             Write-Host "  Puerto $p ya esta en uso por otro proceso." -ForegroundColor Yellow
