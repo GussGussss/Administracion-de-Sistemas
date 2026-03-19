@@ -470,7 +470,13 @@ obtener_puerto_apache() {
 
 instalar_apache_p7() {
     local version="$1" puerto="$2" archivo_tarball="${3:-}"
-    local v_instalada; v_instalada=$(rpm -q httpd --queryformat "%{VERSION}" 2>/dev/null)
+    # Detectar si Apache esta realmente instalado verificando el binario
+    local v_instalada=""
+    if command -v httpd &>/dev/null || systemctl cat httpd.service &>/dev/null 2>&1; then
+        v_instalada=$(httpd -v 2>/dev/null | grep -oP "Apache/[0-9.]+" | cut -d/ -f2)
+        [[ -z "$v_instalada" ]] && v_instalada=$(rpm -q httpd --queryformat "%{VERSION}" 2>/dev/null | grep -v "not installed")
+    fi
+
 
     if [[ -n "$v_instalada" ]]; then
         echo "  Apache ya instalado (v$v_instalada)."
@@ -551,7 +557,13 @@ NGXEOF
 
 instalar_nginx_p7() {
     local version="$1" puerto="$2" archivo_tarball="${3:-}"
-    local v_instalada; v_instalada=$(rpm -q nginx --queryformat "%{VERSION}" 2>/dev/null)
+    # Detectar si Nginx esta realmente instalado verificando el binario
+    local v_instalada=""
+    if command -v nginx &>/dev/null || systemctl cat nginx.service &>/dev/null 2>&1; then
+        v_instalada=$(nginx -v 2>&1 | grep -oP "nginx/[0-9.]+" | cut -d/ -f2)
+        [[ -z "$v_instalada" ]] && v_instalada=$(rpm -q nginx --queryformat "%{VERSION}" 2>/dev/null | grep -v "not installed")
+    fi
+
 
     if [[ -n "$v_instalada" ]]; then
         echo "  Nginx ya instalado (v$v_instalada)."
@@ -831,7 +843,7 @@ generar_certificado_ssl() {
 
 activar_ssl_apache() {
     escribir_titulo "ACTIVAR SSL/TLS EN APACHE"
-    rpm -q httpd &>/dev/null || { echo "  ERROR: Apache no instalado."; return 1; }
+    command -v httpd &>/dev/null || { echo "  ERROR: Apache no instalado. Instale Apache primero."; return 1; }
 
     pedir_dominio
     local dominio="$DOMINIO_SSL" ssl_dir="/etc/httpd/ssl"
@@ -934,22 +946,44 @@ activar_ssl_tomcat() {
     local keystore="$ssl_dir/keystore.p12"
     local keystore_pass="P7Tomcat2024"
 
+
     mkdir -p "$ssl_dir"
-    echo "  Generando keystore para Tomcat..."
-    keytool -genkeypair -alias tomcat -keyalg RSA -keysize 2048 -validity 365 \
-        -keystore "$keystore" -storetype PKCS12 -storepass "$keystore_pass" \
-        -dname "CN=$dominio, O=Practica7, OU=P7-SSL" 2>/dev/null
+    chown -R tomcatsvc:tomcatsvc "$ssl_dir" 2>/dev/null
 
-    [[ -f "$keystore" ]] || { echo "  ERROR: No se pudo generar el keystore."; return 1; }
-    echo "  Keystore generado."
+    # Buscar keytool en Java instalado
+    local keytool_bin
+    keytool_bin=$(find /usr/lib/jvm -name keytool 2>/dev/null | head -1)
+    [[ -z "$keytool_bin" ]] && keytool_bin="keytool"
 
+    if [[ ! -f "$keystore" ]]; then
+        echo "  Generando keystore para Tomcat..."
+        "$keytool_bin" -genkeypair -alias tomcat -keyalg RSA -keysize 2048 -validity 365 \
+            -keystore "$keystore" -storetype PKCS12 -storepass "$keystore_pass" \
+            -dname "CN=$dominio, O=Practica7, OU=P7-SSL" 2>/dev/null
+        [[ -f "$keystore" ]] || { echo "  ERROR: No se pudo generar keystore. Verificar Java."; return 1; }
+        echo "  Keystore generado."
+    else
+        echo "  Keystore ya existe."
+    fi
+
+    chown -R tomcatsvc:tomcatsvc "$ssl_dir"
+
+    # Modificar server.xml usando python3 para evitar problemas con sed y comillas
     local server_xml="/opt/tomcat/conf/server.xml"
-    sed -i '/<Connector port="8443"/,/\/>/d' "$server_xml"
-    sed -i "/<\/Service>/i\\
-    <Connector port=\"8443\" protocol=\"org.apache.coyote.http11.Http11NioProtocol\"\\
-               SSLEnabled=\"true\" maxThreads=\"150\" scheme=\"https\" secure=\"true\"\\
-               keystoreFile=\"$keystore\" keystorePass=\"$keystore_pass\"\\
-               clientAuth=\"false\" sslProtocol=\"TLS\"/>" "$server_xml"
+    python3 << PYBLOCK
+import re
+with open("$server_xml") as f: c = f.read()
+# Eliminar conector SSL previo
+c = re.sub(r'<Connector[^>]*port="8443"[^/]*/>', "", c, flags=re.DOTALL)
+# Insertar nuevo conector antes de </Service>
+connector = '''    <Connector port="8443" protocol="org.apache.coyote.http11.Http11NioProtocol"
+               SSLEnabled="true" maxThreads="150" scheme="https" secure="true"
+               keystoreFile="$keystore" keystorePass="$keystore_pass"
+               clientAuth="false" sslProtocol="TLS" />'''
+c = c.replace("</Service>", connector + "\n</Service>", 1)
+with open("$server_xml", "w") as f: f.write(c)
+PYBLOCK
+    echo "  Conector SSL 8443 configurado en server.xml."
 
     abrir_firewall 8443
     permitir_selinux_http 8443
@@ -1016,7 +1050,7 @@ gestionar_servicios_http() {
     systemctl is-active --quiet nginx  && nginx_est="ACTIVO"  || nginx_est="DETENIDO"
     pgrep -f tomcat &>/dev/null        && tomcat_est="ACTIVO" || tomcat_est="DETENIDO"
     systemctl is-active --quiet vsftpd && ftp_est="ACTIVO"    || ftp_est="DETENIDO"
-    rpm -q httpd  &>/dev/null || httpd_est="NO INSTALADO"
+    command -v httpd &>/dev/null || httpd_est="NO INSTALADO"
     command -v nginx &>/dev/null || nginx_est="NO INSTALADO"
     [[ -f /opt/tomcat/bin/startup.sh ]] || tomcat_est="NO INSTALADO"
     rpm -q vsftpd &>/dev/null || ftp_est="NO INSTALADO"
@@ -1239,7 +1273,10 @@ ftp_crear_usuarios() {
 
         useradd -m -d "/ftp/users/$nombre" -s /bin/bash -g "$grupo" -G ftpusuarios "$nombre"
         echo "$nombre:$password" | chpasswd
-        mkdir -p "/ftp/users/$nombre/{general,$grupo,$nombre,http}"
+        mkdir -p "/ftp/users/$nombre/general"
+        mkdir -p "/ftp/users/$nombre/$grupo"
+        mkdir -p "/ftp/users/$nombre/$nombre"
+        mkdir -p "/ftp/users/$nombre/http"
         mountpoint -q "/ftp/users/$nombre/general" || mount --bind /ftp/public/general "/ftp/users/$nombre/general"
         mountpoint -q "/ftp/users/$nombre/$grupo"   || mount --bind "/ftp/users/$grupo" "/ftp/users/$nombre/$grupo"
         mountpoint -q "/ftp/users/$nombre/http"     || mount --bind /ftp/public/http "/ftp/users/$nombre/http"
