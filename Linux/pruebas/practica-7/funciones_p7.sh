@@ -960,6 +960,10 @@ print("  Conector SSL 8443 configurado en server.xml (Tomcat 10+ SSLHostConfig).
 PYEOF
 
     abrir_firewall 8443; permitir_puerto_selinux 8443
+    # Redirigir puerto 443 -> 8443 para que Tomcat responda en https://IP sin puerto
+    firewall-cmd --permanent --add-forward-port=port=443:proto=tcp:toport=8443 2>/dev/null
+    firewall-cmd --reload 2>/dev/null
+    echo "  Redireccion 443 -> 8443 configurada."
     pkill -f catalina 2>/dev/null; sleep 3
     sudo -u tomcatsvc env JAVA_HOME=/usr/lib/jvm/java-21-openjdk \
         CATALINA_HOME=/opt/tomcat /opt/tomcat/bin/startup.sh
