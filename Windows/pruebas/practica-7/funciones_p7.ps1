@@ -883,9 +883,21 @@ function Configurar-Apache-Puerto {
     param([string]$ApacheBase, [int]$Puerto)
     $conf = "$ApacheBase\conf\httpd.conf"
     if (Test-Path $conf) {
-        $contenido = Get-Content $conf
-        $contenido = $contenido -replace "^Listen \d+", "Listen $Puerto"
-        $contenido | Set-Content $conf
+        # Reemplazar TODOS los Listen existentes con uno solo del puerto correcto
+        $lines = Get-Content $conf
+        $puesto = $false
+        $lines = $lines | ForEach-Object {
+            if ($_ -match "^Listen \d+") {
+                if (-not $puesto) {
+                    "Listen $Puerto"
+                    $puesto = $true
+                }
+                # omitir las demas lineas Listen (no las retorna)
+            } else {
+                $_
+            }
+        }
+        $lines | Set-Content $conf
     }
 }
 
