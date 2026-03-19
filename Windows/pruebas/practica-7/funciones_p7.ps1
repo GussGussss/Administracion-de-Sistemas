@@ -855,6 +855,30 @@ function Instalar-IIS-P7 {
 
 # ── Apache ───────────────────────────────────────────────────────────────────
 
+function Encontrar-Base-Apache-P7 {
+    # Identica a Encontrar-Base-Apache de P6
+    # Busca httpd.exe en las ubicaciones donde Chocolatey suele instalarlo
+    $apacheBase = "C:\Apache24"
+
+    if (-not (Test-Path "$apacheBase\bin\httpd.exe")) {
+        $encontrado = Get-ChildItem "C:\" -Filter "httpd.exe" -Recurse -Depth 5 -ErrorAction SilentlyContinue |
+                      Select-Object -First 1
+        if ($encontrado) {
+            $apacheBase = Split-Path $encontrado.DirectoryName -Parent
+        }
+    }
+
+    # Chocolatey a veces deja una subcarpeta extra (Apache24 dentro de Apache24)
+    if (-not (Test-Path "$apacheBase\bin\httpd.exe")) {
+        $sub = Get-ChildItem $apacheBase -Directory -ErrorAction SilentlyContinue |
+               Where-Object { Test-Path "$($_.FullName)\bin\httpd.exe" } |
+               Select-Object -First 1
+        if ($sub) { $apacheBase = $sub.FullName }
+    }
+
+    return $apacheBase
+}
+
 function Configurar-Apache-Puerto {
     param([string]$ApacheBase, [int]$Puerto)
     $conf = "$ApacheBase\conf\httpd.conf"
@@ -870,10 +894,9 @@ function Instalar-Apache-P7 {
 
     $apacheBase = "C:\Apache24"
 
-    # Chocolatey puede instalar en subcarpeta Apache24 dentro del directorio base
-    if (Test-Path "$apacheBase\Apache24\bin\httpd.exe") {
-        $apacheBase = "$apacheBase\Apache24"
-    }
+    # Usar la misma logica de busqueda de P6 para encontrar httpd.exe
+    # sin importar donde lo haya instalado Chocolatey
+    $apacheBase = Encontrar-Base-Apache-P7
 
     # Detectar si ya esta instalado
     if (Test-Path "$apacheBase\bin\httpd.exe") {
@@ -911,20 +934,20 @@ function Instalar-Apache-P7 {
             return
         }
         Write-Host "  Instalando Apache via Chocolatey (puede tardar varios minutos)..." -ForegroundColor Cyan
-        choco install apache-httpd --params "/installLocation:$apacheBase /noService" -y --no-progress 2>&1 | Out-Null
 
-        # Chocolatey puede crear subcarpeta Apache24 dentro del directorio indicado
-        if (Test-Path "$apacheBase\Apache24\bin\httpd.exe") {
-            $apacheBase = "$apacheBase\Apache24"
-        }
+        $chocoOut = choco install apache-httpd `
+            --params "/installLocation:$apacheBase /noService" `
+            --yes --no-progress --accept-license --allow-downgrade --force `
+            2>&1
 
-        if (-not (Test-Path "$apacheBase\bin\httpd.exe")) {
-            # Busqueda general por si choco lo instalo en otra ubicacion
-            $enc = Get-ChildItem "C:\" -Filter "httpd.exe" -Recurse -Depth 6 -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($enc) { $apacheBase = Split-Path $enc.DirectoryName -Parent }
-        }
+        # Usar Encontrar-Base-Apache (igual que P6) para localizar httpd.exe
+        # sin importar donde lo haya puesto Chocolatey
+        $apacheBase = Encontrar-Base-Apache-P7
+
         if (-not (Test-Path "$apacheBase\bin\httpd.exe")) {
             Write-Host "  ERROR: httpd.exe no encontrado tras instalacion." -ForegroundColor Red
+            Write-Host "  Ultimas lineas de Chocolatey:" -ForegroundColor Gray
+            $chocoOut | Select-Object -Last 5 | ForEach-Object { Write-Host "    $_" -ForegroundColor DarkGray }
             return
         }
     }
