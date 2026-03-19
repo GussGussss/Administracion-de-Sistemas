@@ -824,6 +824,12 @@ activar_ssl_apache() {
     generar_certificado_ssl "$dominio" "$ssl_dir" || return 1
     dnf install -y mod_ssl 2>/dev/null
     local puerto_http; puerto_http=$(obtener_puerto_apache); [[ -z "$puerto_http" ]] && puerto_http=80
+    # mod_ssl instala ssl.conf con VirtualHost y Listen 443 propios
+    # Deshabilitarlo completamente para que nuestro ssl_p7.conf tome precedencia
+    if [[ -f /etc/httpd/conf.d/ssl.conf ]]; then
+        mv /etc/httpd/conf.d/ssl.conf /etc/httpd/conf.d/ssl.conf.disabled
+        echo "  ssl.conf de mod_ssl deshabilitado (usa ssl_p7.conf)."
+    fi
     cat > /etc/httpd/conf.d/ssl_p7.conf <<SSLEOF
 Listen 443 https
 SSLPassPhraseDialog exec:/usr/libexec/httpd-ssl-pass-dialog
@@ -933,11 +939,24 @@ activar_ssl_tomcat() {
 import sys, re
 xml, ks, kp = sys.argv[1], sys.argv[2], sys.argv[3]
 with open(xml) as f: c = f.read()
-c = re.sub(r'<Connector[^>]*port="8443"[^/]*/>', '', c, flags=re.DOTALL)
-conn = f'    <Connector port="8443" protocol="org.apache.coyote.http11.Http11NioProtocol"\n               SSLEnabled="true" maxThreads="150" scheme="https" secure="true"\n               keystoreFile="{ks}" keystorePass="{kp}" clientAuth="false" sslProtocol="TLS" />'
+
+# Eliminar conector 8443 previo (con o sin SSLHostConfig)
+c = re.sub(r'<Connector[^>]*port="8443".*?(?:</Connector>|/>)', '', c, flags=re.DOTALL)
+
+# Tomcat 10+ requiere SSLHostConfig en lugar de keystoreFile en el Connector
+conn = f'''    <Connector port="8443" protocol="org.apache.coyote.http11.Http11NioProtocol"
+               SSLEnabled="true" maxThreads="150" scheme="https" secure="true">
+        <SSLHostConfig>
+            <Certificate certificateKeystoreFile="{ks}"
+                         certificateKeystorePassword="{kp}"
+                         certificateKeystoreType="PKCS12"
+                         type="RSA" />
+        </SSLHostConfig>
+    </Connector>'''
+
 c = c.replace('</Service>', conn + '\n</Service>', 1)
 with open(xml, 'w') as f: f.write(c)
-print("  Conector SSL 8443 configurado en server.xml.")
+print("  Conector SSL 8443 configurado en server.xml (Tomcat 10+ SSLHostConfig).")
 PYEOF
 
     abrir_firewall 8443; permitir_puerto_selinux 8443
