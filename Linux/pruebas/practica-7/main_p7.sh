@@ -10,7 +10,7 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
-source "$(dirname "$0")/funciones_p7_linux.sh"
+source "$(dirname "$0")/funciones_p7.sh"
 
 while true; do
     echo ""
