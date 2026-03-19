@@ -1411,11 +1411,21 @@ SSLSessionCacheTimeout 300
         [System.IO.File]::WriteAllText($ahsslConf, $ahssl)
         Write-Host "  httpd-ahssl.conf actualizado con dominio '$dominio'." -ForegroundColor Green
 
-        # Eliminar Listen 443 duplicado (puede ser "Listen 443" o "Listen 443 https")
+        # Eliminar Listen 443 de httpd-ahssl.conf (evita duplicado)
+        # y agregarlo en httpd.conf para que Apache lo reconozca correctamente
         $ahssl2 = [System.IO.File]::ReadAllText($ahsslConf)
-        $ahssl2Lines = $ahssl2 -split "`n" | Where-Object { $_ -notmatch "^Listen 443" }
+        $ahssl2Lines = ($ahssl2 -split "`n") | Where-Object { $_ -notmatch "^Listen 443" }
         $ahssl2 = $ahssl2Lines -join "`n"
         [System.IO.File]::WriteAllText($ahsslConf, $ahssl2)
+
+        # Agregar Listen 443 en httpd.conf si no existe
+        $httpdMain = "$apacheBase\conf\httpd.conf"
+        $httpdMainContent = [System.IO.File]::ReadAllText($httpdMain)
+        if ($httpdMainContent -notmatch "^Listen 443") {
+            $httpdMainContent = $httpdMainContent -replace "(?m)^(Listen \d+)", "`$1`nListen 443"
+            [System.IO.File]::WriteAllText($httpdMain, $httpdMainContent)
+            Write-Host "  Listen 443 agregado en httpd.conf." -ForegroundColor Gray
+        }
 
         # Deshabilitar httpd-ssl.conf para evitar conflicto con httpd-ahssl.conf
         $httpdConf = "$apacheBase\conf\httpd.conf"
@@ -1434,8 +1444,18 @@ SSLSessionCacheTimeout 300
     }
 
     Abrir-Puerto-Firewall -Puerto 443 -Nombre "Apache-HTTPS-443"
-    Restart-Service "Apache2.4" -ErrorAction SilentlyContinue
+    Stop-Service "Apache2.4" -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
+    Start-Service "Apache2.4" -ErrorAction SilentlyContinue
     Start-Sleep -Seconds 3
+
+    # Si no arranco, intentar directamente con httpd.exe
+    $svc = Get-Service "Apache2.4" -ErrorAction SilentlyContinue
+    if (-not $svc -or $svc.Status -ne "Running") {
+        Write-Host "  Reintentando inicio de Apache..." -ForegroundColor Yellow
+        & "$(Encontrar-Base-Apache-P7)in\httpd.exe" -k start 2>&1 | Out-Null
+        Start-Sleep -Seconds 3
+    }
 
     $test   = Test-NetConnection -ComputerName localhost -Port 443 -WarningAction SilentlyContinue
     $estado = if ($test.TcpTestSucceeded) { "OK" } else { "ADVERTENCIA" }
