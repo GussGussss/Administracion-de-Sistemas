@@ -570,7 +570,8 @@ function Verificar-Hash-SHA256 {
 function Navegar-Y-Descargar-FTP {
     # Navega dinamicamente el repositorio FTP igual que lo haria FileZilla
     # y descarga el instalador elegido junto con su .sha256
-    # Retorna la ruta local del archivo descargado o $null si fallo
+    # Retorna hashtable @{Archivo=ruta; Servicio=nombre} o $null si fallo
+    param([string]$ServicioForzado = "")   # Si se pasa, salta la seleccion de servicio
 
     Leer-Credenciales-FTP
 
@@ -585,18 +586,36 @@ function Navegar-Y-Descargar-FTP {
         Write-Host "  No se encontraron servicios en el repositorio." -ForegroundColor Red
         Write-Host "  Verifique:" -ForegroundColor Yellow
         Write-Host "    1) Que el usuario '$($global:FTP_USER)' tenga acceso." -ForegroundColor Yellow
-        Write-Host "    2) Que el repositorio fue preparado (opcion 2 del menu)." -ForegroundColor Yellow
+        Write-Host "    2) Que el repositorio fue preparado (opcion 3 del menu)." -ForegroundColor Yellow
         Write-Host "    3) Que el junction 'http' existe en el home del usuario." -ForegroundColor Yellow
         return $null
     }
 
-    Write-Host ""
-    Write-Host "  Servicios disponibles:" -ForegroundColor Yellow
-    for ($i = 0; $i -lt $servicios.Count; $i++) {
-        Write-Host "    $($i+1)) $($servicios[$i])"
+    # Si viene servicio forzado desde el menu, preseleccionarlo
+    if ($ServicioForzado) {
+        $matchIdx = $servicios | Where-Object { $_ -eq $ServicioForzado }
+        if ($matchIdx) {
+            $svcEleg = $ServicioForzado
+            Write-Host ""
+            Write-Host "  Servicio preseleccionado: $svcEleg" -ForegroundColor Cyan
+        } else {
+            Write-Host ""
+            Write-Host "  Servicios disponibles en el repositorio:" -ForegroundColor Yellow
+            for ($i = 0; $i -lt $servicios.Count; $i++) {
+                Write-Host "    $($i+1)) $($servicios[$i])"
+            }
+            $sel     = [int](Leer-Opcion -Prompt "  Seleccione servicio" -Validas (1..$servicios.Count | ForEach-Object { "$_" })) - 1
+            $svcEleg = $servicios[$sel]
+        }
+    } else {
+        Write-Host ""
+        Write-Host "  Servicios disponibles:" -ForegroundColor Yellow
+        for ($i = 0; $i -lt $servicios.Count; $i++) {
+            Write-Host "    $($i+1)) $($servicios[$i])"
+        }
+        $sel     = [int](Leer-Opcion -Prompt "  Seleccione servicio" -Validas (1..$servicios.Count | ForEach-Object { "$_" })) - 1
+        $svcEleg = $servicios[$sel]
     }
-    $sel     = [int](Leer-Opcion -Prompt "  Seleccione servicio" -Validas (1..$servicios.Count | ForEach-Object { "$_" })) - 1
-    $svcEleg = $servicios[$sel]
 
     # Nivel 2: listar instaladores dentro del servicio elegido
     $rutaSvc      = "$($global:FTP_RUTA)/$svcEleg"
@@ -648,7 +667,7 @@ function Navegar-Y-Descargar-FTP {
     }
 
     Registrar-Resumen -Servicio $svcEleg -Accion "FTP-Descarga" -Estado "OK" -Detalle $archEleg
-    return $destInst
+    return @{ Archivo = $destInst; Servicio = $svcEleg }
 }
 
 function Instalar-Desde-ZIP {
@@ -670,20 +689,40 @@ function Instalar-Desde-ZIP {
 
     switch ($Servicio) {
         "Apache" {
+            # El ZIP de Chocolatey empaqueta todo el contenido de Apache24 directamente
+            # (bin/, conf/, htdocs/, etc.) sin subcarpeta Apache24 en el primer nivel.
+            # Detectar si hay carpeta Apache24 o si el contenido esta directo en la raiz.
             $apacheDir = Get-ChildItem $tmpExtract -Recurse -Directory -Filter "Apache24" | Select-Object -First 1
-            if (-not $apacheDir) {
-                Write-Host "  ERROR: No se encontro carpeta Apache24 en el ZIP." -ForegroundColor Red
-                Remove-Item $tmpExtract -Recurse -Force -ErrorAction SilentlyContinue
-                return $false
-            }
-            $destino = "C:\Apache24"
+            $destino   = "C:\Apache24"
+
             if (Test-Path $destino) {
                 & "$destino\bin\httpd.exe" -k stop 2>&1 | Out-Null
                 Stop-Service "Apache2.4" -Force -ErrorAction SilentlyContinue
                 Start-Sleep -Seconds 2
                 Remove-Item $destino -Recurse -Force -ErrorAction SilentlyContinue
             }
-            Move-Item $apacheDir.FullName $destino
+
+            if ($apacheDir) {
+                # ZIP con subcarpeta Apache24 dentro
+                Move-Item $apacheDir.FullName $destino
+            } else {
+                # ZIP con contenido directo (bin/, conf/, htdocs/ en raiz)
+                # Verificar que hay bin/httpd.exe en la raiz del ZIP extraido
+                if (Test-Path "$tmpExtract\bin\httpd.exe") {
+                    Move-Item $tmpExtract $destino
+                    $tmpExtract = $null  # ya fue movido
+                } else {
+                    # Intentar con subcarpeta de primer nivel
+                    $subDir = Get-ChildItem $tmpExtract -Directory | Select-Object -First 1
+                    if ($subDir -and (Test-Path "$($subDir.FullName)\bin\httpd.exe")) {
+                        Move-Item $subDir.FullName $destino
+                    } else {
+                        Write-Host "  ERROR: No se encontro httpd.exe en el ZIP." -ForegroundColor Red
+                        Remove-Item $tmpExtract -Recurse -Force -ErrorAction SilentlyContinue
+                        return $false
+                    }
+                }
+            }
             Write-Host "  Apache extraido en $destino" -ForegroundColor Green
         }
         "Nginx" {
@@ -1049,26 +1088,34 @@ function Flujo-Instalar-Servicio {
     Write-Host ""
     $fuente = Leer-Opcion -Prompt "  Seleccione fuente [1/2]" -Validas @("1","2")
 
-    $archivoZip = ""
+    $archivoZip  = ""
+    $servicioReal = $Servicio   # puede cambiar si el usuario elige otro servicio en FTP
+
     if ($fuente -eq "2") {
-        $archivoZip = Navegar-Y-Descargar-FTP
-        if (-not $archivoZip) { Write-Host "  Instalacion cancelada." -ForegroundColor Red; return }
+        # Pasar el servicio como sugerencia pero permitir que el usuario elija en FTP
+        $resultado = Navegar-Y-Descargar-FTP -ServicioForzado $Servicio
+        if (-not $resultado) { Write-Host "  Instalacion cancelada." -ForegroundColor Red; return }
+        $archivoZip  = $resultado.Archivo
+        $servicioReal = $resultado.Servicio   # usar el servicio que el usuario eligio en FTP
+        Write-Host "  Servicio a instalar: $servicioReal" -ForegroundColor Cyan
     }
 
-    # Puerto sugerido (para no colisionar entre servicios)
-    $sugeridos = switch ($Servicio) {
+    # Puerto sugerido segun el servicio real a instalar
+    $sugeridos = switch ($servicioReal) {
         "IIS"    { @(80, 8080, 8181, 8282) }
         "Apache" { @(8080, 80, 8181, 8282) }
         "Nginx"  { @(8181, 8080, 80, 8282) }
+        default  { @(8080, 8181, 8282) }
     }
     $puertoSugerido = Detectar-Puerto-Libre -Sugeridos $sugeridos
     Write-Host ""
     $puerto = Leer-Puerto -Prompt "  Puerto de escucha (sugerido: $puertoSugerido)" -Default $puertoSugerido
 
-    switch ($Servicio) {
+    switch ($servicioReal) {
         "IIS"    { Instalar-IIS-P7    -Puerto $puerto }
         "Apache" { Instalar-Apache-P7 -Puerto $puerto -ArchivoZip $archivoZip }
         "Nginx"  { Instalar-Nginx-P7  -Puerto $puerto -ArchivoZip $archivoZip }
+        default  { Write-Host "  Servicio '$servicioReal' no reconocido para instalacion." -ForegroundColor Yellow }
     }
 }
 
