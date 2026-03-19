@@ -63,10 +63,11 @@ while ($true) {
     Write-Host "  -- UTILIDADES --" -ForegroundColor Yellow
     Write-Host " 11) Ver estado de todos los servicios"
     Write-Host " 12) Mostrar resumen final (evidencias)"
+    Write-Host " 13) Iniciar / Detener servicios"
     Write-Host "  0) Salir"
     Write-Host ""
 
-    $op = Leer-Opcion -Prompt "Seleccione opcion" -Validas @("0","1","2","3","4","5","6","7","8","9","10","11","12")
+    $op = Leer-Opcion -Prompt "Seleccione opcion" -Validas @("0","1","2","3","4","5","6","7","8","9","10","11","12","13")
 
     switch ($op) {
         "1"  { Menu-Administrar-FTP }
@@ -81,6 +82,7 @@ while ($true) {
         "10" { Activar-FTPS-IIS }
         "11" { Ver-Estado-Servicios }
         "12" { Mostrar-Resumen-Final }
+        "13" { Gestionar-Servicios-HTTP }
         "0"  {
             Write-Host ""
             Write-Host "Generando resumen antes de salir..." -ForegroundColor Cyan
