@@ -1254,9 +1254,9 @@ function Pedir-Dominio {
 function Generar-Certificado-Windows {
     param([string]$Dominio)
 
-    # Verificar si ya existe un certificado valido para este dominio
+    # Verificar si ya existe un certificado valido con O=Practica7
     $certExistente = Get-ChildItem Cert:\LocalMachine\My |
-        Where-Object { $_.Subject -like "*$Dominio*" -and $_.NotAfter -gt (Get-Date) } |
+        Where-Object { $_.Subject -like "*$Dominio*" -and $_.Subject -like "*Practica7*" -and $_.NotAfter -gt (Get-Date) } |
         Select-Object -First 1
 
     if ($certExistente) {
@@ -1266,16 +1266,48 @@ function Generar-Certificado-Windows {
         return $certExistente.Thumbprint
     }
 
-    Write-Host "  Generando certificado autofirmado para '$Dominio'..." -ForegroundColor Cyan
+    Write-Host "  Generando certificado con OpenSSL para '$Dominio'..." -ForegroundColor Cyan
+
+    # Eliminar certificados anteriores del dominio
     Get-ChildItem Cert:\LocalMachine\My | Where-Object { $_.Subject -like "*$Dominio*" } |
         Remove-Item -Force -ErrorAction SilentlyContinue
 
-    $cert = New-SelfSignedCertificate `
-        -DnsName $Dominio `
+    # Usar OpenSSL igual que Linux: incluye CN, O y OU
+    $sslDir = "C:\Apache24\conf\ssl"
+    New-Item -ItemType Directory -Force -Path $sslDir | Out-Null
+    $keyFile = "$sslDir\server_temp.key"
+    $crtFile = "$sslDir\server_temp.crt"
+    $pfxFile = "$sslDir\server_temp.pfx"
+    $pfxPass = "P7SSL2024"
+
+    & openssl req -x509 -nodes -days 365 -newkey rsa:2048 `
+        -keyout $keyFile `
+        -out $crtFile `
+        -subj "/CN=$Dominio/O=Practica7/OU=SSL" 2>$null
+
+    if (-not (Test-Path $crtFile)) {
+        Write-Host "  OpenSSL fallo, usando New-SelfSignedCertificate como fallback..." -ForegroundColor Yellow
+        $cert = New-SelfSignedCertificate `
+            -DnsName $Dominio `
+            -CertStoreLocation "Cert:\LocalMachine\My" `
+            -NotAfter (Get-Date).AddDays(365) `
+            -KeyAlgorithm RSA -KeyLength 2048 -HashAlgorithm SHA256 `
+            -FriendlyName "P7-SSL-$Dominio" `
+            -Subject "CN=$Dominio, O=Practica7, OU=SSL"
+        Registrar-Resumen -Servicio $Dominio -Accion "Cert-Generado" -Estado "OK" -Detalle $cert.Thumbprint
+        return $cert.Thumbprint
+    }
+
+    # Convertir PEM a PFX e importar al store de Windows
+    $secPw = ConvertTo-SecureString $pfxPass -AsPlainText -Force
+    & openssl pkcs12 -export -in $crtFile -inkey $keyFile -out $pfxFile `
+        -passout "pass:$pfxPass" -name "P7-SSL-$Dominio" 2>$null
+
+    $cert = Import-PfxCertificate -FilePath $pfxFile `
         -CertStoreLocation "Cert:\LocalMachine\My" `
-        -NotAfter (Get-Date).AddDays(365) `
-        -KeyAlgorithm RSA -KeyLength 2048 -HashAlgorithm SHA256 `
-        -FriendlyName "P7-SSL-$Dominio"
+        -Password $secPw -Exportable
+
+    Remove-Item $pfxFile -Force -ErrorAction SilentlyContinue
 
     Write-Host "  Certificado generado:" -ForegroundColor Green
     Write-Host "    Thumbprint : $($cert.Thumbprint)" -ForegroundColor Gray
