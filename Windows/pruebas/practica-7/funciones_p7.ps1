@@ -890,7 +890,7 @@ function Configurar-Apache-Puerto {
 }
 
 function Instalar-Apache-P7 {
-    param([int]$Puerto, [string]$ArchivoZip = "")
+    param([int]$Puerto, [string]$ArchivoZip = "", [string]$Version = "")
 
     $apacheBase = "C:\Apache24"
 
@@ -935,10 +935,18 @@ function Instalar-Apache-P7 {
         }
         Write-Host "  Instalando Apache via Chocolatey (puede tardar varios minutos)..." -ForegroundColor Cyan
 
-        $chocoOut = choco install apache-httpd `
-            --params "/installLocation:$apacheBase /noService" `
-            --yes --no-progress --accept-license --allow-downgrade --force `
-            2>&1
+        # Construir comando con version especifica si fue elegida
+        $chocoArgs = @(
+            "install", "apache-httpd",
+            "--params", "/installLocation:$apacheBase /noService",
+            "--yes", "--no-progress", "--accept-license", "--allow-downgrade", "--force"
+        )
+        if ($Version) {
+            $chocoArgs += "--version"
+            $chocoArgs += $Version
+            Write-Host "  Version solicitada: $Version" -ForegroundColor Gray
+        }
+        $chocoOut = & choco @chocoArgs 2>&1
 
         # Usar Encontrar-Base-Apache (igual que P6) para localizar httpd.exe
         # sin importar donde lo haya puesto Chocolatey
@@ -1033,7 +1041,7 @@ http {
 }
 
 function Instalar-Nginx-P7 {
-    param([int]$Puerto, [string]$ArchivoZip = "")
+    param([int]$Puerto, [string]$ArchivoZip = "", [string]$Version = "")
 
     $nginxBase = "C:\nginx"
 
@@ -1070,10 +1078,11 @@ function Instalar-Nginx-P7 {
         if (-not $ok) { return }
     } else {
         Write-Host "  Descargando Nginx desde nginx.org..." -ForegroundColor Cyan
-        $version = "1.24.0"
+        # Usar version elegida por el usuario, o LTS como fallback
+        if (-not $Version) { $Version = "1.24.0" }
         $zipDest = "$env:TEMP\nginx_$(Get-Random).zip"
-        $ok = Descargar-URL-Directa -Url "https://nginx.org/download/nginx-$version.zip" -Destino $zipDest -Nombre "nginx-$version.zip"
-        if (-not $ok) { Write-Host "  ERROR: No se pudo descargar Nginx." -ForegroundColor Red; return }
+        $ok = Descargar-URL-Directa -Url "https://nginx.org/download/nginx-$Version.zip" -Destino $zipDest -Nombre "nginx-$Version.zip"
+        if (-not $ok) { Write-Host "  ERROR: No se pudo descargar Nginx $Version." -ForegroundColor Red; return }
 
         $tmpEx = "$env:TEMP\nginx_ex_$(Get-Random)"
         Expand-Archive -Path $zipDest -DestinationPath $tmpEx -Force
@@ -1122,19 +1131,80 @@ function Flujo-Instalar-Servicio {
     Write-Host ""
     $fuente = Leer-Opcion -Prompt "  Seleccione fuente [1/2]" -Validas @("1","2")
 
-    $archivoZip  = ""
-    $servicioReal = $Servicio   # puede cambiar si el usuario elige otro servicio en FTP
+    $archivoZip   = ""
+    $versionEleg  = ""
+    $servicioReal = $Servicio
 
-    if ($fuente -eq "2") {
-        # Pasar el servicio como sugerencia pero permitir que el usuario elija en FTP
+    if ($fuente -eq "1") {
+        # ── WEB: mostrar versiones disponibles igual que P6 ──────────────────
+        switch ($Servicio) {
+            "IIS" {
+                $iisPath = "C:\Windows\System32\inetsrv\inetinfo.exe"
+                $ver = if (Test-Path $iisPath) {
+                    (Get-Item $iisPath).VersionInfo.ProductVersion
+                } else { "10.0" }
+                Write-Host ""
+                Write-Host "  Versiones disponibles de IIS:" -ForegroundColor Cyan
+                Write-Host "    1) $ver  (Latest)"
+                Write-Host "    2) $ver  (LTS / Estable)"
+                Write-Host "    3) $ver  (Oldest)"
+                Write-Host "  Nota: IIS es un rol de Windows. La version depende del OS." -ForegroundColor Yellow
+                Leer-Opcion -Prompt "  Seleccione version [1-3]" -Validas @("1","2","3") | Out-Null
+                $versionEleg = $ver
+            }
+            "Apache" {
+                Write-Host ""
+                Write-Host "  Consultando versiones de Apache via Chocolatey..." -ForegroundColor Cyan
+                Refrescar-PATH
+                $latest = "2.4.63"; $lts = "2.4.62"; $oldest = "2.4.58"
+                if (Get-Command choco -ErrorAction SilentlyContinue) {
+                    try {
+                        $raw = choco search apache-httpd --all-versions --limit-output 2>&1 | Out-String
+                        $vers = ($raw -split "`n") |
+                            Where-Object { $_ -match "^apache-httpd" } |
+                            ForEach-Object { ($_ -split "\|")[1].Trim() } |
+                            Where-Object { $_ -match "^\d+\.\d+\.\d+$" } |
+                            Sort-Object { [Version]$_ } -Descending
+                        if ($vers.Count -ge 1) { $latest = $vers[0] }
+                        if ($vers.Count -ge 2) { $lts    = $vers[1] }
+                        if ($vers.Count -ge 3) { $oldest = $vers[$vers.Count - 1] }
+                    } catch {}
+                }
+                Write-Host ""
+                Write-Host "  Versiones disponibles de Apache:" -ForegroundColor Cyan
+                Write-Host "    1) $latest  (Latest / Desarrollo)"
+                Write-Host "    2) $lts     (LTS / Estable)"
+                Write-Host "    3) $oldest  (Oldest)"
+                $sel = Leer-Opcion -Prompt "  Seleccione version [1-3]" -Validas @("1","2","3")
+                $versionEleg = switch ($sel) { "1" { $latest } "2" { $lts } "3" { $oldest } }
+            }
+            "Nginx" {
+                $latest = "1.26.2"; $lts = "1.24.0"; $oldest = "1.22.1"
+                if (Get-Command winget -ErrorAction SilentlyContinue) {
+                    try {
+                        $raw = winget show Nginx.Nginx 2>&1 | Out-String
+                        if ($raw -match "Version\s*:\s*([0-9.]+)") { $latest = $matches[1].Trim() }
+                    } catch {}
+                }
+                Write-Host ""
+                Write-Host "  Versiones disponibles de Nginx:" -ForegroundColor Cyan
+                Write-Host "    1) $latest  (Latest / Desarrollo)"
+                Write-Host "    2) $lts     (LTS / Estable)"
+                Write-Host "    3) $oldest  (Oldest)"
+                $sel = Leer-Opcion -Prompt "  Seleccione version [1-3]" -Validas @("1","2","3")
+                $versionEleg = switch ($sel) { "1" { $latest } "2" { $lts } "3" { $oldest } }
+            }
+        }
+    } else {
+        # ── FTP: navegar repositorio y descargar ──────────────────────────────
         $resultado = Navegar-Y-Descargar-FTP -ServicioForzado $Servicio
         if (-not $resultado) { Write-Host "  Instalacion cancelada." -ForegroundColor Red; return }
-        $archivoZip  = $resultado.Archivo
-        $servicioReal = $resultado.Servicio   # usar el servicio que el usuario eligio en FTP
+        $archivoZip   = $resultado.Archivo
+        $servicioReal = $resultado.Servicio
         Write-Host "  Servicio a instalar: $servicioReal" -ForegroundColor Cyan
     }
 
-    # Puerto sugerido segun el servicio real a instalar
+    # Puerto sugerido segun el servicio
     $sugeridos = switch ($servicioReal) {
         "IIS"    { @(80, 8080, 8181, 8282) }
         "Apache" { @(8080, 80, 8181, 8282) }
@@ -1147,9 +1217,9 @@ function Flujo-Instalar-Servicio {
 
     switch ($servicioReal) {
         "IIS"    { Instalar-IIS-P7    -Puerto $puerto }
-        "Apache" { Instalar-Apache-P7 -Puerto $puerto -ArchivoZip $archivoZip }
-        "Nginx"  { Instalar-Nginx-P7  -Puerto $puerto -ArchivoZip $archivoZip }
-        default  { Write-Host "  Servicio '$servicioReal' no reconocido para instalacion." -ForegroundColor Yellow }
+        "Apache" { Instalar-Apache-P7 -Puerto $puerto -ArchivoZip $archivoZip -Version $versionEleg }
+        "Nginx"  { Instalar-Nginx-P7  -Puerto $puerto -ArchivoZip $archivoZip -Version $versionEleg }
+        default  { Write-Host "  Servicio '$servicioReal' no reconocido." -ForegroundColor Yellow }
     }
 }
 
