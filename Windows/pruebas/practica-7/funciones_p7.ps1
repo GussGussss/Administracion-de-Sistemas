@@ -1453,7 +1453,8 @@ SSLSessionCacheTimeout 300
     $svc = Get-Service "Apache2.4" -ErrorAction SilentlyContinue
     if (-not $svc -or $svc.Status -ne "Running") {
         Write-Host "  Reintentando inicio de Apache..." -ForegroundColor Yellow
-        & "$(Encontrar-Base-Apache-P7)in\httpd.exe" -k start 2>&1 | Out-Null
+        $apacheExe = (Encontrar-Base-Apache-P7) + "\bin\httpd.exe"
+        & $apacheExe -k start 2>&1 | Out-Null
         Start-Sleep -Seconds 3
     }
 
