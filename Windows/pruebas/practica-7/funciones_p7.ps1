@@ -1396,6 +1396,43 @@ SSLSessionCacheTimeout 300
 </VirtualHost>
 "@ | Set-Content "$apacheBase\conf\extra\httpd-ssl.conf" -Encoding UTF8
 
+    # Chocolatey/ApacheHaus usa httpd-ahssl.conf con ServerName localhost
+    # Corregir ese archivo para que use el dominio de P7
+    $ahsslConf = "$apacheBase\conf\extra\httpd-ahssl.conf"
+    if (Test-Path $ahsslConf) {
+        Write-Host "  Detectado httpd-ahssl.conf (Chocolatey). Corrigiendo ServerName..." -ForegroundColor Cyan
+        $ahssl = Get-Content $ahsslConf -Raw
+        $ahssl = $ahssl -replace "ServerName\s+localhost:443", "ServerName ${dominio}:443"
+        $ahssl = $ahssl -replace "ServerName\s+localhost",     "ServerName $dominio"
+        # Apuntar al certificado de P7 en conf/ssl/
+        $sslFwd = ($sslDir -replace "\\","/")
+        $ahssl = $ahssl -replace 'SSLCertificateFile\s+"\$\{SRVROOT\}/conf/ssl/server\.crt"', "SSLCertificateFile `"$sslFwd/server.crt`""
+        $ahssl = $ahssl -replace 'SSLCertificateKeyFile\s+"\$\{SRVROOT\}/conf/ssl/server\.key"', "SSLCertificateKeyFile `"$sslFwd/server.key`""
+        [System.IO.File]::WriteAllText($ahsslConf, $ahssl)
+        Write-Host "  httpd-ahssl.conf actualizado con dominio '$dominio'." -ForegroundColor Green
+
+        # Eliminar Listen 443 duplicado (puede ser "Listen 443" o "Listen 443 https")
+        $ahssl2 = [System.IO.File]::ReadAllText($ahsslConf)
+        $ahssl2Lines = $ahssl2 -split "`n" | Where-Object { $_ -notmatch "^Listen 443" }
+        $ahssl2 = $ahssl2Lines -join "`n"
+        [System.IO.File]::WriteAllText($ahsslConf, $ahssl2)
+
+        # Deshabilitar httpd-ssl.conf para evitar conflicto con httpd-ahssl.conf
+        $httpdConf = "$apacheBase\conf\httpd.conf"
+        $httpdContent = [System.IO.File]::ReadAllText($httpdConf)
+        $httpdContent = $httpdContent -replace "(?m)^Include conf/extra/httpd-ssl\.conf","#Include conf/extra/httpd-ssl.conf"
+        [System.IO.File]::WriteAllText($httpdConf, $httpdContent)
+        Write-Host "  httpd-ssl.conf deshabilitado (usa httpd-ahssl.conf)." -ForegroundColor Gray
+    } else {
+        # Sin httpd-ahssl.conf: copiar certs en conf\ por si acaso
+        $confRaiz = "$apacheBase\conf"
+        if (Test-Path "$confRaiz\server.crt") {
+            Copy-Item "$sslDir\server.crt" "$confRaiz\server.crt" -Force
+            Copy-Item "$sslDir\server.key" "$confRaiz\server.key" -Force
+            Write-Host "  Certificado copiado a $confRaiz." -ForegroundColor Gray
+        }
+    }
+
     Abrir-Puerto-Firewall -Puerto 443 -Nombre "Apache-HTTPS-443"
     Restart-Service "Apache2.4" -ErrorAction SilentlyContinue
     Start-Sleep -Seconds 3
@@ -1494,7 +1531,140 @@ function Activar-FTPS-IIS {
 }
 
 # ================================================================
-# SECCION 7 - ESTADO Y RESUMEN (evidencias para el profesor)
+# SECCION 7 - GESTION DE SERVICIOS (iniciar / detener)
+# ================================================================
+
+function Gestionar-Servicios-HTTP {
+    Escribir-Titulo "GESTIONAR SERVICIOS HTTP"
+
+    Write-Host "  Estado actual:" -ForegroundColor Cyan
+    Write-Host ""
+
+    # IIS
+    $iisOk = (Get-WindowsFeature -Name Web-Server -ErrorAction SilentlyContinue).Installed
+    $iisEst = if ($iisOk) {
+        $svc = Get-Service W3SVC -ErrorAction SilentlyContinue
+        if ($svc.Status -eq "Running") { "ACTIVO" } else { "DETENIDO" }
+    } else { "NO INSTALADO" }
+
+    # Apache
+    $apacheBase = Encontrar-Base-Apache-P7
+    $apacheEst = if (Test-Path "$apacheBasein\httpd.exe") {
+        $svc = Get-Service "Apache2.4" -ErrorAction SilentlyContinue
+        if ($svc -and $svc.Status -eq "Running") { "ACTIVO" } else { "DETENIDO" }
+    } else { "NO INSTALADO" }
+
+    # Nginx
+    $nginxProc = Get-Process nginx -ErrorAction SilentlyContinue
+    $nginxEst = if (Test-Path "C:
+ginx
+ginx.exe") {
+        if ($nginxProc) { "ACTIVO" } else { "DETENIDO" }
+    } else { "NO INSTALADO" }
+
+    # FTP
+    $ftpSvc = Get-Service ftpsvc -ErrorAction SilentlyContinue
+    $ftpEst = if ($ftpSvc) {
+        if ($ftpSvc.Status -eq "Running") { "ACTIVO" } else { "DETENIDO" }
+    } else { "NO INSTALADO" }
+
+    Write-Host ("    {0,-10} {1}" -f "IIS",    $iisEst)    -ForegroundColor $(if($iisEst -eq "ACTIVO"){"Green"}elseif($iisEst -eq "DETENIDO"){"Yellow"}else{"DarkGray"})
+    Write-Host ("    {0,-10} {1}" -f "Apache", $apacheEst) -ForegroundColor $(if($apacheEst -eq "ACTIVO"){"Green"}elseif($apacheEst -eq "DETENIDO"){"Yellow"}else{"DarkGray"})
+    Write-Host ("    {0,-10} {1}" -f "Nginx",  $nginxEst)  -ForegroundColor $(if($nginxEst -eq "ACTIVO"){"Green"}elseif($nginxEst -eq "DETENIDO"){"Yellow"}else{"DarkGray"})
+    Write-Host ("    {0,-10} {1}" -f "FTP",    $ftpEst)    -ForegroundColor $(if($ftpEst -eq "ACTIVO"){"Green"}elseif($ftpEst -eq "DETENIDO"){"Yellow"}else{"DarkGray"})
+    Write-Host ""
+    Write-Host "  Acciones:" -ForegroundColor Yellow
+    Write-Host "    1) Detener IIS"
+    Write-Host "    2) Iniciar IIS"
+    Write-Host "    3) Detener Apache"
+    Write-Host "    4) Iniciar Apache"
+    Write-Host "    5) Detener Nginx"
+    Write-Host "    6) Iniciar Nginx"
+    Write-Host "    7) Detener FTP"
+    Write-Host "    8) Iniciar FTP"
+    Write-Host "    9) Detener TODOS (para demostrar un servicio a la vez)"
+    Write-Host "    0) Volver"
+    Write-Host ""
+
+    $op = Leer-Opcion -Prompt "  Seleccione" -Validas @("0","1","2","3","4","5","6","7","8","9")
+
+    switch ($op) {
+        "1" {
+            Write-Host "  Deteniendo IIS..." -ForegroundColor Yellow
+            iisreset /stop | Out-Null
+            Stop-Service W3SVC -Force -ErrorAction SilentlyContinue
+            Write-Host "  IIS detenido." -ForegroundColor Green
+            Registrar-Resumen -Servicio "IIS" -Accion "Detenido" -Estado "OK"
+        }
+        "2" {
+            Write-Host "  Iniciando IIS..." -ForegroundColor Cyan
+            Start-Service W3SVC -ErrorAction SilentlyContinue
+            iisreset /start | Out-Null
+            Start-Sleep -Seconds 2
+            Write-Host "  IIS iniciado." -ForegroundColor Green
+            Registrar-Resumen -Servicio "IIS" -Accion "Iniciado" -Estado "OK"
+        }
+        "3" {
+            Write-Host "  Deteniendo Apache..." -ForegroundColor Yellow
+            Stop-Service "Apache2.4" -Force -ErrorAction SilentlyContinue
+            Get-Process httpd -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            Write-Host "  Apache detenido." -ForegroundColor Green
+            Registrar-Resumen -Servicio "Apache" -Accion "Detenido" -Estado "OK"
+        }
+        "4" {
+            Write-Host "  Iniciando Apache..." -ForegroundColor Cyan
+            Start-Service "Apache2.4" -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 2
+            Write-Host "  Apache iniciado." -ForegroundColor Green
+            Registrar-Resumen -Servicio "Apache" -Accion "Iniciado" -Estado "OK"
+        }
+        "5" {
+            Write-Host "  Deteniendo Nginx..." -ForegroundColor Yellow
+            taskkill /f /im nginx.exe 2>&1 | Out-Null
+            Write-Host "  Nginx detenido." -ForegroundColor Green
+            Registrar-Resumen -Servicio "Nginx" -Accion "Detenido" -Estado "OK"
+        }
+        "6" {
+            Write-Host "  Iniciando Nginx..." -ForegroundColor Cyan
+            $nginxBase = "C:
+ginx"
+            if (Test-Path "$nginxBase
+ginx.exe") {
+                Start-Process -FilePath "$nginxBase
+ginx.exe" -WorkingDirectory $nginxBase -WindowStyle Hidden
+                Start-Sleep -Seconds 2
+                Write-Host "  Nginx iniciado." -ForegroundColor Green
+                Registrar-Resumen -Servicio "Nginx" -Accion "Iniciado" -Estado "OK"
+            } else {
+                Write-Host "  ERROR: Nginx no instalado." -ForegroundColor Red
+            }
+        }
+        "7" {
+            Write-Host "  Deteniendo FTP..." -ForegroundColor Yellow
+            Stop-Service ftpsvc -Force -ErrorAction SilentlyContinue
+            Write-Host "  FTP detenido." -ForegroundColor Green
+        }
+        "8" {
+            Write-Host "  Iniciando FTP..." -ForegroundColor Cyan
+            Start-Service ftpsvc -ErrorAction SilentlyContinue
+            Write-Host "  FTP iniciado." -ForegroundColor Green
+        }
+        "9" {
+            Write-Host ""
+            Write-Host "  Deteniendo TODOS los servicios HTTP..." -ForegroundColor Yellow
+            iisreset /stop 2>&1 | Out-Null
+            Stop-Service W3SVC -Force -ErrorAction SilentlyContinue
+            Stop-Service "Apache2.4" -Force -ErrorAction SilentlyContinue
+            Get-Process httpd  -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            taskkill /f /im nginx.exe 2>&1 | Out-Null
+            Write-Host "  Todos los servicios HTTP detenidos." -ForegroundColor Green
+            Write-Host "  Ahora puede iniciar el servicio que desea demostrar (opciones 2, 4 o 6)." -ForegroundColor Cyan
+        }
+    }
+}
+
+# ================================================================
+# SECCION 8 - ESTADO Y RESUMEN (evidencias para el profesor)
 # ================================================================
 
 function Ver-Estado-Servicios {
