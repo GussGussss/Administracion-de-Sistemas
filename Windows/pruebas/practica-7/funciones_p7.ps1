@@ -1645,12 +1645,12 @@ function Gestionar-Servicios-HTTP {
         }
         "6" {
             Write-Host "  Iniciando Nginx..." -ForegroundColor Cyan
-            $nginxBase = "C:
-ginx"
-            if (Test-Path "$nginxBase
-ginx.exe") {
-                Start-Process -FilePath "$nginxBase
-ginx.exe" -WorkingDirectory $nginxBase -WindowStyle Hidden
+            $nginxBase = "C:\nginx"
+            if (Test-Path "$nginxBase\nginx.exe") {
+
+                Start-Process -FilePath "$nginxBase\nginx.exe" -WorkingDirectory $nginxBase -WindowStyle Hidden
+
+
                 Start-Sleep -Seconds 2
                 Write-Host "  Nginx iniciado." -ForegroundColor Green
                 Registrar-Resumen -Servicio "Nginx" -Accion "Iniciado" -Estado "OK"
