@@ -870,6 +870,11 @@ function Instalar-Apache-P7 {
 
     $apacheBase = "C:\Apache24"
 
+    # Chocolatey puede instalar en subcarpeta Apache24 dentro del directorio base
+    if (Test-Path "$apacheBase\Apache24\bin\httpd.exe") {
+        $apacheBase = "$apacheBase\Apache24"
+    }
+
     # Detectar si ya esta instalado
     if (Test-Path "$apacheBase\bin\httpd.exe") {
         $vOut = (& "$apacheBase\bin\httpd.exe" -v 2>&1) | Out-String
