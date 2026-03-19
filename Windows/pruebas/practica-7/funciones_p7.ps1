@@ -908,8 +908,14 @@ function Instalar-Apache-P7 {
         Write-Host "  Instalando Apache via Chocolatey (puede tardar varios minutos)..." -ForegroundColor Cyan
         choco install apache-httpd --params "/installLocation:$apacheBase /noService" -y --no-progress 2>&1 | Out-Null
 
+        # Chocolatey puede crear subcarpeta Apache24 dentro del directorio indicado
+        if (Test-Path "$apacheBase\Apache24\bin\httpd.exe") {
+            $apacheBase = "$apacheBase\Apache24"
+        }
+
         if (-not (Test-Path "$apacheBase\bin\httpd.exe")) {
-            $enc = Get-ChildItem "C:\" -Filter "httpd.exe" -Recurse -Depth 5 -ErrorAction SilentlyContinue | Select-Object -First 1
+            # Busqueda general por si choco lo instalo en otra ubicacion
+            $enc = Get-ChildItem "C:\" -Filter "httpd.exe" -Recurse -Depth 6 -ErrorAction SilentlyContinue | Select-Object -First 1
             if ($enc) { $apacheBase = Split-Path $enc.DirectoryName -Parent }
         }
         if (-not (Test-Path "$apacheBase\bin\httpd.exe")) {
