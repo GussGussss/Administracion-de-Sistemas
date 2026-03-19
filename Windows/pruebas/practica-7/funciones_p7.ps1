@@ -1418,14 +1418,24 @@ SSLSessionCacheTimeout 300
         $ahssl2 = $ahssl2Lines -join "`n"
         [System.IO.File]::WriteAllText($ahsslConf, $ahssl2)
 
-        # Agregar Listen 443 en httpd.conf si no existe
+        # Agregar Listen 443 en httpd.conf si no existe, y limpiar duplicados
         $httpdMain = "$apacheBase\conf\httpd.conf"
-        $httpdMainContent = [System.IO.File]::ReadAllText($httpdMain)
-        if ($httpdMainContent -notmatch "^Listen 443") {
-            $httpdMainContent = $httpdMainContent -replace "(?m)^(Listen \d+)", "`$1`nListen 443"
-            [System.IO.File]::WriteAllText($httpdMain, $httpdMainContent)
-            Write-Host "  Listen 443 agregado en httpd.conf." -ForegroundColor Gray
+        $httpdLines = Get-Content $httpdMain
+
+        # Eliminar todos los Listen 443 existentes para evitar duplicados
+        $httpdLines = $httpdLines | Where-Object { $_ -notmatch "^Listen 443" }
+
+        # Insertar Listen 443 justo despues del primer Listen de HTTP
+        $insertado = $false
+        $httpdLines = $httpdLines | ForEach-Object {
+            $_
+            if (-not $insertado -and $_ -match "^Listen \d+") {
+                "Listen 443"
+                $insertado = $true
+            }
         }
+        $httpdLines | Set-Content $httpdMain
+        Write-Host "  Listen 443 configurado en httpd.conf." -ForegroundColor Gray
 
         # Deshabilitar httpd-ssl.conf para evitar conflicto con httpd-ahssl.conf
         $httpdConf = "$apacheBase\conf\httpd.conf"
@@ -1444,6 +1454,16 @@ SSLSessionCacheTimeout 300
     }
 
     Abrir-Puerto-Firewall -Puerto 443 -Nombre "Apache-HTTPS-443"
+
+    # Verificar sintaxis antes de intentar iniciar
+    $apacheExe = (Encontrar-Base-Apache-P7) + "\bin\httpd.exe"
+    $sintaxis = & $apacheExe -t 2>&1 | Out-String
+    if ($sintaxis -notmatch "Syntax OK") {
+        Write-Host "  ERROR de sintaxis en configuracion de Apache:" -ForegroundColor Red
+        Write-Host $sintaxis -ForegroundColor Red
+        return
+    }
+
     Stop-Service "Apache2.4" -Force -ErrorAction SilentlyContinue
     Start-Sleep -Seconds 2
     Start-Service "Apache2.4" -ErrorAction SilentlyContinue
@@ -1453,8 +1473,8 @@ SSLSessionCacheTimeout 300
     $svc = Get-Service "Apache2.4" -ErrorAction SilentlyContinue
     if (-not $svc -or $svc.Status -ne "Running") {
         Write-Host "  Reintentando inicio de Apache..." -ForegroundColor Yellow
-        $apacheExe = (Encontrar-Base-Apache-P7) + "\bin\httpd.exe"
-        & $apacheExe -k start 2>&1 | Out-Null
+        $apacheExe2 = (Encontrar-Base-Apache-P7) + "\bin\httpd.exe"
+        & $apacheExe2 -k start 2>&1 | Out-Null
         Start-Sleep -Seconds 3
     }
 
