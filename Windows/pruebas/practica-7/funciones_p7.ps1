@@ -804,7 +804,7 @@ function Obtener-Puerto-IIS-P7 {
 }
 
 function Instalar-IIS-P7 {
-    param([int]$Puerto)
+    param([int]$Puerto, [string]$Fuente = "WEB")
     Import-Module WebAdministration -ErrorAction SilentlyContinue
 
     $yaInstalado = (Get-WindowsFeature -Name Web-Server -ErrorAction SilentlyContinue).Installed
@@ -1228,6 +1228,10 @@ function Flujo-Instalar-Servicio {
         $archivoZip   = $resultado.Archivo
         $servicioReal = $resultado.Servicio
         Write-Host "  Servicio a instalar: $servicioReal" -ForegroundColor Cyan
+        if ($servicioReal -eq "IIS") {
+            Write-Host "  Nota: IIS es un rol de Windows. El placeholder fue verificado via SHA256." -ForegroundColor Yellow
+            Write-Host "        Se procedera a instalar/activar el rol IIS normalmente." -ForegroundColor Yellow
+        }
     }
 
     # Puerto sugerido segun el servicio
@@ -1242,7 +1246,7 @@ function Flujo-Instalar-Servicio {
     $puerto = Leer-Puerto -Prompt "  Puerto de escucha (sugerido: $puertoSugerido)" -Default $puertoSugerido
 
     switch ($servicioReal) {
-        "IIS"    { Instalar-IIS-P7    -Puerto $puerto }
+        "IIS"    { Instalar-IIS-P7    -Puerto $puerto -Fuente $(if($archivoZip){"FTP"}else{"WEB"}) }
         "Apache" { Instalar-Apache-P7 -Puerto $puerto -ArchivoZip $archivoZip -Version $versionEleg -Fuente $(if($archivoZip){"FTP"}else{"WEB"}) }
         "Nginx"  { Instalar-Nginx-P7  -Puerto $puerto -ArchivoZip $archivoZip -Version $versionEleg -Fuente $(if($archivoZip){"FTP"}else{"WEB"}) }
         default  { Write-Host "  Servicio '$servicioReal' no reconocido." -ForegroundColor Yellow }
