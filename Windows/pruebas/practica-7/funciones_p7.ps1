@@ -762,22 +762,34 @@ function Instalar-Desde-ZIP {
 # ================================================================
 
 function Crear-Index-HTML {
-    param([string]$Directorio, [string]$Servicio, [string]$Version, [int]$Puerto)
+    param([string]$Directorio, [string]$Servicio, [string]$Version, [int]$Puerto, [string]$Fuente = "WEB")
     if (-not (Test-Path $Directorio)) { New-Item $Directorio -ItemType Directory -Force | Out-Null }
+
+    $FuenteColor = if ($Fuente -eq "FTP") { "#8e44ad" } else { "#27ae60" }
+    $FuenteIcono = if ($Fuente -eq "FTP") { "&#128229; FTP" } else { "&#127760; WEB" }
+
     @"
 <!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>$Servicio - P7</title>
-<style>body{font-family:Arial,sans-serif;text-align:center;margin-top:80px;background:#f4f4f4}
-.card{background:#fff;border-radius:8px;padding:40px;display:inline-block;box-shadow:0 2px 8px rgba(0,0,0,.15)}
-h1{color:#2c3e50}h2{color:#27ae60}h3{color:#2980b9}</style></head>
+<style>
+body{font-family:Arial,sans-serif;text-align:center;margin-top:60px;background:#f4f4f4}
+.card{background:#fff;border-radius:10px;padding:40px 50px;display:inline-block;box-shadow:0 4px 16px rgba(0,0,0,.15)}
+h1{color:#2c3e50;margin-bottom:8px}
+h2{color:#27ae60;margin:6px 0}
+h3{color:#2980b9;margin:6px 0}
+.fuente{display:inline-block;margin-top:18px;padding:8px 22px;border-radius:20px;
+        background:$FuenteColor;color:#fff;font-size:15px;font-weight:bold;letter-spacing:1px}
+.pie{margin-top:18px;color:#999;font-size:13px}
+</style></head>
 <body><div class="card">
-<h1>Servidor: $Servicio</h1>
+<h1>&#128279; $Servicio</h1>
 <h2>Version: $Version</h2>
 <h3>Puerto: $Puerto</h3>
-<p>Practica 7 - Infraestructura de Despliegue Seguro</p>
+<div class="fuente">$FuenteIcono</div>
+<p class="pie">Practica 7 - Infraestructura de Despliegue Seguro</p>
 </div></body></html>
 "@ | Set-Content "$Directorio\index.html" -Encoding UTF8
-    Write-Host "  index.html creado en $Directorio" -ForegroundColor Gray
+    Write-Host "  index.html creado en $Directorio (fuente: $Fuente)" -ForegroundColor Gray
 }
 
 # ── IIS ──────────────────────────────────────────────────────────────────────
@@ -808,7 +820,7 @@ function Instalar-IIS-P7 {
             Remove-WebBinding -Name "Default Web Site" -Protocol "http" -ErrorAction SilentlyContinue
             New-WebBinding -Name "Default Web Site" -Protocol "http" -Port $Puerto -IPAddress "*" | Out-Null
             Abrir-Puerto-Firewall -Puerto $Puerto -Nombre "IIS-HTTP-$Puerto"
-            Crear-Index-HTML -Directorio "C:\inetpub\wwwroot" -Servicio "IIS" -Version $version -Puerto $Puerto
+            Crear-Index-HTML -Directorio "C:\inetpub\wwwroot" -Servicio "IIS" -Version $version -Puerto $Puerto -Fuente $Fuente
             iisreset /restart | Out-Null
             Registrar-Resumen -Servicio "IIS" -Accion "Puerto-Cambiado" -Estado "OK" -Detalle "$puertoActual -> $Puerto"
             Write-Host "  Puerto actualizado a $Puerto." -ForegroundColor Green
@@ -828,7 +840,7 @@ function Instalar-IIS-P7 {
 
     Remove-WebBinding -Name "Default Web Site" -ErrorAction SilentlyContinue
     New-WebBinding -Name "Default Web Site" -Protocol "http" -Port $Puerto -IPAddress "*" | Out-Null
-    Crear-Index-HTML -Directorio "C:\inetpub\wwwroot" -Servicio "IIS" -Version $version -Puerto $Puerto
+    Crear-Index-HTML -Directorio "C:\inetpub\wwwroot" -Servicio "IIS" -Version $version -Puerto $Puerto -Fuente $Fuente
 
     # Seguridad: ocultar headers de version
     try {
@@ -902,7 +914,7 @@ function Configurar-Apache-Puerto {
 }
 
 function Instalar-Apache-P7 {
-    param([int]$Puerto, [string]$ArchivoZip = "", [string]$Version = "")
+    param([int]$Puerto, [string]$ArchivoZip = "", [string]$Version = "", [string]$Fuente = "WEB")
 
     $apacheBase = "C:\Apache24"
 
@@ -923,7 +935,7 @@ function Instalar-Apache-P7 {
             if ($pActual -ne $Puerto) {
                 Write-Host "  Cambiando puerto $pActual -> $Puerto..." -ForegroundColor Cyan
                 Configurar-Apache-Puerto -ApacheBase $apacheBase -Puerto $Puerto
-                Crear-Index-HTML -Directorio "$apacheBase\htdocs" -Servicio "Apache" -Version $vIns -Puerto $Puerto
+                Crear-Index-HTML -Directorio "$apacheBase\htdocs" -Servicio "Apache" -Version $vIns -Puerto $Puerto -Fuente $Fuente
                 Abrir-Puerto-Firewall -Puerto $Puerto -Nombre "Apache-HTTP-$Puerto"
                 Restart-Service "Apache2.4" -ErrorAction SilentlyContinue
                 Registrar-Resumen -Servicio "Apache" -Accion "Puerto-Cambiado" -Estado "OK" -Detalle "$pActual -> $Puerto"
@@ -989,7 +1001,7 @@ function Instalar-Apache-P7 {
     $vOut    = (& "$apacheBase\bin\httpd.exe" -v 2>&1) | Out-String
     $version = if ($vOut -match "Apache/([0-9.]+)") { $matches[1] } else { "2.4" }
 
-    Crear-Index-HTML -Directorio "$apacheBase\htdocs" -Servicio "Apache" -Version $version -Puerto $Puerto
+    Crear-Index-HTML -Directorio "$apacheBase\htdocs" -Servicio "Apache" -Version $version -Puerto $Puerto -Fuente $Fuente
 
     # Seguridad
     $secConf = "$apacheBase\conf\extra\httpd-security.conf"
@@ -1053,7 +1065,7 @@ http {
 }
 
 function Instalar-Nginx-P7 {
-    param([int]$Puerto, [string]$ArchivoZip = "", [string]$Version = "")
+    param([int]$Puerto, [string]$ArchivoZip = "", [string]$Version = "", [string]$Fuente = "WEB")
 
     $nginxBase = "C:\nginx"
 
@@ -1070,7 +1082,7 @@ function Instalar-Nginx-P7 {
             if ($pActual -ne $Puerto) {
                 Write-Host "  Cambiando puerto $pActual -> $Puerto..." -ForegroundColor Cyan
                 Configurar-Nginx-Puerto -Puerto $Puerto
-                Crear-Index-HTML -Directorio "$nginxBase\html" -Servicio "Nginx" -Version $vIns -Puerto $Puerto
+                Crear-Index-HTML -Directorio "$nginxBase\html" -Servicio "Nginx" -Version $vIns -Puerto $Puerto -Fuente $Fuente
                 Abrir-Puerto-Firewall -Puerto $Puerto -Nombre "Nginx-HTTP-$Puerto"
                 taskkill /f /im nginx.exe 2>&1 | Out-Null
                 Start-Sleep -Seconds 1
@@ -1115,7 +1127,7 @@ function Instalar-Nginx-P7 {
     $version = if ($vOut -match "nginx/([0-9.]+)") { $matches[1] } else { "1.24" }
 
     Configurar-Nginx-Puerto -Puerto $Puerto
-    Crear-Index-HTML -Directorio "$nginxBase\html" -Servicio "Nginx" -Version $version -Puerto $Puerto
+    Crear-Index-HTML -Directorio "$nginxBase\html" -Servicio "Nginx" -Version $version -Puerto $Puerto -Fuente $Fuente
     Abrir-Puerto-Firewall -Puerto $Puerto -Nombre "Nginx-HTTP-$Puerto"
 
     taskkill /f /im nginx.exe 2>&1 | Out-Null
@@ -1229,8 +1241,8 @@ function Flujo-Instalar-Servicio {
 
     switch ($servicioReal) {
         "IIS"    { Instalar-IIS-P7    -Puerto $puerto }
-        "Apache" { Instalar-Apache-P7 -Puerto $puerto -ArchivoZip $archivoZip -Version $versionEleg }
-        "Nginx"  { Instalar-Nginx-P7  -Puerto $puerto -ArchivoZip $archivoZip -Version $versionEleg }
+        "Apache" { Instalar-Apache-P7 -Puerto $puerto -ArchivoZip $archivoZip -Version $versionEleg -Fuente $(if($archivoZip){"FTP"}else{"WEB"}) }
+        "Nginx"  { Instalar-Nginx-P7  -Puerto $puerto -ArchivoZip $archivoZip -Version $versionEleg -Fuente $(if($archivoZip){"FTP"}else{"WEB"}) }
         default  { Write-Host "  Servicio '$servicioReal' no reconocido." -ForegroundColor Yellow }
     }
 }
