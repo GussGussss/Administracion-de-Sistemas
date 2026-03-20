@@ -487,12 +487,13 @@ instalar_apache_p7() {
             abrir_firewall "$PUERTO"
             permitir_puerto_selinux "$PUERTO"
             systemctl restart httpd
-            crear_index "Apache" "$VERSION_INSTALADA" "$PUERTO" "/var/www/html" "$FUENTE"
             registrar_resumen "Apache" "Puerto-Cambiado" "OK" "$p_actual -> $PUERTO"
             echo "  Puerto actualizado a $PUERTO."
         else
             echo "  Puerto ya configurado en $PUERTO."
         fi
+        # Siempre actualizar index con la fuente actual
+        crear_index "Apache" "$VERSION_INSTALADA" "$PUERTO" "/var/www/html" "$FUENTE"
         return 0
     fi
 
@@ -551,12 +552,13 @@ instalar_nginx_p7() {
             abrir_firewall "$PUERTO"
             permitir_puerto_selinux "$PUERTO"
             systemctl restart nginx
-            crear_index "Nginx" "$VERSION_INSTALADA" "$PUERTO" "/usr/share/nginx/html" "$FUENTE"
             registrar_resumen "Nginx" "Puerto-Cambiado" "OK" "$p_actual -> $PUERTO"
             echo "  Puerto actualizado a $PUERTO."
         else
             echo "  Puerto ya configurado en $PUERTO."
         fi
+        # Siempre actualizar index con la fuente actual
+        crear_index "Nginx" "$VERSION_INSTALADA" "$PUERTO" "/usr/share/nginx/html" "$FUENTE"
         return 0
     fi
 
@@ -650,12 +652,13 @@ instalar_tomcat_p7() {
             pkill -f catalina 2>/dev/null; sleep 2
             sudo -u tomcatsvc env JAVA_HOME=/usr/lib/jvm/java-21-openjdk \
                 CATALINA_HOME=/opt/tomcat /opt/tomcat/bin/startup.sh
-            crear_index "Tomcat" "$VERSION_INSTALADA" "$PUERTO" "/opt/tomcat/webapps/ROOT" "$FUENTE"
             registrar_resumen "Tomcat" "Puerto-Cambiado" "OK" "$p_actual -> $PUERTO"
             echo "  Puerto actualizado a $PUERTO."
         else
             echo "  Puerto ya configurado en $PUERTO."
         fi
+        # Siempre actualizar index con la fuente actual
+        crear_index "Tomcat" "$VERSION_INSTALADA" "$PUERTO" "/opt/tomcat/webapps/ROOT" "$FUENTE"
         return 0
     fi
 
