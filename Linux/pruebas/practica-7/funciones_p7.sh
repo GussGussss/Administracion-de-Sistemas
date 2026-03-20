@@ -86,22 +86,38 @@ detener_servicios_http() {
 
 # De P6 (crear_index)
 crear_index() {
-    local SERVICIO=$1 VERSION=$2 PUERTO=$3 DIRECTORIO=$4
+    local SERVICIO=$1 VERSION=$2 PUERTO=$3 DIRECTORIO=$4 FUENTE="${5:-WEB}"
+    local FUENTE_COLOR FUENTE_ICONO
+    if [[ "$FUENTE" == "FTP" ]]; then
+        FUENTE_COLOR="#8e44ad"
+        FUENTE_ICONO="&#128229; FTP"
+    else
+        FUENTE_COLOR="#27ae60"
+        FUENTE_ICONO="&#127760; WEB"
+    fi
     mkdir -p "$DIRECTORIO"
     cat > "$DIRECTORIO/index.html" <<HTMLEOF
 <!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>$SERVICIO - P7</title>
-<style>body{font-family:Arial,sans-serif;text-align:center;margin-top:80px;background:#f4f4f4}
-.card{background:#fff;border-radius:8px;padding:40px;display:inline-block;box-shadow:0 2px 8px rgba(0,0,0,.15)}
-h1{color:#2c3e50}h2{color:#27ae60}h3{color:#2980b9}</style></head>
+<style>
+body{font-family:Arial,sans-serif;text-align:center;margin-top:60px;background:#f4f4f4}
+.card{background:#fff;border-radius:10px;padding:40px 50px;display:inline-block;box-shadow:0 4px 16px rgba(0,0,0,.15)}
+h1{color:#2c3e50;margin-bottom:8px}
+h2{color:#27ae60;margin:6px 0}
+h3{color:#2980b9;margin:6px 0}
+.fuente{display:inline-block;margin-top:18px;padding:8px 22px;border-radius:20px;
+        background:$FUENTE_COLOR;color:#fff;font-size:15px;font-weight:bold;letter-spacing:1px}
+.pie{margin-top:18px;color:#999;font-size:13px}
+</style></head>
 <body><div class="card">
-<h1>Servidor: $SERVICIO</h1>
+<h1>&#128279; $SERVICIO</h1>
 <h2>Version: $VERSION</h2>
 <h3>Puerto: $PUERTO</h3>
-<p>Practica 7 - Infraestructura de Despliegue Seguro</p>
+<div class="fuente">$FUENTE_ICONO</div>
+<p class="pie">Practica 7 - Infraestructura de Despliegue Seguro</p>
 </div></body></html>
 HTMLEOF
-    echo "  index.html creado en $DIRECTORIO"
+    echo "  index.html creado en $DIRECTORIO (fuente: $FUENTE)"
 }
 
 # ================================================================
@@ -454,7 +470,7 @@ instalar_desde_archivo() {
 # ── APACHE (basado en P6 instalar_apache) ────────────────────────
 
 instalar_apache_p7() {
-    local VERSION=$1 PUERTO=$2 ARCHIVO="${3:-}"
+    local VERSION=$1 PUERTO=$2 ARCHIVO="${3:-}" FUENTE="${4:-WEB}"
 
     # Detectar si ya esta instalado (mismo metodo que P6)
     local VERSION_INSTALADA
@@ -471,7 +487,7 @@ instalar_apache_p7() {
             abrir_firewall "$PUERTO"
             permitir_puerto_selinux "$PUERTO"
             systemctl restart httpd
-            crear_index "Apache" "$VERSION_INSTALADA" "$PUERTO" "/var/www/html"
+            crear_index "Apache" "$VERSION_INSTALADA" "$PUERTO" "/var/www/html" "$FUENTE"
             registrar_resumen "Apache" "Puerto-Cambiado" "OK" "$p_actual -> $PUERTO"
             echo "  Puerto actualizado a $PUERTO."
         else
@@ -499,7 +515,7 @@ instalar_apache_p7() {
     VERSION_REAL=$(rpm -q httpd --queryformat "%{VERSION}-%{RELEASE}" 2>/dev/null | sed 's/\.noarch$//')
     [[ -n "$VERSION_REAL" && "$VERSION_REAL" != *"not installed"* ]] && VERSION="$VERSION_REAL"
 
-    crear_index "Apache" "$VERSION" "$PUERTO" "/var/www/html"
+    crear_index "Apache" "$VERSION" "$PUERTO" "/var/www/html" "$FUENTE"
     configurar_seguridad_apache
 
     systemctl enable httpd
@@ -518,7 +534,7 @@ instalar_apache_p7() {
 # ── NGINX (basado en P6 instalar_nginx) ──────────────────────────
 
 instalar_nginx_p7() {
-    local VERSION=$1 PUERTO=$2 ARCHIVO="${3:-}"
+    local VERSION=$1 PUERTO=$2 ARCHIVO="${3:-}" FUENTE="${4:-WEB}"
 
     # Detectar si ya esta instalado (mismo metodo que P6)
     local VERSION_INSTALADA
@@ -535,7 +551,7 @@ instalar_nginx_p7() {
             abrir_firewall "$PUERTO"
             permitir_puerto_selinux "$PUERTO"
             systemctl restart nginx
-            crear_index "Nginx" "$VERSION_INSTALADA" "$PUERTO" "/usr/share/nginx/html"
+            crear_index "Nginx" "$VERSION_INSTALADA" "$PUERTO" "/usr/share/nginx/html" "$FUENTE"
             registrar_resumen "Nginx" "Puerto-Cambiado" "OK" "$p_actual -> $PUERTO"
             echo "  Puerto actualizado a $PUERTO."
         else
@@ -589,7 +605,7 @@ instalar_nginx_p7() {
 
     permitir_puerto_selinux "$PUERTO"
     configurar_puerto_nginx "$PUERTO"
-    crear_index "Nginx" "$VERSION" "$PUERTO" "/usr/share/nginx/html"
+    crear_index "Nginx" "$VERSION" "$PUERTO" "/usr/share/nginx/html" "$FUENTE"
     configurar_seguridad_nginx
 
     nginx -t 2>/dev/null || { echo "  ERROR en config Nginx."; return 1; }
@@ -609,7 +625,7 @@ instalar_nginx_p7() {
 # ── TOMCAT (basado en P6 instalar_tomcat) ────────────────────────
 
 instalar_tomcat_p7() {
-    local VERSION=$1 PUERTO=$2 ARCHIVO="${3:-}"
+    local VERSION=$1 PUERTO=$2 ARCHIVO="${3:-}" FUENTE="${4:-WEB}"
 
     # Detectar si ya esta instalado (mismo metodo que P6)
     local VERSION_INSTALADA=""
@@ -634,7 +650,7 @@ instalar_tomcat_p7() {
             pkill -f catalina 2>/dev/null; sleep 2
             sudo -u tomcatsvc env JAVA_HOME=/usr/lib/jvm/java-21-openjdk \
                 CATALINA_HOME=/opt/tomcat /opt/tomcat/bin/startup.sh
-            crear_index "Tomcat" "$VERSION_INSTALADA" "$PUERTO" "/opt/tomcat/webapps/ROOT"
+            crear_index "Tomcat" "$VERSION_INSTALADA" "$PUERTO" "/opt/tomcat/webapps/ROOT" "$FUENTE"
             registrar_resumen "Tomcat" "Puerto-Cambiado" "OK" "$p_actual -> $PUERTO"
             echo "  Puerto actualizado a $PUERTO."
         else
@@ -678,7 +694,7 @@ instalar_tomcat_p7() {
         /opt/tomcat/conf/server.xml 2>/dev/null
 
     permitir_puerto_selinux "$PUERTO"
-    crear_index "Tomcat" "$VERSION" "$PUERTO" "/opt/tomcat/webapps/ROOT"
+    crear_index "Tomcat" "$VERSION" "$PUERTO" "/opt/tomcat/webapps/ROOT" "$FUENTE"
 
     # Iniciar (igual que P6)
     sudo -u tomcatsvc env JAVA_HOME=/usr/lib/jvm/java-21-openjdk \
@@ -763,6 +779,7 @@ flujo_instalar_servicio() {
         navegar_y_descargar_ftp "$servicio" || { echo "  Instalacion cancelada."; return; }
         archivo="$ARCHIVO_DESCARGADO"
         servicio_real="$SERVICIO_DESCARGADO"
+        fuente="FTP"
         echo "  Servicio a instalar: $servicio_real"
     fi
 
@@ -774,9 +791,9 @@ flujo_instalar_servicio() {
     validar_puerto "$puerto" || return
 
     case $servicio_real in
-        Apache) instalar_apache_p7 "$version" "$puerto" "$archivo" ;;
-        Nginx)  instalar_nginx_p7  "$version" "$puerto" "$archivo" ;;
-        Tomcat) instalar_tomcat_p7 "$version" "$puerto" "$archivo" ;;
+        Apache) instalar_apache_p7 "$version" "$puerto" "$archivo" "$fuente" ;;
+        Nginx)  instalar_nginx_p7  "$version" "$puerto" "$archivo" "$fuente" ;;
+        Tomcat) instalar_tomcat_p7 "$version" "$puerto" "$archivo" "$fuente" ;;
         *) echo "  Servicio '$servicio_real' no reconocido." ;;
     esac
 }
