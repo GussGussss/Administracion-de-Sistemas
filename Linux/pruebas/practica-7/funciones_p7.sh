@@ -287,11 +287,12 @@ leer_credenciales_ftp() {
 }
 
 listar_ftp() {
-    curl -s --max-time 15 --user "$FTP_USER:$FTP_PASS" "ftp://$FTP_IP/$1/" --list-only 2>/dev/null
+    # --ssl: usa FTPS (STARTTLS) si el servidor lo requiere, -k ignora certificado autofirmado
+    curl -s --max-time 15 --ssl -k --user "$FTP_USER:$FTP_PASS" "ftp://$FTP_IP/$1/" --list-only 2>/dev/null
 }
 
 descargar_ftp() {
-    curl -s --max-time 120 --user "$FTP_USER:$FTP_PASS" "ftp://$FTP_IP/$1" -o "$2" 2>/dev/null
+    curl -s --max-time 120 --ssl -k --user "$FTP_USER:$FTP_PASS" "ftp://$FTP_IP/$1" -o "$2" 2>/dev/null
 }
 
 verificar_sha256() {
