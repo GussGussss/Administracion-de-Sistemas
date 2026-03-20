@@ -935,7 +935,6 @@ function Instalar-Apache-P7 {
             if ($pActual -ne $Puerto) {
                 Write-Host "  Cambiando puerto $pActual -> $Puerto..." -ForegroundColor Cyan
                 Configurar-Apache-Puerto -ApacheBase $apacheBase -Puerto $Puerto
-                Crear-Index-HTML -Directorio "$apacheBase\htdocs" -Servicio "Apache" -Version $vIns -Puerto $Puerto -Fuente $Fuente
                 Abrir-Puerto-Firewall -Puerto $Puerto -Nombre "Apache-HTTP-$Puerto"
                 Restart-Service "Apache2.4" -ErrorAction SilentlyContinue
                 Registrar-Resumen -Servicio "Apache" -Accion "Puerto-Cambiado" -Estado "OK" -Detalle "$pActual -> $Puerto"
@@ -943,6 +942,8 @@ function Instalar-Apache-P7 {
             } else {
                 Write-Host "  Puerto ya configurado en $Puerto." -ForegroundColor Green
             }
+            # Siempre actualizar index con la fuente actual
+            Crear-Index-HTML -Directorio "$apacheBase\htdocs" -Servicio "Apache" -Version $vIns -Puerto $Puerto -Fuente $Fuente
             return
         }
     }
@@ -1082,7 +1083,6 @@ function Instalar-Nginx-P7 {
             if ($pActual -ne $Puerto) {
                 Write-Host "  Cambiando puerto $pActual -> $Puerto..." -ForegroundColor Cyan
                 Configurar-Nginx-Puerto -Puerto $Puerto
-                Crear-Index-HTML -Directorio "$nginxBase\html" -Servicio "Nginx" -Version $vIns -Puerto $Puerto -Fuente $Fuente
                 Abrir-Puerto-Firewall -Puerto $Puerto -Nombre "Nginx-HTTP-$Puerto"
                 taskkill /f /im nginx.exe 2>&1 | Out-Null
                 Start-Sleep -Seconds 1
@@ -1092,6 +1092,8 @@ function Instalar-Nginx-P7 {
             } else {
                 Write-Host "  Puerto ya configurado en $Puerto." -ForegroundColor Green
             }
+            # Siempre actualizar index con la fuente actual
+            Crear-Index-HTML -Directorio "$nginxBase\html" -Servicio "Nginx" -Version $vIns -Puerto $Puerto -Fuente $Fuente
             return
         }
     }
