@@ -590,15 +590,15 @@ function Configurar-CuotasFSRM {
 
     foreach ($p in $plantillas) {
         try {
-            # Verificar si ya existe la plantilla
             $existePlantilla = Get-FsrmQuotaTemplate -Name $p.Nombre -ErrorAction SilentlyContinue
             if ($existePlantilla) {
                 Write-Host "  [OK] Plantilla '$($p.Nombre)' ya existe, se omite." -ForegroundColor Yellow
             } else {
+                # -SoftLimit:$false = Hard Quota (bloquea al llegar al limite)
                 New-FsrmQuotaTemplate `
                     -Name $p.Nombre `
                     -Size $p.Tamano `
-                    -SoftLimit $false
+                    -SoftLimit:$false
                 Write-Host "  [CREADO] Plantilla '$($p.Nombre)' ($($p.Tamano / 1MB) MB)." -ForegroundColor Green
             }
         } catch {
@@ -618,12 +618,14 @@ function Configurar-CuotasFSRM {
 
         $carpetaUsuario = "$carpetaRaiz\$($u.Usuario)"
 
-        # Determinar que plantilla usar segun el departamento
+        # Determinar tamano segun el departamento
         if ($u.Departamento -eq "Cuates") {
             $plantillaNombre = "Practica8-Cuates-10MB"
+            $tamanoBytes     = 10MB
             $tamanoTexto     = "10 MB"
         } elseif ($u.Departamento -eq "NoCuates") {
             $plantillaNombre = "Practica8-NoCuates-5MB"
+            $tamanoBytes     = 5MB
             $tamanoTexto     = "5 MB"
         } else {
             Write-Host "  [AVISO] $($u.Usuario): departamento desconocido, se omite." -ForegroundColor Yellow
@@ -646,14 +648,23 @@ function Configurar-CuotasFSRM {
         try {
             $cuotaExistente = Get-FsrmQuota -Path $carpetaUsuario -ErrorAction SilentlyContinue
 
+            # Verificar si la plantilla existe para usarla, si no usar tamano directo
+            $existePlantilla = Get-FsrmQuotaTemplate -Name $plantillaNombre -ErrorAction SilentlyContinue
+
             if ($cuotaExistente) {
-                # Actualizar cuota existente con la plantilla correcta
-                Set-FsrmQuota -Path $carpetaUsuario -Template $plantillaNombre
+                if ($existePlantilla) {
+                    Set-FsrmQuota -Path $carpetaUsuario -Template $plantillaNombre
+                } else {
+                    Set-FsrmQuota -Path $carpetaUsuario -Size $tamanoBytes -SoftLimit:$false
+                }
                 Write-Host "  [ACTUALIZADO] $($u.Usuario) ($($u.Departamento)) -> $tamanoTexto" -ForegroundColor Yellow
                 $omitidas++
             } else {
-                # Crear cuota nueva basada en la plantilla
-                New-FsrmQuota -Path $carpetaUsuario -Template $plantillaNombre
+                if ($existePlantilla) {
+                    New-FsrmQuota -Path $carpetaUsuario -Template $plantillaNombre
+                } else {
+                    New-FsrmQuota -Path $carpetaUsuario -Size $tamanoBytes -SoftLimit:$false
+                }
                 Write-Host "  [CUOTA] $($u.Usuario) ($($u.Departamento)) -> $tamanoTexto" -ForegroundColor Green
                 $creadas++
             }
