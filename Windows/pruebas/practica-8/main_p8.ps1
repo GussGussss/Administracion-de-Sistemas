@@ -47,7 +47,7 @@ do {
         "3" { Crear-OUsYUsuarios }
         "4" { Configurar-Horarios }
         "5" { Configurar-CuotasFSRM }
-        "6" { Write-Host "`n  [Proximamente] Configurar apantallamiento..." -ForegroundColor Yellow; pause }
+        "6" { Configurar-Apantallamiento }
         "7" { Write-Host "`n  [Proximamente] Configurar AppLocker..." -ForegroundColor Yellow; pause }
         "0" { Write-Host "`n  Saliendo...`n" -ForegroundColor Yellow }
         default { Write-Host "`n  Opcion invalida, intenta de nuevo." -ForegroundColor Red; pause }
