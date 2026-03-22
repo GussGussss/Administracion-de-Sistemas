@@ -5,7 +5,7 @@
 # ============================================================
 
 # Importar todas las funciones
-. "$PSScriptRoot\funciones.ps1"
+. "$PSScriptRoot\funciones_p8.ps1"
 
 # Verificar que el script se ejecuta como Administrador
 if (-not ([Security.Principal.WindowsPrincipal] `
