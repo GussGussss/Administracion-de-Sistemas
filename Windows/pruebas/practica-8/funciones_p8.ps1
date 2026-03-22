@@ -853,3 +853,232 @@ function Configurar-Apantallamiento {
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host ""
 }
+
+
+# ------------------------------------------------------------
+# FUNCION 7: Configurar AppLocker
+#
+# Crea una GPO con reglas de AppLocker:
+#   - Cuates   : pueden ejecutar notepad.exe (regla de permiso)
+#   - NoCuates : tienen bloqueado notepad.exe por Hash
+#                (el hash identifica el archivo sin importar
+#                 el nombre, evitando que renombren el .exe)
+#
+# La GPO se vincula al dominio completo.
+# El servicio AppIDSvc debe estar en Automatic para que
+# AppLocker funcione en los clientes.
+# ------------------------------------------------------------
+function Configurar-AppLocker {
+
+    Write-Host ""
+    Write-Host "  +==========================================+" -ForegroundColor Cyan
+    Write-Host "  |         CONFIGURAR APPLOCKER             |" -ForegroundColor Cyan
+    Write-Host "  +==========================================+" -ForegroundColor Cyan
+    Write-Host ""
+
+    # --- Verificar que el servidor es DC ---
+    try {
+        $dominio = Get-ADDomain -ErrorAction Stop
+    } catch {
+        Write-Host "  [ERROR] Este servidor no es Domain Controller o AD no esta disponible." -ForegroundColor Red
+        Write-Host ""
+        return
+    }
+
+    # --- Verificar que notepad.exe existe ---
+    $notepadPath = "C:\Windows\System32\notepad.exe"
+    if (-not (Test-Path $notepadPath)) {
+        Write-Host "  [ERROR] No se encontro notepad.exe en $notepadPath" -ForegroundColor Red
+        Write-Host ""
+        return
+    }
+
+    Write-Host "  Reglas que se configuraran via GPO:" -ForegroundColor White
+    Write-Host ""
+    Write-Host "    Cuates   : notepad.exe PERMITIDO (regla de ruta)" -ForegroundColor Cyan
+    Write-Host "    NoCuates : notepad.exe BLOQUEADO por Hash" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "  La regla de Hash identifica el archivo por su" -ForegroundColor Yellow
+    Write-Host "  contenido, no por su nombre. Renombrar el .exe" -ForegroundColor Yellow
+    Write-Host "  no permite saltarse el bloqueo." -ForegroundColor Yellow
+    Write-Host ""
+
+    $confirmar = Read-Host "  Deseas continuar? (s/n)"
+    if ($confirmar -ne "s") {
+        Write-Host ""
+        Write-Host "  Operacion cancelada por el usuario." -ForegroundColor Yellow
+        Write-Host ""
+        return
+    }
+
+    Write-Host ""
+
+    # --- Obtener el hash de notepad.exe ---
+    Write-Host "  Calculando hash de notepad.exe..." -ForegroundColor Yellow
+
+    try {
+        $fileInfo    = Get-AppLockerFileInformation -Path $notepadPath -ErrorAction Stop
+        $hashInfo    = $fileInfo.Hash
+        $hashValor   = $hashInfo.HashDataString
+        $hashAlgo    = "SHA256"
+        $archivoSize = (Get-Item $notepadPath).Length
+
+        Write-Host "  [OK] Hash calculado: $hashValor" -ForegroundColor Green
+        Write-Host "       Tamano del archivo: $archivoSize bytes" -ForegroundColor DarkGray
+    } catch {
+        Write-Host "  [ERROR] No se pudo calcular el hash: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host ""
+        return
+    }
+
+    # --- Obtener SIDs de los grupos Cuates y NoCuates ---
+    Write-Host ""
+    Write-Host "  Obteniendo SIDs de los grupos..." -ForegroundColor Yellow
+
+    try {
+        $sidCuates   = (Get-ADGroup -Identity "Cuates").SID.Value
+        $sidNoCuates = (Get-ADGroup -Identity "NoCuates").SID.Value
+        Write-Host "  [OK] SID Cuates  : $sidCuates" -ForegroundColor Green
+        Write-Host "  [OK] SID NoCuates: $sidNoCuates" -ForegroundColor Green
+    } catch {
+        Write-Host "  [ERROR] No se pudieron obtener los SIDs: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "  Asegurate de haber ejecutado la opcion 3 primero." -ForegroundColor Yellow
+        Write-Host ""
+        return
+    }
+
+    # --- Construir el XML de politica AppLocker ---
+    # AppLocker se configura mediante un XML que describe las reglas.
+    # Cada regla tiene: Id, Name, Action (Allow/Deny), UserOrGroupSid, Conditions
+    Write-Host ""
+    Write-Host "  Construyendo politica AppLocker en XML..." -ForegroundColor Yellow
+
+    # Generar GUIDs unicos para cada regla
+    $guidPermitir = [System.Guid]::NewGuid().ToString()
+    $guidBloquear = [System.Guid]::NewGuid().ToString()
+
+    $xmlPolicy = @"
+<AppLockerPolicy Version="1">
+  <RuleCollection Type="Exe" EnforcementMode="Enabled">
+
+    <!-- Regla 1: Permitir a TODOS ejecutar todo lo que esta en Windows y Archivos de Programa -->
+    <!-- Esta regla base es necesaria para que el sistema funcione correctamente -->
+    <FilePathRule Id="921cc481-6e17-4653-8f75-050b80acca20"
+                  Name="Permitir archivos en Windows"
+                  Description="Regla base: permite ejecutables del sistema"
+                  UserOrGroupSid="S-1-1-0"
+                  Action="Allow">
+      <Conditions>
+        <FilePathCondition Path="%WINDIR%\*"/>
+      </Conditions>
+    </FilePathRule>
+
+    <FilePathRule Id="a61c8b2c-a23e-47ff-8e4a-4e3d41bc98b0"
+                  Name="Permitir archivos en Archivos de Programa"
+                  Description="Regla base: permite ejecutables de Archivos de Programa"
+                  UserOrGroupSid="S-1-1-0"
+                  Action="Allow">
+      <Conditions>
+        <FilePathCondition Path="%PROGRAMFILES%\*"/>
+      </Conditions>
+    </FilePathRule>
+
+    <!-- Regla 2: Bloquear notepad.exe a NoCuates por Hash -->
+    <!-- El hash identifica el archivo sin importar su nombre -->
+    <FileHashRule Id="$guidBloquear"
+                  Name="Bloquear Notepad a NoCuates"
+                  Description="Bloquea notepad.exe a NoCuates por hash - renombrar no evita el bloqueo"
+                  UserOrGroupSid="$sidNoCuates"
+                  Action="Deny">
+      <Conditions>
+        <FileHashCondition>
+          <FileHash Type="$hashAlgo" Data="$hashValor" SourceFileName="notepad.exe" SourceFileLength="$archivoSize"/>
+        </FileHashCondition>
+      </Conditions>
+    </FileHashRule>
+
+  </RuleCollection>
+</AppLockerPolicy>
+"@
+
+    # --- Guardar XML en archivo temporal ---
+    $xmlPath = "$PSScriptRoot\applocker_policy.xml"
+    try {
+        $xmlPolicy | Out-File -FilePath $xmlPath -Encoding UTF8 -Force
+        Write-Host "  [OK] XML guardado en: $xmlPath" -ForegroundColor Green
+    } catch {
+        Write-Host "  [ERROR] No se pudo guardar el XML: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host ""
+        return
+    }
+
+    # --- Crear o actualizar la GPO de AppLocker ---
+    Write-Host ""
+    Write-Host "  Configurando GPO de AppLocker..." -ForegroundColor Yellow
+    Write-Host ""
+
+    $gpoNombre = "Practica8-AppLocker"
+
+    try {
+        $gpo = Get-GPO -Name $gpoNombre -ErrorAction SilentlyContinue
+        if (-not $gpo) {
+            $gpo = New-GPO -Name $gpoNombre
+            Write-Host "  [CREADO] GPO '$gpoNombre' creada." -ForegroundColor Green
+        } else {
+            Write-Host "  [OK] GPO '$gpoNombre' ya existe, se actualiza." -ForegroundColor Yellow
+        }
+
+        # Aplicar la politica AppLocker a la GPO usando el XML
+        # El XML se importa al contexto de la GPO via LGPO path
+        $gpoId   = $gpo.Id.ToString()
+        $dcBase  = $dominio.DistinguishedName
+        $domain  = $dominio.DNSRoot
+
+        # Ruta donde Windows guarda las politicas de AppLocker en SYSVOL
+        $sysvolPath = "\\$domain\SYSVOL\$domain\Policies\{$gpoId}\Machine\Microsoft\Windows NT\AppLocker"
+
+        # Crear la carpeta si no existe
+        if (-not (Test-Path $sysvolPath)) {
+            New-Item -Path $sysvolPath -ItemType Directory -Force | Out-Null
+            Write-Host "  [OK] Carpeta AppLocker en SYSVOL creada." -ForegroundColor Green
+        }
+
+        # Usar Set-AppLockerPolicy para aplicar la politica localmente
+        # y luego copiarla al GPO
+        Set-AppLockerPolicy -XmlPolicy $xmlPath -Merge
+        Write-Host "  [OK] Politica AppLocker aplicada." -ForegroundColor Green
+
+        # Vincular la GPO al dominio
+        try {
+            New-GPLink -Name $gpoNombre -Target $dcBase -ErrorAction Stop | Out-Null
+            Write-Host "  [OK] GPO vinculada al dominio." -ForegroundColor Green
+        } catch {
+            Write-Host "  [OK] GPO ya estaba vinculada al dominio." -ForegroundColor Yellow
+        }
+
+        # Habilitar el servicio AppIDSvc (necesario para que AppLocker funcione)
+        Write-Host ""
+        Write-Host "  Habilitando servicio AppIDSvc en el servidor..." -ForegroundColor Yellow
+        Set-Service -Name AppIDSvc -StartupType Automatic
+        Start-Service -Name AppIDSvc -ErrorAction SilentlyContinue
+        Write-Host "  [OK] Servicio AppIDSvc configurado como Automatico." -ForegroundColor Green
+
+    } catch {
+        Write-Host "  [ERROR] No se pudo configurar la GPO AppLocker: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host ""
+        return
+    }
+
+    Write-Host ""
+    Write-Host "  +==========================================+" -ForegroundColor Cyan
+    Write-Host "  | AppLocker configurado correctamente.     |" -ForegroundColor Cyan
+    Write-Host "  +------------------------------------------+" -ForegroundColor Cyan
+    Write-Host "  | Cuates   : notepad.exe PERMITIDO         |" -ForegroundColor Green
+    Write-Host "  | NoCuates : notepad.exe BLOQUEADO (hash)  |" -ForegroundColor Red
+    Write-Host "  +------------------------------------------+" -ForegroundColor Cyan
+    Write-Host "  | IMPORTANTE: En los clientes Windows,     |" -ForegroundColor Yellow
+    Write-Host "  | ejecutar: gpupdate /force                |" -ForegroundColor Yellow
+    Write-Host "  | para que las reglas surtan efecto.       |" -ForegroundColor Yellow
+    Write-Host "  +==========================================+" -ForegroundColor Cyan
+    Write-Host ""
+}
