@@ -44,7 +44,7 @@ do {
     switch ($opcion) {
         "1" { Instalar-Dependencias }
         "2" { Promover-DomainController }
-        "3" { Write-Host "`n  [Proximamente] Crear OUs y usuarios..." -ForegroundColor Yellow; pause }
+        "3" { Crear-OUsYUsuarios }
         "4" { Write-Host "`n  [Proximamente] Configurar horarios..." -ForegroundColor Yellow; pause }
         "5" { Write-Host "`n  [Proximamente] Configurar cuotas FSRM..." -ForegroundColor Yellow; pause }
         "6" { Write-Host "`n  [Proximamente] Configurar apantallamiento..." -ForegroundColor Yellow; pause }
