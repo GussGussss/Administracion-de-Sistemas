@@ -20,7 +20,6 @@ if (-not ([Security.Principal.WindowsPrincipal] `
 
 # Bucle principal del menu
 do {
-    Clear-Host
     Write-Host ""
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host "  |        PRACTICA 8 - ACTIVE DIRECTORY     |" -ForegroundColor Cyan
