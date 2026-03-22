@@ -20,6 +20,7 @@ if (-not ([Security.Principal.WindowsPrincipal] `
 
 # Bucle principal del menu
 do {
+    Clear-Host
     Write-Host ""
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host "  |        PRACTICA 8 - ACTIVE DIRECTORY     |" -ForegroundColor Cyan
@@ -43,7 +44,7 @@ do {
 
     switch ($opcion) {
         "1" { Instalar-Dependencias }
-        "2" { Write-Host "`n  [Proximamente] Promover a DC..." -ForegroundColor Yellow; pause }
+        "2" { Promover-DomainController }
         "3" { Write-Host "`n  [Proximamente] Crear OUs y usuarios..." -ForegroundColor Yellow; pause }
         "4" { Write-Host "`n  [Proximamente] Configurar horarios..." -ForegroundColor Yellow; pause }
         "5" { Write-Host "`n  [Proximamente] Configurar cuotas FSRM..." -ForegroundColor Yellow; pause }
