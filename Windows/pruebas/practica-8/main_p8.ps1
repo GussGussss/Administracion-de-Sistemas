@@ -45,7 +45,7 @@ do {
         "1" { Instalar-Dependencias }
         "2" { Promover-DomainController }
         "3" { Crear-OUsYUsuarios }
-        "4" { Write-Host "`n  [Proximamente] Configurar horarios..." -ForegroundColor Yellow; pause }
+        "4" { Configurar-Horarios }
         "5" { Write-Host "`n  [Proximamente] Configurar cuotas FSRM..." -ForegroundColor Yellow; pause }
         "6" { Write-Host "`n  [Proximamente] Configurar apantallamiento..." -ForegroundColor Yellow; pause }
         "7" { Write-Host "`n  [Proximamente] Configurar AppLocker..." -ForegroundColor Yellow; pause }
