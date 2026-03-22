@@ -6,9 +6,6 @@
 
 # ------------------------------------------------------------
 # FUNCION 1: Instalar Dependencias
-# Instala los roles y caracteristicas necesarios para la
-# practica: AD DS, DNS, FSRM y herramientas de AD.
-# Si ya estan instalados, pregunta si se desea reinstalar.
 # ------------------------------------------------------------
 function Instalar-Dependencias {
 
@@ -18,7 +15,6 @@ function Instalar-Dependencias {
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host ""
 
-    # Lista de roles/caracteristicas que necesitamos
     $dependencias = @(
         @{ Nombre = "AD-Domain-Services";  Descripcion = "Active Directory Domain Services" },
         @{ Nombre = "DNS";                 Descripcion = "Servidor DNS"                     },
@@ -27,7 +23,6 @@ function Instalar-Dependencias {
         @{ Nombre = "RSAT-ADDS";           Descripcion = "Herramientas de administracion AD" }
     )
 
-    # Verificar cuales ya estan instaladas
     Write-Host "  Verificando estado de las dependencias..." -ForegroundColor Yellow
     Write-Host ""
 
@@ -47,7 +42,6 @@ function Instalar-Dependencias {
 
     Write-Host ""
 
-    # --- Caso 1: Todo ya esta instalado ---
     if ($porInstalar.Count -eq 0) {
         Write-Host "  Todas las dependencias ya estan instaladas." -ForegroundColor Green
         Write-Host ""
@@ -61,7 +55,6 @@ function Instalar-Dependencias {
         $porInstalar = $dependencias
     }
 
-    # --- Caso 2: Faltan dependencias o el usuario quiere reinstalar ---
     Write-Host "  Se instalaran las siguientes dependencias:" -ForegroundColor Yellow
     foreach ($dep in $porInstalar) {
         Write-Host "    -> $($dep.Descripcion)" -ForegroundColor White
@@ -75,7 +68,6 @@ function Instalar-Dependencias {
         return
     }
 
-    # --- Instalar ---
     Write-Host ""
     Write-Host "  Iniciando instalacion, esto puede tardar unos minutos..." -ForegroundColor Cyan
     Write-Host ""
@@ -102,9 +94,6 @@ function Instalar-Dependencias {
 
 # ------------------------------------------------------------
 # FUNCION 2: Promover servidor a Domain Controller
-# Verifica que AD DS este instalado, verifica que el servidor
-# no sea ya un DC, y crea el bosque practica8.local.
-# Al finalizar reinicia el servidor (obligatorio).
 # ------------------------------------------------------------
 function Promover-DomainController {
 
@@ -114,7 +103,6 @@ function Promover-DomainController {
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host ""
 
-    # --- Verificar que AD DS este instalado ---
     $adds = Get-WindowsFeature -Name "AD-Domain-Services"
     if ($adds.InstallState -ne "Installed") {
         Write-Host "  [ERROR] Active Directory Domain Services no esta instalado." -ForegroundColor Red
@@ -123,7 +111,6 @@ function Promover-DomainController {
         return
     }
 
-    # --- Verificar si ya es Domain Controller ---
     $esDC = $false
     try {
         $domainInfo = Get-ADDomain -ErrorAction Stop
@@ -141,7 +128,6 @@ function Promover-DomainController {
         return
     }
 
-    # --- Informar al usuario lo que se va a hacer ---
     Write-Host "  Se creara un nuevo bosque de Active Directory con los" -ForegroundColor White
     Write-Host "  siguientes parametros:" -ForegroundColor White
     Write-Host ""
@@ -162,22 +148,16 @@ function Promover-DomainController {
         return
     }
 
-    # --- Pedir contrasena para el modo de restauracion de AD (DSRM) ---
-    # El DSRM es una contrasena de emergencia para recuperar AD si algo falla.
-    # Es diferente a la contrasena del Administrador.
     Write-Host ""
     Write-Host "  Se requiere una contrasena para el Modo de Restauracion de AD (DSRM)." -ForegroundColor Yellow
     Write-Host "  Esta contrasena se usa en caso de emergencia para recuperar AD." -ForegroundColor White
-    Write-Host "  Debe cumplir los requisitos de complejidad de Windows." -ForegroundColor White
     Write-Host ""
 
     $dsrmPassword = Read-Host "  Ingresa la contrasena DSRM" -AsSecureString
 
-    # --- Configurar DNS estatico apuntando a si mismo ---
     Write-Host ""
     Write-Host "  Configurando DNS estatico en el adaptador de red interna..." -ForegroundColor Yellow
 
-    # Buscar el adaptador con la IP 192.168.1.202
     $adaptador = Get-NetAdapter | Where-Object { $_.Status -eq "Up" } | ForEach-Object {
         $ip = Get-NetIPAddress -InterfaceIndex $_.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue
         if ($ip.IPAddress -eq "192.168.1.202") { $_ }
@@ -191,7 +171,6 @@ function Promover-DomainController {
         Write-Host "  Continuando de todas formas..." -ForegroundColor Yellow
     }
 
-    # --- Promover el servidor ---
     Write-Host ""
     Write-Host "  Iniciando promocion a Domain Controller..." -ForegroundColor Cyan
     Write-Host "  Esto puede tardar varios minutos..." -ForegroundColor Cyan
@@ -208,8 +187,6 @@ function Promover-DomainController {
             -NoRebootOnCompletion:$false `
             -Force:$true
 
-        # Nota: si -NoRebootOnCompletion es $false, el servidor
-        # se reinicia automaticamente y no llega a esta linea.
         Write-Host "  [OK] Promocion completada. El servidor se reiniciara ahora." -ForegroundColor Green
 
     } catch {
@@ -218,4 +195,186 @@ function Promover-DomainController {
         Write-Host "  Detalle: $($_.Exception.Message)" -ForegroundColor Red
         Write-Host ""
     }
+}
+
+
+# ------------------------------------------------------------
+# FUNCION 3: Crear OUs y usuarios desde CSV
+# Lee el archivo usuarios.csv de la misma carpeta que el
+# script, crea las OUs Cuates y NoCuates, y distribuye
+# los usuarios segun la columna Departamento del CSV.
+# Si un usuario ya existe, lo omite sin error.
+# ------------------------------------------------------------
+function Crear-OUsYUsuarios {
+
+    Write-Host ""
+    Write-Host "  +==========================================+" -ForegroundColor Cyan
+    Write-Host "  |       CREAR OUs Y USUARIOS DESDE CSV     |" -ForegroundColor Cyan
+    Write-Host "  +==========================================+" -ForegroundColor Cyan
+    Write-Host ""
+
+    # --- Verificar que el servidor es DC ---
+    try {
+        $dominio = Get-ADDomain -ErrorAction Stop
+    } catch {
+        Write-Host "  [ERROR] Este servidor no es Domain Controller o AD no esta disponible." -ForegroundColor Red
+        Write-Host "  Ejecuta primero las opciones 1 y 2." -ForegroundColor Yellow
+        Write-Host ""
+        return
+    }
+
+    # --- Verificar que existe el CSV ---
+    $csvPath = "$PSScriptRoot\usuarios.csv"
+    if (-not (Test-Path $csvPath)) {
+        Write-Host "  [ERROR] No se encontro el archivo usuarios.csv en:" -ForegroundColor Red
+        Write-Host "  $csvPath" -ForegroundColor Red
+        Write-Host ""
+        return
+    }
+
+    # --- Leer CSV ---
+    $usuarios = Import-Csv -Path $csvPath
+    Write-Host "  Se encontraron $($usuarios.Count) usuarios en el CSV." -ForegroundColor White
+    Write-Host ""
+
+    # --- Confirmar operacion ---
+    $confirmar = Read-Host "  Se crearan las OUs y usuarios. Deseas continuar? (s/n)"
+    if ($confirmar -ne "s") {
+        Write-Host ""
+        Write-Host "  Operacion cancelada por el usuario." -ForegroundColor Yellow
+        Write-Host ""
+        return
+    }
+
+    Write-Host ""
+
+    # --- Definir la ruta base del dominio ---
+    # Ejemplo: DC=practica8,DC=local
+    $dcBase = ($dominio.DistinguishedName)
+
+    # --- Crear OUs si no existen ---
+    $ous = @("Cuates", "NoCuates")
+    foreach ($ou in $ous) {
+        $ouPath = "OU=$ou,$dcBase"
+        try {
+            Get-ADOrganizationalUnit -Identity $ouPath -ErrorAction Stop | Out-Null
+            Write-Host "  [OK] OU '$ou' ya existe, se omite." -ForegroundColor Yellow
+        } catch {
+            try {
+                New-ADOrganizationalUnit -Name $ou -Path $dcBase -ProtectedFromAccidentalDeletion $false
+                Write-Host "  [CREADO] OU '$ou' creada correctamente." -ForegroundColor Green
+            } catch {
+                Write-Host "  [ERROR] No se pudo crear la OU '$ou': $($_.Exception.Message)" -ForegroundColor Red
+            }
+        }
+    }
+
+    Write-Host ""
+    Write-Host "  Creando usuarios..." -ForegroundColor Yellow
+    Write-Host ""
+
+    # Contadores para el resumen final
+    $creados  = 0
+    $omitidos = 0
+    $errores  = 0
+
+    # --- Crear usuarios ---
+    foreach ($u in $usuarios) {
+
+        # Determinar en que OU va segun el Departamento del CSV
+        # El CSV tiene "Cuates" o "NoCuates" en la columna Departamento
+        $ouDestino = "OU=$($u.Departamento),$dcBase"
+
+        # Verificar si el usuario ya existe
+        $existe = $null
+        try {
+            $existe = Get-ADUser -Identity $u.Usuario -ErrorAction Stop
+        } catch {
+            $existe = $null
+        }
+
+        if ($existe) {
+            Write-Host "  [OMITIDO] El usuario '$($u.Usuario)' ya existe." -ForegroundColor Yellow
+            $omitidos++
+            continue
+        }
+
+        # Crear el usuario
+        try {
+            $passwordSegura = ConvertTo-SecureString $u.Password -AsPlainText -Force
+
+            New-ADUser `
+                -Name "$($u.Nombre) $($u.Apellido)" `
+                -GivenName $u.Nombre `
+                -Surname $u.Apellido `
+                -SamAccountName $u.Usuario `
+                -UserPrincipalName "$($u.Usuario)@practica8.local" `
+                -Path $ouDestino `
+                -AccountPassword $passwordSegura `
+                -Enabled $true `
+                -PasswordNeverExpires $true `
+                -ChangePasswordAtLogon $false
+
+            Write-Host "  [CREADO] $($u.Nombre) $($u.Apellido) -> OU: $($u.Departamento)" -ForegroundColor Green
+            $creados++
+
+        } catch {
+            Write-Host "  [ERROR] No se pudo crear '$($u.Usuario)': $($_.Exception.Message)" -ForegroundColor Red
+            $errores++
+        }
+    }
+
+    # --- Crear grupos de seguridad para Cuates y NoCuates ---
+    # Los grupos son necesarios para AppLocker y las GPOs
+    Write-Host ""
+    Write-Host "  Creando grupos de seguridad..." -ForegroundColor Yellow
+    Write-Host ""
+
+    $grupos = @(
+        @{ Nombre = "Cuates";    OU = "OU=Cuates,$dcBase"    },
+        @{ Nombre = "NoCuates";  OU = "OU=NoCuates,$dcBase"  }
+    )
+
+    foreach ($g in $grupos) {
+        try {
+            Get-ADGroup -Identity $g.Nombre -ErrorAction Stop | Out-Null
+            Write-Host "  [OK] Grupo '$($g.Nombre)' ya existe, se omite." -ForegroundColor Yellow
+        } catch {
+            try {
+                New-ADGroup `
+                    -Name $g.Nombre `
+                    -GroupScope Global `
+                    -GroupCategory Security `
+                    -Path $g.OU
+                Write-Host "  [CREADO] Grupo '$($g.Nombre)' creado en OU $($g.Nombre)." -ForegroundColor Green
+            } catch {
+                Write-Host "  [ERROR] No se pudo crear el grupo '$($g.Nombre)': $($_.Exception.Message)" -ForegroundColor Red
+            }
+        }
+    }
+
+    # --- Agregar usuarios a sus grupos segun su OU ---
+    Write-Host ""
+    Write-Host "  Agregando usuarios a sus grupos..." -ForegroundColor Yellow
+    Write-Host ""
+
+    foreach ($u in $usuarios) {
+        try {
+            Add-ADGroupMember -Identity $u.Departamento -Members $u.Usuario -ErrorAction Stop
+            Write-Host "  [OK] $($u.Usuario) agregado al grupo $($u.Departamento)." -ForegroundColor Green
+        } catch {
+            Write-Host "  [AVISO] No se pudo agregar '$($u.Usuario)' al grupo '$($u.Departamento)': $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+    }
+
+    # --- Resumen final ---
+    Write-Host ""
+    Write-Host "  +==========================================+" -ForegroundColor Cyan
+    Write-Host "  | RESUMEN                                  |" -ForegroundColor Cyan
+    Write-Host "  +------------------------------------------+" -ForegroundColor Cyan
+    Write-Host "  | Usuarios creados : $creados" -ForegroundColor Green
+    Write-Host "  | Usuarios omitidos: $omitidos (ya existian)" -ForegroundColor Yellow
+    Write-Host "  | Errores          : $errores" -ForegroundColor Red
+    Write-Host "  +==========================================+" -ForegroundColor Cyan
+    Write-Host ""
 }
