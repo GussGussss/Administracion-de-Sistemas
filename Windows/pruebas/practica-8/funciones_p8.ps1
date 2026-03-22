@@ -356,13 +356,9 @@ function Crear-OUsYUsuarios {
 
 # ------------------------------------------------------------
 # FUNCION 4: Configurar horarios de acceso (Logon Hours)
-#
-# AD almacena los horarios en UTC internamente.
-# Zona horaria: Los Mochis, Sinaloa = UTC-7 (sin cambio de horario)
-#
-# Conversion local -> UTC (sumar 7 horas):
-#   Cuates   : 08:00-15:00 local  =>  15:00-22:00 UTC  (horas 15 a 21)
-#   NoCuates : 15:00-02:00 local  =>  22:00-09:00 UTC  (horas 22,23 y 0 a 8)
+# UTC-7 (Los Mochis, Sinaloa)
+# Cuates   : 08:00-15:00 local => 15:00-22:00 UTC => horas 15..21
+# NoCuates : 15:00-02:00 local => 22:00-09:00 UTC => horas 22,23,0..8
 # ------------------------------------------------------------
 function Configurar-Horarios {
 
@@ -406,50 +402,29 @@ function Configurar-Horarios {
 
     Write-Host ""
 
-    # ----------------------------------------------------------
-    # HELPER: Construir array de 21 bytes para LogonHours
-    # Recibe horas UTC permitidas (0-23) y aplica el mismo
-    # horario para los 7 dias de la semana.
-    # ----------------------------------------------------------
     function Build-LogonHours {
         param([int[]]$HorasUTC)
-
         $bits = New-Object bool[] 168
-
         for ($dia = 0; $dia -lt 7; $dia++) {
             foreach ($hora in $HorasUTC) {
                 $bits[$dia * 24 + $hora] = $true
             }
         }
-
         $bytes = New-Object byte[] 21
         for ($i = 0; $i -lt 168; $i++) {
             if ($bits[$i]) {
                 $bytes[[math]::Floor($i / 8)] = $bytes[[math]::Floor($i / 8)] -bor (1 -shl ($i % 8))
             }
         }
-
         return $bytes
     }
 
-    # ----------------------------------------------------------
-    # Horas UTC permitidas por grupo
-    # UTC-7: hora local + 7 = hora UTC
-    #
-    # Cuates: local 08:00-14:59 => UTC 15:00-21:59 => horas 15..21
-    # NoCuates: local 15:00-23:59 => UTC 22:00-06:59 => horas 22,23,0,1,2,3,4,5,6
-    #           local 00:00-01:59 => UTC 07:00-08:59 => horas 7,8
-    #           Combinado: 22,23,0,1,2,3,4,5,6,7,8
-    # ----------------------------------------------------------
     $horasUTC_Cuates   = @(15,16,17,18,19,20,21)
     $horasUTC_NoCuates = @(22,23,0,1,2,3,4,5,6,7,8)
 
     $bytesCuates   = Build-LogonHours -HorasUTC $horasUTC_Cuates
     $bytesNoCuates = Build-LogonHours -HorasUTC $horasUTC_NoCuates
 
-    # ----------------------------------------------------------
-    # Aplicar horarios a cada usuario segun su grupo
-    # ----------------------------------------------------------
     $csvPath = "$PSScriptRoot\usuarios.csv"
     if (-not (Test-Path $csvPath)) {
         Write-Host "  [ERROR] No se encontro usuarios.csv en $PSScriptRoot" -ForegroundColor Red
@@ -465,7 +440,6 @@ function Configurar-Horarios {
     foreach ($u in $usuarios) {
         try {
             if ($u.Departamento -eq "Cuates") {
-                # Primero limpiar el atributo, luego establecer el nuevo valor
                 Set-ADUser -Identity $u.Usuario -Clear logonHours
                 Set-ADUser -Identity $u.Usuario -Replace @{logonHours = ([byte[]]$bytesCuates)}
                 Write-Host "  [OK] $($u.Usuario) -> Cuates (08:00-15:00 local)" -ForegroundColor Green
@@ -481,9 +455,6 @@ function Configurar-Horarios {
         }
     }
 
-    # ----------------------------------------------------------
-    # GPO: forzar cierre de sesion al expirar horario
-    # ----------------------------------------------------------
     Write-Host ""
     Write-Host "  Configurando GPO de cierre de sesion forzado..." -ForegroundColor Yellow
     Write-Host ""
@@ -492,7 +463,6 @@ function Configurar-Horarios {
 
     try {
         $gpo = Get-GPO -Name $gpoNombre -ErrorAction SilentlyContinue
-
         if (-not $gpo) {
             $gpo = New-GPO -Name $gpoNombre
             Write-Host "  [CREADO] GPO '$gpoNombre' creada." -ForegroundColor Green
@@ -516,7 +486,6 @@ function Configurar-Horarios {
         } catch {
             Write-Host "  [OK] GPO ya estaba vinculada al dominio." -ForegroundColor Yellow
         }
-
     } catch {
         Write-Host "  [ERROR] No se pudo configurar la GPO: $($_.Exception.Message)" -ForegroundColor Red
         Write-Host "  Verifica que el modulo GroupPolicy este disponible." -ForegroundColor Yellow
@@ -528,6 +497,181 @@ function Configurar-Horarios {
     Write-Host "  | Zona horaria: UTC-7 (Los Mochis, Sin.)   |" -ForegroundColor Cyan
     Write-Host "  | Los usuarios seran desconectados al      |" -ForegroundColor Cyan
     Write-Host "  | finalizar su turno permitido.            |" -ForegroundColor Cyan
+    Write-Host "  +==========================================+" -ForegroundColor Cyan
+    Write-Host ""
+}
+
+
+# ------------------------------------------------------------
+# FUNCION 5: Configurar cuotas FSRM
+#
+# Crea carpetas personales para cada usuario en:
+#   C:\Usuarios\<usuario>
+# Aplica cuotas con FSRM:
+#   Cuates   -> 10 MB (cuota Hard: bloquea al llegar al limite)
+#   NoCuates ->  5 MB (cuota Hard: bloquea al llegar al limite)
+# Si la cuota ya existe en una carpeta, la sobreescribe.
+# ------------------------------------------------------------
+function Configurar-CuotasFSRM {
+
+    Write-Host ""
+    Write-Host "  +==========================================+" -ForegroundColor Cyan
+    Write-Host "  |       CONFIGURAR CUOTAS FSRM             |" -ForegroundColor Cyan
+    Write-Host "  +==========================================+" -ForegroundColor Cyan
+    Write-Host ""
+
+    # --- Verificar que FSRM este instalado ---
+    $fsrm = Get-WindowsFeature -Name "FS-Resource-Manager"
+    if ($fsrm.InstallState -ne "Installed") {
+        Write-Host "  [ERROR] FSRM no esta instalado." -ForegroundColor Red
+        Write-Host "  Ejecuta primero la opcion 1 para instalar las dependencias." -ForegroundColor Yellow
+        Write-Host ""
+        return
+    }
+
+    # --- Verificar que el CSV existe ---
+    $csvPath = "$PSScriptRoot\usuarios.csv"
+    if (-not (Test-Path $csvPath)) {
+        Write-Host "  [ERROR] No se encontro usuarios.csv en $PSScriptRoot" -ForegroundColor Red
+        Write-Host ""
+        return
+    }
+
+    $usuarios = Import-Csv -Path $csvPath
+
+    # --- Definir tamanos de cuota en bytes ---
+    # 1 MB = 1048576 bytes
+    $cuotaCuates   = 10MB   # 10485760 bytes
+    $cuotaNoCuates =  5MB   #  5242880 bytes
+
+    # --- Carpeta raiz donde vivirán las carpetas de usuarios ---
+    $carpetaRaiz = "C:\Usuarios"
+
+    Write-Host "  Configuracion que se aplicara:" -ForegroundColor White
+    Write-Host ""
+    Write-Host "    Carpeta raiz : $carpetaRaiz\<usuario>" -ForegroundColor Cyan
+    Write-Host "    Cuates       : 10 MB por usuario (cuota estricta)" -ForegroundColor Cyan
+    Write-Host "    NoCuates     :  5 MB por usuario (cuota estricta)" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "  NOTA: La cuota es estricta (Hard Quota)." -ForegroundColor Yellow
+    Write-Host "  El servidor BLOQUEARA cualquier archivo que supere" -ForegroundColor Yellow
+    Write-Host "  el limite asignado al usuario." -ForegroundColor Yellow
+    Write-Host ""
+
+    $confirmar = Read-Host "  Deseas continuar? (s/n)"
+    if ($confirmar -ne "s") {
+        Write-Host ""
+        Write-Host "  Operacion cancelada por el usuario." -ForegroundColor Yellow
+        Write-Host ""
+        return
+    }
+
+    Write-Host ""
+
+    # --- Crear carpeta raiz si no existe ---
+    if (-not (Test-Path $carpetaRaiz)) {
+        New-Item -Path $carpetaRaiz -ItemType Directory | Out-Null
+        Write-Host "  [CREADO] Carpeta raiz: $carpetaRaiz" -ForegroundColor Green
+    } else {
+        Write-Host "  [OK] Carpeta raiz ya existe: $carpetaRaiz" -ForegroundColor Yellow
+    }
+
+    Write-Host ""
+    Write-Host "  Creando plantillas de cuota FSRM..." -ForegroundColor Yellow
+    Write-Host ""
+
+    # --- Crear plantillas de cuota si no existen ---
+    # Las plantillas permiten reutilizar la configuracion de cuota
+    # en multiples carpetas sin repetir la configuracion cada vez.
+    $plantillas = @(
+        @{ Nombre = "Practica8-Cuates-10MB";   Tamano = 10MB; Descripcion = "Cuota 10MB para Cuates"   },
+        @{ Nombre = "Practica8-NoCuates-5MB";  Tamano = 5MB;  Descripcion = "Cuota 5MB para NoCuates"  }
+    )
+
+    foreach ($p in $plantillas) {
+        try {
+            # Verificar si ya existe la plantilla
+            $existePlantilla = Get-FsrmQuotaTemplate -Name $p.Nombre -ErrorAction SilentlyContinue
+            if ($existePlantilla) {
+                Write-Host "  [OK] Plantilla '$($p.Nombre)' ya existe, se omite." -ForegroundColor Yellow
+            } else {
+                New-FsrmQuotaTemplate `
+                    -Name $p.Nombre `
+                    -Size $p.Tamano `
+                    -SoftLimit $false
+                Write-Host "  [CREADO] Plantilla '$($p.Nombre)' ($($p.Tamano / 1MB) MB)." -ForegroundColor Green
+            }
+        } catch {
+            Write-Host "  [ERROR] No se pudo crear la plantilla '$($p.Nombre)': $($_.Exception.Message)" -ForegroundColor Red
+        }
+    }
+
+    Write-Host ""
+    Write-Host "  Creando carpetas y aplicando cuotas a usuarios..." -ForegroundColor Yellow
+    Write-Host ""
+
+    $creadas   = 0
+    $omitidas  = 0
+    $errores   = 0
+
+    foreach ($u in $usuarios) {
+
+        $carpetaUsuario = "$carpetaRaiz\$($u.Usuario)"
+
+        # Determinar que plantilla usar segun el departamento
+        if ($u.Departamento -eq "Cuates") {
+            $plantillaNombre = "Practica8-Cuates-10MB"
+            $tamanoTexto     = "10 MB"
+        } elseif ($u.Departamento -eq "NoCuates") {
+            $plantillaNombre = "Practica8-NoCuates-5MB"
+            $tamanoTexto     = "5 MB"
+        } else {
+            Write-Host "  [AVISO] $($u.Usuario): departamento desconocido, se omite." -ForegroundColor Yellow
+            continue
+        }
+
+        # Crear la carpeta del usuario si no existe
+        if (-not (Test-Path $carpetaUsuario)) {
+            try {
+                New-Item -Path $carpetaUsuario -ItemType Directory | Out-Null
+                Write-Host "  [CARPETA] Creada: $carpetaUsuario" -ForegroundColor DarkGreen
+            } catch {
+                Write-Host "  [ERROR] No se pudo crear la carpeta '$carpetaUsuario': $($_.Exception.Message)" -ForegroundColor Red
+                $errores++
+                continue
+            }
+        }
+
+        # Aplicar o actualizar la cuota FSRM en la carpeta
+        try {
+            $cuotaExistente = Get-FsrmQuota -Path $carpetaUsuario -ErrorAction SilentlyContinue
+
+            if ($cuotaExistente) {
+                # Actualizar cuota existente con la plantilla correcta
+                Set-FsrmQuota -Path $carpetaUsuario -Template $plantillaNombre
+                Write-Host "  [ACTUALIZADO] $($u.Usuario) ($($u.Departamento)) -> $tamanoTexto" -ForegroundColor Yellow
+                $omitidas++
+            } else {
+                # Crear cuota nueva basada en la plantilla
+                New-FsrmQuota -Path $carpetaUsuario -Template $plantillaNombre
+                Write-Host "  [CUOTA] $($u.Usuario) ($($u.Departamento)) -> $tamanoTexto" -ForegroundColor Green
+                $creadas++
+            }
+        } catch {
+            Write-Host "  [ERROR] Cuota para '$($u.Usuario)': $($_.Exception.Message)" -ForegroundColor Red
+            $errores++
+        }
+    }
+
+    Write-Host ""
+    Write-Host "  +==========================================+" -ForegroundColor Cyan
+    Write-Host "  | RESUMEN DE CUOTAS                        |" -ForegroundColor Cyan
+    Write-Host "  +------------------------------------------+" -ForegroundColor Cyan
+    Write-Host "  | Cuotas creadas     : $creadas" -ForegroundColor Green
+    Write-Host "  | Cuotas actualizadas: $omitidas" -ForegroundColor Yellow
+    Write-Host "  | Errores            : $errores" -ForegroundColor Red
+    Write-Host "  +------------------------------------------+" -ForegroundColor Cyan
+    Write-Host "  | Carpetas en: $carpetaRaiz" -ForegroundColor White
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host ""
 }
