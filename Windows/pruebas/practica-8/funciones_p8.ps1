@@ -200,10 +200,6 @@ function Promover-DomainController {
 
 # ------------------------------------------------------------
 # FUNCION 3: Crear OUs y usuarios desde CSV
-# Lee el archivo usuarios.csv de la misma carpeta que el
-# script, crea las OUs Cuates y NoCuates, y distribuye
-# los usuarios segun la columna Departamento del CSV.
-# Si un usuario ya existe, lo omite sin error.
 # ------------------------------------------------------------
 function Crear-OUsYUsuarios {
 
@@ -213,7 +209,6 @@ function Crear-OUsYUsuarios {
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host ""
 
-    # --- Verificar que el servidor es DC ---
     try {
         $dominio = Get-ADDomain -ErrorAction Stop
     } catch {
@@ -223,7 +218,6 @@ function Crear-OUsYUsuarios {
         return
     }
 
-    # --- Verificar que existe el CSV ---
     $csvPath = "$PSScriptRoot\usuarios.csv"
     if (-not (Test-Path $csvPath)) {
         Write-Host "  [ERROR] No se encontro el archivo usuarios.csv en:" -ForegroundColor Red
@@ -232,12 +226,10 @@ function Crear-OUsYUsuarios {
         return
     }
 
-    # --- Leer CSV ---
     $usuarios = Import-Csv -Path $csvPath
     Write-Host "  Se encontraron $($usuarios.Count) usuarios en el CSV." -ForegroundColor White
     Write-Host ""
 
-    # --- Confirmar operacion ---
     $confirmar = Read-Host "  Se crearan las OUs y usuarios. Deseas continuar? (s/n)"
     if ($confirmar -ne "s") {
         Write-Host ""
@@ -247,12 +239,8 @@ function Crear-OUsYUsuarios {
     }
 
     Write-Host ""
-
-    # --- Definir la ruta base del dominio ---
-    # Ejemplo: DC=practica8,DC=local
     $dcBase = ($dominio.DistinguishedName)
 
-    # --- Crear OUs si no existen ---
     $ous = @("Cuates", "NoCuates")
     foreach ($ou in $ous) {
         $ouPath = "OU=$ou,$dcBase"
@@ -273,19 +261,12 @@ function Crear-OUsYUsuarios {
     Write-Host "  Creando usuarios..." -ForegroundColor Yellow
     Write-Host ""
 
-    # Contadores para el resumen final
     $creados  = 0
     $omitidos = 0
     $errores  = 0
 
-    # --- Crear usuarios ---
     foreach ($u in $usuarios) {
-
-        # Determinar en que OU va segun el Departamento del CSV
-        # El CSV tiene "Cuates" o "NoCuates" en la columna Departamento
         $ouDestino = "OU=$($u.Departamento),$dcBase"
-
-        # Verificar si el usuario ya existe
         $existe = $null
         try {
             $existe = Get-ADUser -Identity $u.Usuario -ErrorAction Stop
@@ -299,10 +280,8 @@ function Crear-OUsYUsuarios {
             continue
         }
 
-        # Crear el usuario
         try {
             $passwordSegura = ConvertTo-SecureString $u.Password -AsPlainText -Force
-
             New-ADUser `
                 -Name "$($u.Nombre) $($u.Apellido)" `
                 -GivenName $u.Nombre `
@@ -317,22 +296,19 @@ function Crear-OUsYUsuarios {
 
             Write-Host "  [CREADO] $($u.Nombre) $($u.Apellido) -> OU: $($u.Departamento)" -ForegroundColor Green
             $creados++
-
         } catch {
             Write-Host "  [ERROR] No se pudo crear '$($u.Usuario)': $($_.Exception.Message)" -ForegroundColor Red
             $errores++
         }
     }
 
-    # --- Crear grupos de seguridad para Cuates y NoCuates ---
-    # Los grupos son necesarios para AppLocker y las GPOs
     Write-Host ""
     Write-Host "  Creando grupos de seguridad..." -ForegroundColor Yellow
     Write-Host ""
 
     $grupos = @(
-        @{ Nombre = "Cuates";    OU = "OU=Cuates,$dcBase"    },
-        @{ Nombre = "NoCuates";  OU = "OU=NoCuates,$dcBase"  }
+        @{ Nombre = "Cuates";   OU = "OU=Cuates,$dcBase"   },
+        @{ Nombre = "NoCuates"; OU = "OU=NoCuates,$dcBase" }
     )
 
     foreach ($g in $grupos) {
@@ -346,14 +322,13 @@ function Crear-OUsYUsuarios {
                     -GroupScope Global `
                     -GroupCategory Security `
                     -Path $g.OU
-                Write-Host "  [CREADO] Grupo '$($g.Nombre)' creado en OU $($g.Nombre)." -ForegroundColor Green
+                Write-Host "  [CREADO] Grupo '$($g.Nombre)' creado." -ForegroundColor Green
             } catch {
                 Write-Host "  [ERROR] No se pudo crear el grupo '$($g.Nombre)': $($_.Exception.Message)" -ForegroundColor Red
             }
         }
     }
 
-    # --- Agregar usuarios a sus grupos segun su OU ---
     Write-Host ""
     Write-Host "  Agregando usuarios a sus grupos..." -ForegroundColor Yellow
     Write-Host ""
@@ -363,11 +338,10 @@ function Crear-OUsYUsuarios {
             Add-ADGroupMember -Identity $u.Departamento -Members $u.Usuario -ErrorAction Stop
             Write-Host "  [OK] $($u.Usuario) agregado al grupo $($u.Departamento)." -ForegroundColor Green
         } catch {
-            Write-Host "  [AVISO] No se pudo agregar '$($u.Usuario)' al grupo '$($u.Departamento)': $($_.Exception.Message)" -ForegroundColor Yellow
+            Write-Host "  [AVISO] $($u.Usuario) -> $($u.Departamento): $($_.Exception.Message)" -ForegroundColor Yellow
         }
     }
 
-    # --- Resumen final ---
     Write-Host ""
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host "  | RESUMEN                                  |" -ForegroundColor Cyan
@@ -375,6 +349,182 @@ function Crear-OUsYUsuarios {
     Write-Host "  | Usuarios creados : $creados" -ForegroundColor Green
     Write-Host "  | Usuarios omitidos: $omitidos (ya existian)" -ForegroundColor Yellow
     Write-Host "  | Errores          : $errores" -ForegroundColor Red
+    Write-Host "  +==========================================+" -ForegroundColor Cyan
+    Write-Host ""
+}
+
+
+# ------------------------------------------------------------
+# FUNCION 4: Configurar horarios de acceso (Logon Hours)
+#
+# AD almacena los horarios en UTC internamente.
+# Zona horaria: Los Mochis, Sinaloa = UTC-7 (sin cambio de horario)
+#
+# Conversion local -> UTC (sumar 7 horas):
+#   Cuates   : 08:00-15:00 local  =>  15:00-22:00 UTC  (horas 15 a 21)
+#   NoCuates : 15:00-02:00 local  =>  22:00-09:00 UTC  (horas 22,23 y 0 a 8)
+# ------------------------------------------------------------
+function Configurar-Horarios {
+
+    Write-Host ""
+    Write-Host "  +==========================================+" -ForegroundColor Cyan
+    Write-Host "  |     CONFIGURAR HORARIOS DE ACCESO        |" -ForegroundColor Cyan
+    Write-Host "  +==========================================+" -ForegroundColor Cyan
+    Write-Host ""
+
+    try {
+        $dominio = Get-ADDomain -ErrorAction Stop
+    } catch {
+        Write-Host "  [ERROR] Este servidor no es Domain Controller o AD no esta disponible." -ForegroundColor Red
+        Write-Host ""
+        return
+    }
+
+    Write-Host "  Zona horaria aplicada: UTC-7 (Los Mochis, Sinaloa)" -ForegroundColor White
+    Write-Host ""
+    Write-Host "  Horarios locales que se configuraran:" -ForegroundColor White
+    Write-Host ""
+    Write-Host "    Cuates   : 08:00 AM - 03:00 PM (hora local)" -ForegroundColor Cyan
+    Write-Host "    NoCuates : 03:00 PM - 02:00 AM (hora local)" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "  Equivalencia en UTC (lo que AD almacena):" -ForegroundColor White
+    Write-Host ""
+    Write-Host "    Cuates   : 15:00 - 22:00 UTC" -ForegroundColor DarkCyan
+    Write-Host "    NoCuates : 22:00 - 09:00 UTC" -ForegroundColor DarkCyan
+    Write-Host ""
+    Write-Host "  Ademas se configurara la GPO para forzar cierre" -ForegroundColor White
+    Write-Host "  de sesion cuando el horario expire." -ForegroundColor White
+    Write-Host ""
+
+    $confirmar = Read-Host "  Deseas continuar? (s/n)"
+    if ($confirmar -ne "s") {
+        Write-Host ""
+        Write-Host "  Operacion cancelada por el usuario." -ForegroundColor Yellow
+        Write-Host ""
+        return
+    }
+
+    Write-Host ""
+
+    # ----------------------------------------------------------
+    # HELPER: Construir array de 21 bytes para LogonHours
+    # Recibe horas UTC permitidas (0-23) y aplica el mismo
+    # horario para los 7 dias de la semana.
+    # ----------------------------------------------------------
+    function Build-LogonHours {
+        param([int[]]$HorasUTC)
+
+        $bits = New-Object bool[] 168
+
+        for ($dia = 0; $dia -lt 7; $dia++) {
+            foreach ($hora in $HorasUTC) {
+                $bits[$dia * 24 + $hora] = $true
+            }
+        }
+
+        $bytes = New-Object byte[] 21
+        for ($i = 0; $i -lt 168; $i++) {
+            if ($bits[$i]) {
+                $bytes[[math]::Floor($i / 8)] = $bytes[[math]::Floor($i / 8)] -bor (1 -shl ($i % 8))
+            }
+        }
+
+        return $bytes
+    }
+
+    # ----------------------------------------------------------
+    # Horas UTC permitidas por grupo
+    # UTC-7: hora local + 7 = hora UTC
+    #
+    # Cuates: local 08:00-14:59 => UTC 15:00-21:59 => horas 15..21
+    # NoCuates: local 15:00-23:59 => UTC 22:00-06:59 => horas 22,23,0,1,2,3,4,5,6
+    #           local 00:00-01:59 => UTC 07:00-08:59 => horas 7,8
+    #           Combinado: 22,23,0,1,2,3,4,5,6,7,8
+    # ----------------------------------------------------------
+    $horasUTC_Cuates   = @(15,16,17,18,19,20,21)
+    $horasUTC_NoCuates = @(22,23,0,1,2,3,4,5,6,7,8)
+
+    $bytesCuates   = Build-LogonHours -HorasUTC $horasUTC_Cuates
+    $bytesNoCuates = Build-LogonHours -HorasUTC $horasUTC_NoCuates
+
+    # ----------------------------------------------------------
+    # Aplicar horarios a cada usuario segun su grupo
+    # ----------------------------------------------------------
+    $csvPath = "$PSScriptRoot\usuarios.csv"
+    if (-not (Test-Path $csvPath)) {
+        Write-Host "  [ERROR] No se encontro usuarios.csv en $PSScriptRoot" -ForegroundColor Red
+        Write-Host ""
+        return
+    }
+
+    $usuarios = Import-Csv -Path $csvPath
+
+    Write-Host "  Aplicando horarios a usuarios..." -ForegroundColor Yellow
+    Write-Host ""
+
+    foreach ($u in $usuarios) {
+        try {
+            if ($u.Departamento -eq "Cuates") {
+                Set-ADUser -Identity $u.Usuario -Replace @{logonHours = $bytesCuates}
+                Write-Host "  [OK] $($u.Usuario) -> Cuates (08:00-15:00 local)" -ForegroundColor Green
+            } elseif ($u.Departamento -eq "NoCuates") {
+                Set-ADUser -Identity $u.Usuario -Replace @{logonHours = $bytesNoCuates}
+                Write-Host "  [OK] $($u.Usuario) -> NoCuates (15:00-02:00 local)" -ForegroundColor Green
+            } else {
+                Write-Host "  [AVISO] $($u.Usuario): departamento desconocido '$($u.Departamento)'" -ForegroundColor Yellow
+            }
+        } catch {
+            Write-Host "  [ERROR] No se pudo aplicar horario a '$($u.Usuario)': $($_.Exception.Message)" -ForegroundColor Red
+        }
+    }
+
+    # ----------------------------------------------------------
+    # GPO: forzar cierre de sesion al expirar horario
+    # ----------------------------------------------------------
+    Write-Host ""
+    Write-Host "  Configurando GPO de cierre de sesion forzado..." -ForegroundColor Yellow
+    Write-Host ""
+
+    $gpoNombre = "Practica8-LogonHours"
+
+    try {
+        $gpo = Get-GPO -Name $gpoNombre -ErrorAction SilentlyContinue
+
+        if (-not $gpo) {
+            $gpo = New-GPO -Name $gpoNombre
+            Write-Host "  [CREADO] GPO '$gpoNombre' creada." -ForegroundColor Green
+        } else {
+            Write-Host "  [OK] GPO '$gpoNombre' ya existe, se actualiza." -ForegroundColor Yellow
+        }
+
+        Set-GPRegistryValue `
+            -Name $gpoNombre `
+            -Key "HKLM\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters" `
+            -ValueName "EnableForcedLogOff" `
+            -Type DWord `
+            -Value 1
+
+        Write-Host "  [OK] Politica de cierre forzado configurada." -ForegroundColor Green
+
+        $dcBase = $dominio.DistinguishedName
+        try {
+            New-GPLink -Name $gpoNombre -Target $dcBase -ErrorAction Stop
+            Write-Host "  [OK] GPO vinculada al dominio." -ForegroundColor Green
+        } catch {
+            Write-Host "  [OK] GPO ya estaba vinculada al dominio." -ForegroundColor Yellow
+        }
+
+    } catch {
+        Write-Host "  [ERROR] No se pudo configurar la GPO: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "  Verifica que el modulo GroupPolicy este disponible." -ForegroundColor Yellow
+    }
+
+    Write-Host ""
+    Write-Host "  +==========================================+" -ForegroundColor Cyan
+    Write-Host "  | Horarios configurados correctamente.     |" -ForegroundColor Cyan
+    Write-Host "  | Zona horaria: UTC-7 (Los Mochis, Sin.)   |" -ForegroundColor Cyan
+    Write-Host "  | Los usuarios seran desconectados al      |" -ForegroundColor Cyan
+    Write-Host "  | finalizar su turno permitido.            |" -ForegroundColor Cyan
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host ""
 }
