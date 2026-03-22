@@ -686,3 +686,170 @@ function Configurar-CuotasFSRM {
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host ""
 }
+
+
+# ------------------------------------------------------------
+# FUNCION 6: Configurar apantallamiento de archivos (FSRM)
+#
+# Crea un grupo de archivos bloqueados con extensiones:
+#   .mp3, .mp4 (multimedia)
+#   .exe, .msi (ejecutables)
+# Aplica un File Screen de tipo Active (bloqueo real) en
+# la carpeta de cada usuario en C:\Usuarios\<usuario>.
+# Si el screen ya existe, lo actualiza.
+# ------------------------------------------------------------
+function Configurar-Apantallamiento {
+
+    Write-Host ""
+    Write-Host "  +==========================================+" -ForegroundColor Cyan
+    Write-Host "  |   CONFIGURAR APANTALLAMIENTO DE ARCHIVOS |" -ForegroundColor Cyan
+    Write-Host "  +==========================================+" -ForegroundColor Cyan
+    Write-Host ""
+
+    # --- Verificar que FSRM este instalado ---
+    $fsrm = Get-WindowsFeature -Name "FS-Resource-Manager"
+    if ($fsrm.InstallState -ne "Installed") {
+        Write-Host "  [ERROR] FSRM no esta instalado." -ForegroundColor Red
+        Write-Host "  Ejecuta primero la opcion 1 para instalar las dependencias." -ForegroundColor Yellow
+        Write-Host ""
+        return
+    }
+
+    # --- Verificar que el CSV existe ---
+    $csvPath = "$PSScriptRoot\usuarios.csv"
+    if (-not (Test-Path $csvPath)) {
+        Write-Host "  [ERROR] No se encontro usuarios.csv en $PSScriptRoot" -ForegroundColor Red
+        Write-Host ""
+        return
+    }
+
+    $usuarios    = Import-Csv -Path $csvPath
+    $carpetaRaiz = "C:\Usuarios"
+    $grupoNombre = "Practica8-ArchivosProhibidos"
+
+    Write-Host "  Se bloquearan los siguientes tipos de archivo" -ForegroundColor White
+    Write-Host "  en las carpetas personales de TODOS los usuarios:" -ForegroundColor White
+    Write-Host ""
+    Write-Host "    Multimedia  : *.mp3, *.mp4" -ForegroundColor Cyan
+    Write-Host "    Ejecutables : *.exe, *.msi" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "  Tipo de apantallamiento: ACTIVO (Active Screening)" -ForegroundColor Yellow
+    Write-Host "  El servidor RECHAZARA el archivo en tiempo real." -ForegroundColor Yellow
+    Write-Host ""
+
+    $confirmar = Read-Host "  Deseas continuar? (s/n)"
+    if ($confirmar -ne "s") {
+        Write-Host ""
+        Write-Host "  Operacion cancelada por el usuario." -ForegroundColor Yellow
+        Write-Host ""
+        return
+    }
+
+    Write-Host ""
+
+    # --- Crear grupo de archivos prohibidos si no existe ---
+    Write-Host "  Creando grupo de archivos prohibidos..." -ForegroundColor Yellow
+    Write-Host ""
+
+    try {
+        $grupoExistente = Get-FsrmFileGroup -Name $grupoNombre -ErrorAction SilentlyContinue
+        if ($grupoExistente) {
+            # Actualizar el grupo con las extensiones correctas
+            Set-FsrmFileGroup `
+                -Name $grupoNombre `
+                -IncludePattern @("*.mp3","*.mp4","*.exe","*.msi") | Out-Null
+            Write-Host "  [OK] Grupo '$grupoNombre' ya existe, actualizado." -ForegroundColor Yellow
+        } else {
+            New-FsrmFileGroup `
+                -Name $grupoNombre `
+                -IncludePattern @("*.mp3","*.mp4","*.exe","*.msi") | Out-Null
+            Write-Host "  [CREADO] Grupo '$grupoNombre' creado." -ForegroundColor Green
+        }
+    } catch {
+        Write-Host "  [ERROR] No se pudo crear el grupo de archivos: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host ""
+        return
+    }
+
+    # --- Crear plantilla de apantallamiento si no existe ---
+    Write-Host ""
+    Write-Host "  Creando plantilla de apantallamiento..." -ForegroundColor Yellow
+    Write-Host ""
+
+    $plantillaNombre = "Practica8-Apantallamiento"
+
+    try {
+        $plantillaExistente = Get-FsrmFileScreenTemplate -Name $plantillaNombre -ErrorAction SilentlyContinue
+        if ($plantillaExistente) {
+            Set-FsrmFileScreenTemplate `
+                -Name $plantillaNombre `
+                -Active:$true `
+                -IncludeGroup @($grupoNombre) | Out-Null
+            Write-Host "  [OK] Plantilla '$plantillaNombre' ya existe, actualizada." -ForegroundColor Yellow
+        } else {
+            New-FsrmFileScreenTemplate `
+                -Name $plantillaNombre `
+                -Active:$true `
+                -IncludeGroup @($grupoNombre) | Out-Null
+            Write-Host "  [CREADO] Plantilla '$plantillaNombre' creada." -ForegroundColor Green
+        }
+    } catch {
+        Write-Host "  [ERROR] No se pudo crear la plantilla: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host ""
+        return
+    }
+
+    # --- Aplicar apantallamiento a cada carpeta de usuario ---
+    Write-Host ""
+    Write-Host "  Aplicando apantallamiento a carpetas de usuarios..." -ForegroundColor Yellow
+    Write-Host ""
+
+    $creados  = 0
+    $omitidos = 0
+    $errores  = 0
+
+    foreach ($u in $usuarios) {
+        $carpetaUsuario = "$carpetaRaiz\$($u.Usuario)"
+
+        # Verificar que la carpeta existe (debe haberse creado en opcion 5)
+        if (-not (Test-Path $carpetaUsuario)) {
+            Write-Host "  [AVISO] No existe la carpeta '$carpetaUsuario'." -ForegroundColor Yellow
+            Write-Host "          Ejecuta primero la opcion 5 (Cuotas FSRM)." -ForegroundColor Yellow
+            $errores++
+            continue
+        }
+
+        try {
+            $screenExistente = Get-FsrmFileScreen -Path $carpetaUsuario -ErrorAction SilentlyContinue
+
+            if ($screenExistente) {
+                Set-FsrmFileScreen `
+                    -Path $carpetaUsuario `
+                    -Template $plantillaNombre | Out-Null
+                Write-Host "  [ACTUALIZADO] $($u.Usuario) -> apantallamiento actualizado" -ForegroundColor Yellow
+                $omitidos++
+            } else {
+                New-FsrmFileScreen `
+                    -Path $carpetaUsuario `
+                    -Template $plantillaNombre | Out-Null
+                Write-Host "  [OK] $($u.Usuario) -> .mp3 .mp4 .exe .msi bloqueados" -ForegroundColor Green
+                $creados++
+            }
+        } catch {
+            Write-Host "  [ERROR] $($u.Usuario): $($_.Exception.Message)" -ForegroundColor Red
+            $errores++
+        }
+    }
+
+    Write-Host ""
+    Write-Host "  +==========================================+" -ForegroundColor Cyan
+    Write-Host "  | RESUMEN DE APANTALLAMIENTO               |" -ForegroundColor Cyan
+    Write-Host "  +------------------------------------------+" -ForegroundColor Cyan
+    Write-Host "  | Screens creados     : $creados" -ForegroundColor Green
+    Write-Host "  | Screens actualizados: $omitidos" -ForegroundColor Yellow
+    Write-Host "  | Errores             : $errores" -ForegroundColor Red
+    Write-Host "  +------------------------------------------+" -ForegroundColor Cyan
+    Write-Host "  | Archivos bloqueados: .mp3 .mp4 .exe .msi |" -ForegroundColor White
+    Write-Host "  +==========================================+" -ForegroundColor Cyan
+    Write-Host ""
+}
