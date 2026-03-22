@@ -46,7 +46,7 @@ do {
         "2" { Promover-DomainController }
         "3" { Crear-OUsYUsuarios }
         "4" { Configurar-Horarios }
-        "5" { Write-Host "`n  [Proximamente] Configurar cuotas FSRM..." -ForegroundColor Yellow; pause }
+        "5" { Configurar-CuotasFSRM }
         "6" { Write-Host "`n  [Proximamente] Configurar apantallamiento..." -ForegroundColor Yellow; pause }
         "7" { Write-Host "`n  [Proximamente] Configurar AppLocker..." -ForegroundColor Yellow; pause }
         "0" { Write-Host "`n  Saliendo...`n" -ForegroundColor Yellow }
