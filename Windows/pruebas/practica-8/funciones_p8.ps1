@@ -1059,8 +1059,8 @@ function Configurar-AppLocker {
         # Habilitar el servicio AppIDSvc (necesario para que AppLocker funcione)
         Write-Host ""
         Write-Host "  Habilitando servicio AppIDSvc en el servidor..." -ForegroundColor Yellow
-        Set-Service -Name AppIDSvc -StartupType Automatic
-        Start-Service -Name AppIDSvc -ErrorAction SilentlyContinue
+        sc.exe config AppIDSvc start= auto | Out-Null
+        sc.exe start AppIDSvc 2>$null | Out-Null
         Write-Host "  [OK] Servicio AppIDSvc configurado como Automatico." -ForegroundColor Green
 
     } catch {
