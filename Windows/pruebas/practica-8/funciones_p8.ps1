@@ -465,10 +465,13 @@ function Configurar-Horarios {
     foreach ($u in $usuarios) {
         try {
             if ($u.Departamento -eq "Cuates") {
-                Set-ADUser -Identity $u.Usuario -Replace @{logonHours = $bytesCuates}
+                # Primero limpiar el atributo, luego establecer el nuevo valor
+                Set-ADUser -Identity $u.Usuario -Clear logonHours
+                Set-ADUser -Identity $u.Usuario -Replace @{logonHours = ([byte[]]$bytesCuates)}
                 Write-Host "  [OK] $($u.Usuario) -> Cuates (08:00-15:00 local)" -ForegroundColor Green
             } elseif ($u.Departamento -eq "NoCuates") {
-                Set-ADUser -Identity $u.Usuario -Replace @{logonHours = $bytesNoCuates}
+                Set-ADUser -Identity $u.Usuario -Clear logonHours
+                Set-ADUser -Identity $u.Usuario -Replace @{logonHours = ([byte[]]$bytesNoCuates)}
                 Write-Host "  [OK] $($u.Usuario) -> NoCuates (15:00-02:00 local)" -ForegroundColor Green
             } else {
                 Write-Host "  [AVISO] $($u.Usuario): departamento desconocido '$($u.Departamento)'" -ForegroundColor Yellow
