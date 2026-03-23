@@ -2,6 +2,7 @@
 #  funciones_p8.ps1 - Libreria de funciones para la Practica 8
 #  Dominio  : practica8.local
 #  Servidor : 192.168.1.202
+#  Version  : Final (hash automatico)
 # ============================================================
 
 # ------------------------------------------------------------
@@ -475,13 +476,13 @@ function Configurar-Horarios {
             -Key "HKLM\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters" `
             -ValueName "EnableForcedLogOff" `
             -Type DWord `
-            -Value 1
+            -Value 1 | Out-Null
 
         Write-Host "  [OK] Politica de cierre forzado configurada." -ForegroundColor Green
 
         $dcBase = $dominio.DistinguishedName
         try {
-            New-GPLink -Name $gpoNombre -Target $dcBase -ErrorAction Stop
+            New-GPLink -Name $gpoNombre -Target $dcBase -ErrorAction Stop | Out-Null
             Write-Host "  [OK] GPO vinculada al dominio." -ForegroundColor Green
         } catch {
             Write-Host "  [OK] GPO ya estaba vinculada al dominio." -ForegroundColor Yellow
@@ -504,13 +505,10 @@ function Configurar-Horarios {
 
 # ------------------------------------------------------------
 # FUNCION 5: Configurar cuotas FSRM
-#
-# Crea carpetas personales para cada usuario en:
-#   C:\Usuarios\<usuario>
-# Aplica cuotas con FSRM:
-#   Cuates   -> 10 MB (cuota Hard: bloquea al llegar al limite)
-#   NoCuates ->  5 MB (cuota Hard: bloquea al llegar al limite)
-# Si la cuota ya existe en una carpeta, la sobreescribe.
+# Cuates   -> 10 MB (Hard Quota)
+# NoCuates ->  5 MB (Hard Quota)
+# Crea carpetas, plantillas y cuotas.
+# Comparte la carpeta C:\Usuarios en la red.
 # ------------------------------------------------------------
 function Configurar-CuotasFSRM {
 
@@ -520,7 +518,6 @@ function Configurar-CuotasFSRM {
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host ""
 
-    # --- Verificar que FSRM este instalado ---
     $fsrm = Get-WindowsFeature -Name "FS-Resource-Manager"
     if ($fsrm.InstallState -ne "Installed") {
         Write-Host "  [ERROR] FSRM no esta instalado." -ForegroundColor Red
@@ -529,7 +526,6 @@ function Configurar-CuotasFSRM {
         return
     }
 
-    # --- Verificar que el CSV existe ---
     $csvPath = "$PSScriptRoot\usuarios.csv"
     if (-not (Test-Path $csvPath)) {
         Write-Host "  [ERROR] No se encontro usuarios.csv en $PSScriptRoot" -ForegroundColor Red
@@ -537,14 +533,7 @@ function Configurar-CuotasFSRM {
         return
     }
 
-    $usuarios = Import-Csv -Path $csvPath
-
-    # --- Definir tamanos de cuota en bytes ---
-    # 1 MB = 1048576 bytes
-    $cuotaCuates   = 10MB   # 10485760 bytes
-    $cuotaNoCuates =  5MB   #  5242880 bytes
-
-    # --- Carpeta raiz donde vivirán las carpetas de usuarios ---
+    $usuarios    = Import-Csv -Path $csvPath
     $carpetaRaiz = "C:\Usuarios"
 
     Write-Host "  Configuracion que se aplicara:" -ForegroundColor White
@@ -568,7 +557,7 @@ function Configurar-CuotasFSRM {
 
     Write-Host ""
 
-    # --- Crear carpeta raiz si no existe ---
+    # Crear carpeta raiz
     if (-not (Test-Path $carpetaRaiz)) {
         New-Item -Path $carpetaRaiz -ItemType Directory | Out-Null
         Write-Host "  [CREADO] Carpeta raiz: $carpetaRaiz" -ForegroundColor Green
@@ -576,16 +565,31 @@ function Configurar-CuotasFSRM {
         Write-Host "  [OK] Carpeta raiz ya existe: $carpetaRaiz" -ForegroundColor Yellow
     }
 
+    # Compartir carpeta en la red si no esta compartida
+    Write-Host ""
+    Write-Host "  Configurando recurso compartido de red..." -ForegroundColor Yellow
+    $shareExiste = Get-SmbShare -Name "Usuarios" -ErrorAction SilentlyContinue
+    if (-not $shareExiste) {
+        New-SmbShare -Name "Usuarios" -Path $carpetaRaiz -FullAccess "PRACTICA8\Domain Admins" -ChangeAccess "PRACTICA8\Domain Users" | Out-Null
+        Write-Host "  [CREADO] Carpeta compartida como \\192.168.1.202\Usuarios" -ForegroundColor Green
+    } else {
+        Write-Host "  [OK] Recurso compartido 'Usuarios' ya existe." -ForegroundColor Yellow
+    }
+
+    # Permisos NTFS para usuarios del dominio
+    $acl = Get-Acl $carpetaRaiz
+    $regla = New-Object System.Security.AccessControl.FileSystemAccessRule("PRACTICA8\Domain Users","Modify","ContainerInherit,ObjectInherit","None","Allow")
+    $acl.AddAccessRule($regla)
+    Set-Acl $carpetaRaiz $acl
+    Write-Host "  [OK] Permisos NTFS configurados para Domain Users." -ForegroundColor Green
+
     Write-Host ""
     Write-Host "  Creando plantillas de cuota FSRM..." -ForegroundColor Yellow
     Write-Host ""
 
-    # --- Crear plantillas de cuota si no existen ---
-    # Las plantillas permiten reutilizar la configuracion de cuota
-    # en multiples carpetas sin repetir la configuracion cada vez.
     $plantillas = @(
-        @{ Nombre = "Practica8-Cuates-10MB";   Tamano = 10MB; Descripcion = "Cuota 10MB para Cuates"   },
-        @{ Nombre = "Practica8-NoCuates-5MB";  Tamano = 5MB;  Descripcion = "Cuota 5MB para NoCuates"  }
+        @{ Nombre = "Practica8-Cuates-10MB";  Tamano = 10MB },
+        @{ Nombre = "Practica8-NoCuates-5MB"; Tamano = 5MB  }
     )
 
     foreach ($p in $plantillas) {
@@ -594,11 +598,7 @@ function Configurar-CuotasFSRM {
             if ($existePlantilla) {
                 Write-Host "  [OK] Plantilla '$($p.Nombre)' ya existe, se omite." -ForegroundColor Yellow
             } else {
-                # -SoftLimit:$false = Hard Quota (bloquea al llegar al limite)
-                New-FsrmQuotaTemplate `
-                    -Name $p.Nombre `
-                    -Size $p.Tamano `
-                    -SoftLimit:$false
+                New-FsrmQuotaTemplate -Name $p.Nombre -Size $p.Tamano -SoftLimit:$false | Out-Null
                 Write-Host "  [CREADO] Plantilla '$($p.Nombre)' ($($p.Tamano / 1MB) MB)." -ForegroundColor Green
             }
         } catch {
@@ -610,15 +610,13 @@ function Configurar-CuotasFSRM {
     Write-Host "  Creando carpetas y aplicando cuotas a usuarios..." -ForegroundColor Yellow
     Write-Host ""
 
-    $creadas   = 0
-    $omitidas  = 0
-    $errores   = 0
+    $creadas  = 0
+    $omitidas = 0
+    $errores  = 0
 
     foreach ($u in $usuarios) {
-
         $carpetaUsuario = "$carpetaRaiz\$($u.Usuario)"
 
-        # Determinar tamano segun el departamento
         if ($u.Departamento -eq "Cuates") {
             $plantillaNombre = "Practica8-Cuates-10MB"
             $tamanoBytes     = 10MB
@@ -632,7 +630,6 @@ function Configurar-CuotasFSRM {
             continue
         }
 
-        # Crear la carpeta del usuario si no existe
         if (-not (Test-Path $carpetaUsuario)) {
             try {
                 New-Item -Path $carpetaUsuario -ItemType Directory | Out-Null
@@ -644,26 +641,23 @@ function Configurar-CuotasFSRM {
             }
         }
 
-        # Aplicar o actualizar la cuota FSRM en la carpeta
         try {
-            $cuotaExistente = Get-FsrmQuota -Path $carpetaUsuario -ErrorAction SilentlyContinue
-
-            # Verificar si la plantilla existe para usarla, si no usar tamano directo
+            $cuotaExistente  = Get-FsrmQuota -Path $carpetaUsuario -ErrorAction SilentlyContinue
             $existePlantilla = Get-FsrmQuotaTemplate -Name $plantillaNombre -ErrorAction SilentlyContinue
 
             if ($cuotaExistente) {
                 if ($existePlantilla) {
-                    Set-FsrmQuota -Path $carpetaUsuario -Template $plantillaNombre
+                    Set-FsrmQuota -Path $carpetaUsuario -Template $plantillaNombre | Out-Null
                 } else {
-                    Set-FsrmQuota -Path $carpetaUsuario -Size $tamanoBytes -SoftLimit:$false
+                    Set-FsrmQuota -Path $carpetaUsuario -Size $tamanoBytes -SoftLimit:$false | Out-Null
                 }
                 Write-Host "  [ACTUALIZADO] $($u.Usuario) ($($u.Departamento)) -> $tamanoTexto" -ForegroundColor Yellow
                 $omitidas++
             } else {
                 if ($existePlantilla) {
-                    New-FsrmQuota -Path $carpetaUsuario -Template $plantillaNombre
+                    New-FsrmQuota -Path $carpetaUsuario -Template $plantillaNombre | Out-Null
                 } else {
-                    New-FsrmQuota -Path $carpetaUsuario -Size $tamanoBytes -SoftLimit:$false
+                    New-FsrmQuota -Path $carpetaUsuario -Size $tamanoBytes -SoftLimit:$false | Out-Null
                 }
                 Write-Host "  [CUOTA] $($u.Usuario) ($($u.Departamento)) -> $tamanoTexto" -ForegroundColor Green
                 $creadas++
@@ -683,6 +677,7 @@ function Configurar-CuotasFSRM {
     Write-Host "  | Errores            : $errores" -ForegroundColor Red
     Write-Host "  +------------------------------------------+" -ForegroundColor Cyan
     Write-Host "  | Carpetas en: $carpetaRaiz" -ForegroundColor White
+    Write-Host "  | Compartido : \\192.168.1.202\Usuarios     |" -ForegroundColor White
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host ""
 }
@@ -690,13 +685,8 @@ function Configurar-CuotasFSRM {
 
 # ------------------------------------------------------------
 # FUNCION 6: Configurar apantallamiento de archivos (FSRM)
-#
-# Crea un grupo de archivos bloqueados con extensiones:
-#   .mp3, .mp4 (multimedia)
-#   .exe, .msi (ejecutables)
-# Aplica un File Screen de tipo Active (bloqueo real) en
-# la carpeta de cada usuario en C:\Usuarios\<usuario>.
-# Si el screen ya existe, lo actualiza.
+# Bloquea .mp3, .mp4, .exe, .msi en carpetas de usuarios.
+# Tipo: Active Screening (bloqueo real en tiempo real).
 # ------------------------------------------------------------
 function Configurar-Apantallamiento {
 
@@ -706,7 +696,6 @@ function Configurar-Apantallamiento {
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host ""
 
-    # --- Verificar que FSRM este instalado ---
     $fsrm = Get-WindowsFeature -Name "FS-Resource-Manager"
     if ($fsrm.InstallState -ne "Installed") {
         Write-Host "  [ERROR] FSRM no esta instalado." -ForegroundColor Red
@@ -715,7 +704,6 @@ function Configurar-Apantallamiento {
         return
     }
 
-    # --- Verificar que el CSV existe ---
     $csvPath = "$PSScriptRoot\usuarios.csv"
     if (-not (Test-Path $csvPath)) {
         Write-Host "  [ERROR] No se encontro usuarios.csv en $PSScriptRoot" -ForegroundColor Red
@@ -746,23 +734,16 @@ function Configurar-Apantallamiento {
     }
 
     Write-Host ""
-
-    # --- Crear grupo de archivos prohibidos si no existe ---
     Write-Host "  Creando grupo de archivos prohibidos..." -ForegroundColor Yellow
     Write-Host ""
 
     try {
         $grupoExistente = Get-FsrmFileGroup -Name $grupoNombre -ErrorAction SilentlyContinue
         if ($grupoExistente) {
-            # Actualizar el grupo con las extensiones correctas
-            Set-FsrmFileGroup `
-                -Name $grupoNombre `
-                -IncludePattern @("*.mp3","*.mp4","*.exe","*.msi") | Out-Null
+            Set-FsrmFileGroup -Name $grupoNombre -IncludePattern @("*.mp3","*.mp4","*.exe","*.msi") | Out-Null
             Write-Host "  [OK] Grupo '$grupoNombre' ya existe, actualizado." -ForegroundColor Yellow
         } else {
-            New-FsrmFileGroup `
-                -Name $grupoNombre `
-                -IncludePattern @("*.mp3","*.mp4","*.exe","*.msi") | Out-Null
+            New-FsrmFileGroup -Name $grupoNombre -IncludePattern @("*.mp3","*.mp4","*.exe","*.msi") | Out-Null
             Write-Host "  [CREADO] Grupo '$grupoNombre' creado." -ForegroundColor Green
         }
     } catch {
@@ -771,7 +752,6 @@ function Configurar-Apantallamiento {
         return
     }
 
-    # --- Crear plantilla de apantallamiento si no existe ---
     Write-Host ""
     Write-Host "  Creando plantilla de apantallamiento..." -ForegroundColor Yellow
     Write-Host ""
@@ -781,16 +761,10 @@ function Configurar-Apantallamiento {
     try {
         $plantillaExistente = Get-FsrmFileScreenTemplate -Name $plantillaNombre -ErrorAction SilentlyContinue
         if ($plantillaExistente) {
-            Set-FsrmFileScreenTemplate `
-                -Name $plantillaNombre `
-                -Active:$true `
-                -IncludeGroup @($grupoNombre) | Out-Null
+            Set-FsrmFileScreenTemplate -Name $plantillaNombre -Active:$true -IncludeGroup @($grupoNombre) | Out-Null
             Write-Host "  [OK] Plantilla '$plantillaNombre' ya existe, actualizada." -ForegroundColor Yellow
         } else {
-            New-FsrmFileScreenTemplate `
-                -Name $plantillaNombre `
-                -Active:$true `
-                -IncludeGroup @($grupoNombre) | Out-Null
+            New-FsrmFileScreenTemplate -Name $plantillaNombre -Active:$true -IncludeGroup @($grupoNombre) | Out-Null
             Write-Host "  [CREADO] Plantilla '$plantillaNombre' creada." -ForegroundColor Green
         }
     } catch {
@@ -799,7 +773,6 @@ function Configurar-Apantallamiento {
         return
     }
 
-    # --- Aplicar apantallamiento a cada carpeta de usuario ---
     Write-Host ""
     Write-Host "  Aplicando apantallamiento a carpetas de usuarios..." -ForegroundColor Yellow
     Write-Host ""
@@ -811,7 +784,6 @@ function Configurar-Apantallamiento {
     foreach ($u in $usuarios) {
         $carpetaUsuario = "$carpetaRaiz\$($u.Usuario)"
 
-        # Verificar que la carpeta existe (debe haberse creado en opcion 5)
         if (-not (Test-Path $carpetaUsuario)) {
             Write-Host "  [AVISO] No existe la carpeta '$carpetaUsuario'." -ForegroundColor Yellow
             Write-Host "          Ejecuta primero la opcion 5 (Cuotas FSRM)." -ForegroundColor Yellow
@@ -823,15 +795,11 @@ function Configurar-Apantallamiento {
             $screenExistente = Get-FsrmFileScreen -Path $carpetaUsuario -ErrorAction SilentlyContinue
 
             if ($screenExistente) {
-                Set-FsrmFileScreen `
-                    -Path $carpetaUsuario `
-                    -Template $plantillaNombre | Out-Null
+                Set-FsrmFileScreen -Path $carpetaUsuario -Template $plantillaNombre | Out-Null
                 Write-Host "  [ACTUALIZADO] $($u.Usuario) -> apantallamiento actualizado" -ForegroundColor Yellow
                 $omitidos++
             } else {
-                New-FsrmFileScreen `
-                    -Path $carpetaUsuario `
-                    -Template $plantillaNombre | Out-Null
+                New-FsrmFileScreen -Path $carpetaUsuario -Template $plantillaNombre | Out-Null
                 Write-Host "  [OK] $($u.Usuario) -> .mp3 .mp4 .exe .msi bloqueados" -ForegroundColor Green
                 $creados++
             }
@@ -856,17 +824,16 @@ function Configurar-Apantallamiento {
 
 
 # ------------------------------------------------------------
-# FUNCION 7: Configurar AppLocker
+# FUNCION 7: Configurar AppLocker (hash automatico)
 #
-# Crea una GPO con reglas de AppLocker:
-#   - Cuates   : pueden ejecutar notepad.exe (regla de permiso)
-#   - NoCuates : tienen bloqueado notepad.exe por Hash
-#                (el hash identifica el archivo sin importar
-#                 el nombre, evitando que renombren el .exe)
+# Detecta automaticamente el hash de notepad.exe desde el
+# cliente Windows 10 (192.168.1.200) usando la ruta UNC.
+# Si no puede obtener el hash remoto, usa el hash conocido
+# del servidor como fallback.
 #
-# La GPO se vincula al dominio completo.
-# El servicio AppIDSvc debe estar en Automatic para que
-# AppLocker funcione en los clientes.
+# Reglas:
+#   - Cuates   : notepad.exe PERMITIDO (reglas base)
+#   - NoCuates : notepad.exe BLOQUEADO por Hash
 # ------------------------------------------------------------
 function Configurar-AppLocker {
 
@@ -876,7 +843,6 @@ function Configurar-AppLocker {
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host ""
 
-    # --- Verificar que el servidor es DC ---
     try {
         $dominio = Get-ADDomain -ErrorAction Stop
     } catch {
@@ -885,17 +851,9 @@ function Configurar-AppLocker {
         return
     }
 
-    # --- Verificar que notepad.exe existe ---
-    $notepadPath = "C:\Windows\System32\notepad.exe"
-    if (-not (Test-Path $notepadPath)) {
-        Write-Host "  [ERROR] No se encontro notepad.exe en $notepadPath" -ForegroundColor Red
-        Write-Host ""
-        return
-    }
-
     Write-Host "  Reglas que se configuraran via GPO:" -ForegroundColor White
     Write-Host ""
-    Write-Host "    Cuates   : notepad.exe PERMITIDO (regla de ruta)" -ForegroundColor Cyan
+    Write-Host "    Cuates   : notepad.exe PERMITIDO (reglas base)" -ForegroundColor Cyan
     Write-Host "    NoCuates : notepad.exe BLOQUEADO por Hash" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "  La regla de Hash identifica el archivo por su" -ForegroundColor Yellow
@@ -913,112 +871,105 @@ function Configurar-AppLocker {
 
     Write-Host ""
 
-    # --- Obtener el hash de notepad.exe ---
-    Write-Host "  Calculando hash de notepad.exe..." -ForegroundColor Yellow
-
-    try {
-        $fileInfo    = Get-AppLockerFileInformation -Path $notepadPath -ErrorAction Stop
-        $hashInfo    = $fileInfo.Hash
-        $hashValor   = $hashInfo.HashDataString
-        $hashAlgo    = "SHA256"
-        $archivoSize = (Get-Item $notepadPath).Length
-
-        Write-Host "  [OK] Hash calculado: $hashValor" -ForegroundColor Green
-        Write-Host "       Tamano del archivo: $archivoSize bytes" -ForegroundColor DarkGray
-    } catch {
-        Write-Host "  [ERROR] No se pudo calcular el hash: $($_.Exception.Message)" -ForegroundColor Red
-        Write-Host ""
-        return
-    }
-
-    # --- Obtener SIDs de los grupos Cuates y NoCuates ---
-    Write-Host ""
+    # --- Obtener SIDs de los grupos ---
     Write-Host "  Obteniendo SIDs de los grupos..." -ForegroundColor Yellow
-
     try {
-        $sidCuates   = (Get-ADGroup -Identity "Cuates").SID.Value
         $sidNoCuates = (Get-ADGroup -Identity "NoCuates").SID.Value
-        Write-Host "  [OK] SID Cuates  : $sidCuates" -ForegroundColor Green
         Write-Host "  [OK] SID NoCuates: $sidNoCuates" -ForegroundColor Green
     } catch {
         Write-Host "  [ERROR] No se pudieron obtener los SIDs: $($_.Exception.Message)" -ForegroundColor Red
-        Write-Host "  Asegurate de haber ejecutado la opcion 3 primero." -ForegroundColor Yellow
-        Write-Host ""
         return
     }
 
-    # --- Construir el XML de politica AppLocker ---
-    # AppLocker se configura mediante un XML que describe las reglas.
-    # Cada regla tiene: Id, Name, Action (Allow/Deny), UserOrGroupSid, Conditions
+    # --- Intentar obtener hash del cliente Windows 10 automaticamente ---
     Write-Host ""
-    Write-Host "  Construyendo politica AppLocker en XML..." -ForegroundColor Yellow
+    Write-Host "  Intentando obtener hash de notepad.exe desde el cliente..." -ForegroundColor Yellow
+    Write-Host "  (Cliente Windows 10: 192.168.1.200)" -ForegroundColor White
+    Write-Host ""
 
-    # Generar GUIDs unicos para cada regla
-    $guidPermitir = [System.Guid]::NewGuid().ToString()
-    $guidBloquear = [System.Guid]::NewGuid().ToString()
+    $hashValor   = $null
+    $archivoSize = $null
+
+    # Ruta UNC al notepad del cliente
+    $notepadRemoto = "\\192.168.1.200\C$\Windows\System32\notepad.exe"
+
+    try {
+        if (Test-Path $notepadRemoto -ErrorAction SilentlyContinue) {
+            $fileInfo    = Get-AppLockerFileInformation -Path $notepadRemoto -ErrorAction Stop
+            $hashValor   = $fileInfo.Hash.HashDataString
+            $archivoSize = (Get-Item $notepadRemoto).Length
+            Write-Host "  [OK] Hash obtenido desde el cliente automaticamente." -ForegroundColor Green
+            Write-Host "       Hash: $hashValor" -ForegroundColor DarkGray
+            Write-Host "       Tamano: $archivoSize bytes" -ForegroundColor DarkGray
+        } else {
+            Write-Host "  [AVISO] No se pudo acceder al cliente via UNC." -ForegroundColor Yellow
+            throw "Cliente no accesible"
+        }
+    } catch {
+        # Fallback: usar hash conocido del cliente Windows 10
+        Write-Host "  [AVISO] Usando hash conocido del cliente Windows 10 (fallback)." -ForegroundColor Yellow
+        $hashValor   = "0x0C386FA6ABFDEFFBBEFF5BCE97D461340A23D1981458607BD9E5EEFF4066789A"
+        $archivoSize = 201216
+        Write-Host "       Hash: $hashValor" -ForegroundColor DarkGray
+        Write-Host "       Tamano: $archivoSize bytes" -ForegroundColor DarkGray
+    }
+
+    # --- Construir XML de politica AppLocker ---
+    Write-Host ""
+    Write-Host "  Construyendo politica AppLocker..." -ForegroundColor Yellow
+
+    $guid1 = [System.Guid]::NewGuid().ToString()
 
     $xmlPolicy = @"
 <AppLockerPolicy Version="1">
   <RuleCollection Type="Exe" EnforcementMode="Enabled">
-
-    <!-- Regla 1: Permitir a TODOS ejecutar todo lo que esta en Windows y Archivos de Programa -->
-    <!-- Esta regla base es necesaria para que el sistema funcione correctamente -->
-    <FilePathRule Id="921cc481-6e17-4653-8f75-050b80acca20"
-                  Name="Permitir archivos en Windows"
-                  Description="Regla base: permite ejecutables del sistema"
-                  UserOrGroupSid="S-1-1-0"
-                  Action="Allow">
-      <Conditions>
-        <FilePathCondition Path="%WINDIR%\*"/>
-      </Conditions>
+    <FilePathRule Id="921cc481-6e17-4653-8f75-050b80acca20" Name="Permitir Windows" Description="" UserOrGroupSid="S-1-1-0" Action="Allow">
+      <Conditions><FilePathCondition Path="%WINDIR%\*"/></Conditions>
     </FilePathRule>
-
-    <FilePathRule Id="a61c8b2c-a23e-47ff-8e4a-4e3d41bc98b0"
-                  Name="Permitir archivos en Archivos de Programa"
-                  Description="Regla base: permite ejecutables de Archivos de Programa"
-                  UserOrGroupSid="S-1-1-0"
-                  Action="Allow">
-      <Conditions>
-        <FilePathCondition Path="%PROGRAMFILES%\*"/>
-      </Conditions>
+    <FilePathRule Id="a61c8b2c-a23e-47ff-8e4a-4e3d41bc98b0" Name="Permitir ProgramFiles" Description="" UserOrGroupSid="S-1-1-0" Action="Allow">
+      <Conditions><FilePathCondition Path="%PROGRAMFILES%\*"/></Conditions>
     </FilePathRule>
-
-    <!-- Regla 2: Bloquear notepad.exe a NoCuates por Hash -->
-    <!-- El hash identifica el archivo sin importar su nombre -->
-    <FileHashRule Id="$guidBloquear"
-                  Name="Bloquear Notepad a NoCuates"
-                  Description="Bloquea notepad.exe a NoCuates por hash - renombrar no evita el bloqueo"
-                  UserOrGroupSid="$sidNoCuates"
-                  Action="Deny">
+    <FilePathRule Id="b61c8b2c-a23e-47ff-8e4a-4e3d41bc98b1" Name="Permitir ProgramFiles x86" Description="" UserOrGroupSid="S-1-1-0" Action="Allow">
+      <Conditions><FilePathCondition Path="%PROGRAMFILES(X86)%\*"/></Conditions>
+    </FilePathRule>
+    <FileHashRule Id="$guid1" Name="Bloquear Notepad NoCuates" Description="Bloquea notepad.exe por hash - renombrar no evita el bloqueo" UserOrGroupSid="$sidNoCuates" Action="Deny">
       <Conditions>
         <FileHashCondition>
-          <FileHash Type="$hashAlgo" Data="$hashValor" SourceFileName="notepad.exe" SourceFileLength="$archivoSize"/>
+          <FileHash Type="SHA256" Data="$hashValor" SourceFileName="notepad.exe" SourceFileLength="$archivoSize"/>
         </FileHashCondition>
       </Conditions>
     </FileHashRule>
-
+  </RuleCollection>
+  <RuleCollection Type="Appx" EnforcementMode="Enabled">
+    <FilePublisherRule Id="a9e18c21-ff8f-43cf-b9fc-db40eed693ba" Name="Permitir apps Microsoft" Description="" UserOrGroupSid="S-1-1-0" Action="Allow">
+      <Conditions>
+        <FilePublisherCondition PublisherName="CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US" ProductName="*" BinaryName="*">
+          <BinaryVersionRange LowSection="*" HighSection="*"/>
+        </FilePublisherCondition>
+      </Conditions>
+    </FilePublisherRule>
+    <FilePublisherRule Id="b9e18c21-ff8f-43cf-b9fc-db40eed693bb" Name="Permitir apps Windows" Description="" UserOrGroupSid="S-1-1-0" Action="Allow">
+      <Conditions>
+        <FilePublisherCondition PublisherName="CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US" ProductName="*" BinaryName="*">
+          <BinaryVersionRange LowSection="*" HighSection="*"/>
+        </FilePublisherCondition>
+      </Conditions>
+    </FilePublisherRule>
   </RuleCollection>
 </AppLockerPolicy>
 "@
 
-    # --- Guardar XML en archivo temporal ---
-    $xmlPath = "$PSScriptRoot\applocker_policy.xml"
-    try {
-        $xmlPolicy | Out-File -FilePath $xmlPath -Encoding UTF8 -Force
-        Write-Host "  [OK] XML guardado en: $xmlPath" -ForegroundColor Green
-    } catch {
-        Write-Host "  [ERROR] No se pudo guardar el XML: $($_.Exception.Message)" -ForegroundColor Red
-        Write-Host ""
-        return
-    }
+    # --- Guardar XML y aplicar a GPO ---
+    $xmlPath = "C:\Windows\Temp\applocker_final.xml"
+    $xmlPolicy | Out-File $xmlPath -Encoding UTF8 -Force
 
-    # --- Crear o actualizar la GPO de AppLocker ---
+    Write-Host "  [OK] XML generado." -ForegroundColor Green
+
+    # Crear o actualizar GPO
     Write-Host ""
     Write-Host "  Configurando GPO de AppLocker..." -ForegroundColor Yellow
-    Write-Host ""
 
     $gpoNombre = "Practica8-AppLocker"
-
     try {
         $gpo = Get-GPO -Name $gpoNombre -ErrorAction SilentlyContinue
         if (-not $gpo) {
@@ -1028,27 +979,15 @@ function Configurar-AppLocker {
             Write-Host "  [OK] GPO '$gpoNombre' ya existe, se actualiza." -ForegroundColor Yellow
         }
 
-        # Aplicar la politica AppLocker a la GPO usando el XML
-        # El XML se importa al contexto de la GPO via LGPO path
-        $gpoId   = $gpo.Id.ToString()
-        $dcBase  = $dominio.DistinguishedName
-        $domain  = $dominio.DNSRoot
+        $gpoId  = $gpo.Id.ToString()
+        $dcBase = $dominio.DistinguishedName
+        $domain = $dominio.DNSRoot
 
-        # Ruta donde Windows guarda las politicas de AppLocker en SYSVOL
-        $sysvolPath = "\\$domain\SYSVOL\$domain\Policies\{$gpoId}\Machine\Microsoft\Windows NT\AppLocker"
+        # Aplicar politica AppLocker a la GPO via LDAP
+        Set-AppLockerPolicy -XmlPolicy $xmlPath -Ldap "LDAP://CN={$gpoId},CN=Policies,CN=System,DC=practica8,DC=local"
+        Write-Host "  [OK] Politica AppLocker aplicada a la GPO." -ForegroundColor Green
 
-        # Crear la carpeta si no existe
-        if (-not (Test-Path $sysvolPath)) {
-            New-Item -Path $sysvolPath -ItemType Directory -Force | Out-Null
-            Write-Host "  [OK] Carpeta AppLocker en SYSVOL creada." -ForegroundColor Green
-        }
-
-        # Usar Set-AppLockerPolicy para aplicar la politica localmente
-        # y luego copiarla al GPO
-        Set-AppLockerPolicy -XmlPolicy $xmlPath -Merge
-        Write-Host "  [OK] Politica AppLocker aplicada." -ForegroundColor Green
-
-        # Vincular la GPO al dominio
+        # Vincular GPO al dominio
         try {
             New-GPLink -Name $gpoNombre -Target $dcBase -ErrorAction Stop | Out-Null
             Write-Host "  [OK] GPO vinculada al dominio." -ForegroundColor Green
@@ -1056,16 +995,15 @@ function Configurar-AppLocker {
             Write-Host "  [OK] GPO ya estaba vinculada al dominio." -ForegroundColor Yellow
         }
 
-        # Habilitar el servicio AppIDSvc (necesario para que AppLocker funcione)
+        # Habilitar servicio AppIDSvc en el servidor
         Write-Host ""
-        Write-Host "  Habilitando servicio AppIDSvc en el servidor..." -ForegroundColor Yellow
+        Write-Host "  Habilitando servicio AppIDSvc..." -ForegroundColor Yellow
         sc.exe config AppIDSvc start= auto | Out-Null
         sc.exe start AppIDSvc 2>$null | Out-Null
         Write-Host "  [OK] Servicio AppIDSvc configurado como Automatico." -ForegroundColor Green
 
     } catch {
         Write-Host "  [ERROR] No se pudo configurar la GPO AppLocker: $($_.Exception.Message)" -ForegroundColor Red
-        Write-Host ""
         return
     }
 
@@ -1076,9 +1014,13 @@ function Configurar-AppLocker {
     Write-Host "  | Cuates   : notepad.exe PERMITIDO         |" -ForegroundColor Green
     Write-Host "  | NoCuates : notepad.exe BLOQUEADO (hash)  |" -ForegroundColor Red
     Write-Host "  +------------------------------------------+" -ForegroundColor Cyan
-    Write-Host "  | IMPORTANTE: En los clientes Windows,     |" -ForegroundColor Yellow
-    Write-Host "  | ejecutar: gpupdate /force                |" -ForegroundColor Yellow
-    Write-Host "  | para que las reglas surtan efecto.       |" -ForegroundColor Yellow
+    Write-Host "  | IMPORTANTE: En el cliente Windows:       |" -ForegroundColor Yellow
+    Write-Host "  | 1. Abrir PowerShell como Admin           |" -ForegroundColor Yellow
+    Write-Host "  | 2. Ejecutar: sc.exe config AppIDSvc      |" -ForegroundColor Yellow
+    Write-Host "  |             start= auto                  |" -ForegroundColor Yellow
+    Write-Host "  | 3. Ejecutar: sc.exe start AppIDSvc       |" -ForegroundColor Yellow
+    Write-Host "  | 4. Ejecutar: gpupdate /force             |" -ForegroundColor Yellow
+    Write-Host "  | 5. Cerrar sesion y volver a entrar       |" -ForegroundColor Yellow
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host ""
 }
