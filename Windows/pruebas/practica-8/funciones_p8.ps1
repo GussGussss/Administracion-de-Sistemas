@@ -2,7 +2,11 @@
 #  funciones_p8.ps1 - Libreria de funciones para la Practica 8
 #  Dominio  : practica8.local
 #  Servidor : 192.168.1.202
-#  Version  : Final (hash automatico)
+#  Version  : Final (hash hardcodeado - cliente Windows 10)
+#
+#  Hash de notepad.exe del cliente Windows 10 Pro:
+#  0x0C386FA6ABFDEFFBBEFF5BCE97D461340A23D1981458607BD9E5EEFF4066789A
+#  Tamano: 201216 bytes
 # ============================================================
 
 # ------------------------------------------------------------
@@ -358,8 +362,6 @@ function Crear-OUsYUsuarios {
 # ------------------------------------------------------------
 # FUNCION 4: Configurar horarios de acceso (Logon Hours)
 # UTC-7 (Los Mochis, Sinaloa)
-# Cuates   : 08:00-15:00 local => 15:00-22:00 UTC => horas 15..21
-# NoCuates : 15:00-02:00 local => 22:00-09:00 UTC => horas 22,23,0..8
 # ------------------------------------------------------------
 function Configurar-Horarios {
 
@@ -489,7 +491,6 @@ function Configurar-Horarios {
         }
     } catch {
         Write-Host "  [ERROR] No se pudo configurar la GPO: $($_.Exception.Message)" -ForegroundColor Red
-        Write-Host "  Verifica que el modulo GroupPolicy este disponible." -ForegroundColor Yellow
     }
 
     Write-Host ""
@@ -505,10 +506,6 @@ function Configurar-Horarios {
 
 # ------------------------------------------------------------
 # FUNCION 5: Configurar cuotas FSRM
-# Cuates   -> 10 MB (Hard Quota)
-# NoCuates ->  5 MB (Hard Quota)
-# Crea carpetas, plantillas y cuotas.
-# Comparte la carpeta C:\Usuarios en la red.
 # ------------------------------------------------------------
 function Configurar-CuotasFSRM {
 
@@ -557,7 +554,6 @@ function Configurar-CuotasFSRM {
 
     Write-Host ""
 
-    # Crear carpeta raiz
     if (-not (Test-Path $carpetaRaiz)) {
         New-Item -Path $carpetaRaiz -ItemType Directory | Out-Null
         Write-Host "  [CREADO] Carpeta raiz: $carpetaRaiz" -ForegroundColor Green
@@ -565,7 +561,7 @@ function Configurar-CuotasFSRM {
         Write-Host "  [OK] Carpeta raiz ya existe: $carpetaRaiz" -ForegroundColor Yellow
     }
 
-    # Compartir carpeta en la red si no esta compartida
+    # Compartir carpeta en la red
     Write-Host ""
     Write-Host "  Configurando recurso compartido de red..." -ForegroundColor Yellow
     $shareExiste = Get-SmbShare -Name "Usuarios" -ErrorAction SilentlyContinue
@@ -576,7 +572,7 @@ function Configurar-CuotasFSRM {
         Write-Host "  [OK] Recurso compartido 'Usuarios' ya existe." -ForegroundColor Yellow
     }
 
-    # Permisos NTFS para usuarios del dominio
+    # Permisos NTFS
     $acl = Get-Acl $carpetaRaiz
     $regla = New-Object System.Security.AccessControl.FileSystemAccessRule("PRACTICA8\Domain Users","Modify","ContainerInherit,ObjectInherit","None","Allow")
     $acl.AddAccessRule($regla)
@@ -635,7 +631,7 @@ function Configurar-CuotasFSRM {
                 New-Item -Path $carpetaUsuario -ItemType Directory | Out-Null
                 Write-Host "  [CARPETA] Creada: $carpetaUsuario" -ForegroundColor DarkGreen
             } catch {
-                Write-Host "  [ERROR] No se pudo crear la carpeta '$carpetaUsuario': $($_.Exception.Message)" -ForegroundColor Red
+                Write-Host "  [ERROR] No se pudo crear '$carpetaUsuario': $($_.Exception.Message)" -ForegroundColor Red
                 $errores++
                 continue
             }
@@ -685,8 +681,6 @@ function Configurar-CuotasFSRM {
 
 # ------------------------------------------------------------
 # FUNCION 6: Configurar apantallamiento de archivos (FSRM)
-# Bloquea .mp3, .mp4, .exe, .msi en carpetas de usuarios.
-# Tipo: Active Screening (bloqueo real en tiempo real).
 # ------------------------------------------------------------
 function Configurar-Apantallamiento {
 
@@ -747,8 +741,7 @@ function Configurar-Apantallamiento {
             Write-Host "  [CREADO] Grupo '$grupoNombre' creado." -ForegroundColor Green
         }
     } catch {
-        Write-Host "  [ERROR] No se pudo crear el grupo de archivos: $($_.Exception.Message)" -ForegroundColor Red
-        Write-Host ""
+        Write-Host "  [ERROR] No se pudo crear el grupo: $($_.Exception.Message)" -ForegroundColor Red
         return
     }
 
@@ -769,7 +762,6 @@ function Configurar-Apantallamiento {
         }
     } catch {
         Write-Host "  [ERROR] No se pudo crear la plantilla: $($_.Exception.Message)" -ForegroundColor Red
-        Write-Host ""
         return
     }
 
@@ -785,15 +777,13 @@ function Configurar-Apantallamiento {
         $carpetaUsuario = "$carpetaRaiz\$($u.Usuario)"
 
         if (-not (Test-Path $carpetaUsuario)) {
-            Write-Host "  [AVISO] No existe la carpeta '$carpetaUsuario'." -ForegroundColor Yellow
-            Write-Host "          Ejecuta primero la opcion 5 (Cuotas FSRM)." -ForegroundColor Yellow
+            Write-Host "  [AVISO] No existe '$carpetaUsuario'. Ejecuta primero la opcion 5." -ForegroundColor Yellow
             $errores++
             continue
         }
 
         try {
             $screenExistente = Get-FsrmFileScreen -Path $carpetaUsuario -ErrorAction SilentlyContinue
-
             if ($screenExistente) {
                 Set-FsrmFileScreen -Path $carpetaUsuario -Template $plantillaNombre | Out-Null
                 Write-Host "  [ACTUALIZADO] $($u.Usuario) -> apantallamiento actualizado" -ForegroundColor Yellow
@@ -824,12 +814,11 @@ function Configurar-Apantallamiento {
 
 
 # ------------------------------------------------------------
-# FUNCION 7: Configurar AppLocker (hash automatico)
+# FUNCION 7: Configurar AppLocker (hash hardcodeado)
 #
-# Detecta automaticamente el hash de notepad.exe desde el
-# cliente Windows 10 (192.168.1.200) usando la ruta UNC.
-# Si no puede obtener el hash remoto, usa el hash conocido
-# del servidor como fallback.
+# Hash conocido de notepad.exe del cliente Windows 10 Pro:
+# 0x0C386FA6ABFDEFFBBEFF5BCE97D461340A23D1981458607BD9E5EEFF4066789A
+# Tamano: 201216 bytes
 #
 # Reglas:
 #   - Cuates   : notepad.exe PERMITIDO (reglas base)
@@ -856,6 +845,9 @@ function Configurar-AppLocker {
     Write-Host "    Cuates   : notepad.exe PERMITIDO (reglas base)" -ForegroundColor Cyan
     Write-Host "    NoCuates : notepad.exe BLOQUEADO por Hash" -ForegroundColor Cyan
     Write-Host ""
+    Write-Host "  Hash usado (notepad.exe Windows 10 Pro):" -ForegroundColor White
+    Write-Host "  0x0C386FA6ABFDEFFBBEFF5BCE97D461340A23D19..." -ForegroundColor DarkGray
+    Write-Host ""
     Write-Host "  La regla de Hash identifica el archivo por su" -ForegroundColor Yellow
     Write-Host "  contenido, no por su nombre. Renombrar el .exe" -ForegroundColor Yellow
     Write-Host "  no permite saltarse el bloqueo." -ForegroundColor Yellow
@@ -871,50 +863,21 @@ function Configurar-AppLocker {
 
     Write-Host ""
 
-    # --- Obtener SIDs de los grupos ---
-    Write-Host "  Obteniendo SIDs de los grupos..." -ForegroundColor Yellow
+    # --- Obtener SID de NoCuates ---
+    Write-Host "  Obteniendo SID del grupo NoCuates..." -ForegroundColor Yellow
     try {
         $sidNoCuates = (Get-ADGroup -Identity "NoCuates").SID.Value
         Write-Host "  [OK] SID NoCuates: $sidNoCuates" -ForegroundColor Green
     } catch {
-        Write-Host "  [ERROR] No se pudieron obtener los SIDs: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "  [ERROR] No se pudo obtener el SID: $($_.Exception.Message)" -ForegroundColor Red
         return
     }
 
-    # --- Intentar obtener hash del cliente Windows 10 automaticamente ---
-    Write-Host ""
-    Write-Host "  Intentando obtener hash de notepad.exe desde el cliente..." -ForegroundColor Yellow
-    Write-Host "  (Cliente Windows 10: 192.168.1.200)" -ForegroundColor White
-    Write-Host ""
+    # --- Hash hardcodeado del cliente Windows 10 Pro ---
+    $hashValor   = "0x0C386FA6ABFDEFFBBEFF5BCE97D461340A23D1981458607BD9E5EEFF4066789A"
+    $archivoSize = 201216
 
-    $hashValor   = $null
-    $archivoSize = $null
-
-    # Ruta UNC al notepad del cliente
-    $notepadRemoto = "\\192.168.1.200\C$\Windows\System32\notepad.exe"
-
-    try {
-        if (Test-Path $notepadRemoto -ErrorAction SilentlyContinue) {
-            $fileInfo    = Get-AppLockerFileInformation -Path $notepadRemoto -ErrorAction Stop
-            $hashValor   = $fileInfo.Hash.HashDataString
-            $archivoSize = (Get-Item $notepadRemoto).Length
-            Write-Host "  [OK] Hash obtenido desde el cliente automaticamente." -ForegroundColor Green
-            Write-Host "       Hash: $hashValor" -ForegroundColor DarkGray
-            Write-Host "       Tamano: $archivoSize bytes" -ForegroundColor DarkGray
-        } else {
-            Write-Host "  [AVISO] No se pudo acceder al cliente via UNC." -ForegroundColor Yellow
-            throw "Cliente no accesible"
-        }
-    } catch {
-        # Fallback: usar hash conocido del cliente Windows 10
-        Write-Host "  [AVISO] Usando hash conocido del cliente Windows 10 (fallback)." -ForegroundColor Yellow
-        $hashValor   = "0x0C386FA6ABFDEFFBBEFF5BCE97D461340A23D1981458607BD9E5EEFF4066789A"
-        $archivoSize = 201216
-        Write-Host "       Hash: $hashValor" -ForegroundColor DarkGray
-        Write-Host "       Tamano: $archivoSize bytes" -ForegroundColor DarkGray
-    }
-
-    # --- Construir XML de politica AppLocker ---
+    # --- Construir XML ---
     Write-Host ""
     Write-Host "  Construyendo politica AppLocker..." -ForegroundColor Yellow
 
@@ -959,13 +922,11 @@ function Configurar-AppLocker {
 </AppLockerPolicy>
 "@
 
-    # --- Guardar XML y aplicar a GPO ---
     $xmlPath = "C:\Windows\Temp\applocker_final.xml"
     $xmlPolicy | Out-File $xmlPath -Encoding UTF8 -Force
-
     Write-Host "  [OK] XML generado." -ForegroundColor Green
 
-    # Crear o actualizar GPO
+    # --- Crear o actualizar GPO ---
     Write-Host ""
     Write-Host "  Configurando GPO de AppLocker..." -ForegroundColor Yellow
 
@@ -981,13 +942,10 @@ function Configurar-AppLocker {
 
         $gpoId  = $gpo.Id.ToString()
         $dcBase = $dominio.DistinguishedName
-        $domain = $dominio.DNSRoot
 
-        # Aplicar politica AppLocker a la GPO via LDAP
         Set-AppLockerPolicy -XmlPolicy $xmlPath -Ldap "LDAP://CN={$gpoId},CN=Policies,CN=System,DC=practica8,DC=local"
         Write-Host "  [OK] Politica AppLocker aplicada a la GPO." -ForegroundColor Green
 
-        # Vincular GPO al dominio
         try {
             New-GPLink -Name $gpoNombre -Target $dcBase -ErrorAction Stop | Out-Null
             Write-Host "  [OK] GPO vinculada al dominio." -ForegroundColor Green
@@ -995,7 +953,7 @@ function Configurar-AppLocker {
             Write-Host "  [OK] GPO ya estaba vinculada al dominio." -ForegroundColor Yellow
         }
 
-        # Habilitar servicio AppIDSvc en el servidor
+        # Habilitar AppIDSvc
         Write-Host ""
         Write-Host "  Habilitando servicio AppIDSvc..." -ForegroundColor Yellow
         sc.exe config AppIDSvc start= auto | Out-Null
@@ -1003,7 +961,7 @@ function Configurar-AppLocker {
         Write-Host "  [OK] Servicio AppIDSvc configurado como Automatico." -ForegroundColor Green
 
     } catch {
-        Write-Host "  [ERROR] No se pudo configurar la GPO AppLocker: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "  [ERROR] No se pudo configurar la GPO: $($_.Exception.Message)" -ForegroundColor Red
         return
     }
 
@@ -1016,10 +974,9 @@ function Configurar-AppLocker {
     Write-Host "  +------------------------------------------+" -ForegroundColor Cyan
     Write-Host "  | IMPORTANTE: En el cliente Windows:       |" -ForegroundColor Yellow
     Write-Host "  | 1. Abrir PowerShell como Admin           |" -ForegroundColor Yellow
-    Write-Host "  | 2. Ejecutar: sc.exe config AppIDSvc      |" -ForegroundColor Yellow
-    Write-Host "  |             start= auto                  |" -ForegroundColor Yellow
-    Write-Host "  | 3. Ejecutar: sc.exe start AppIDSvc       |" -ForegroundColor Yellow
-    Write-Host "  | 4. Ejecutar: gpupdate /force             |" -ForegroundColor Yellow
+    Write-Host "  | 2. sc.exe config AppIDSvc start= auto    |" -ForegroundColor Yellow
+    Write-Host "  | 3. sc.exe start AppIDSvc                 |" -ForegroundColor Yellow
+    Write-Host "  | 4. gpupdate /force                       |" -ForegroundColor Yellow
     Write-Host "  | 5. Cerrar sesion y volver a entrar       |" -ForegroundColor Yellow
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host ""
