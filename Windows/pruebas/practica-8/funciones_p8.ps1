@@ -980,4 +980,292 @@ function Configurar-AppLocker {
     Write-Host "  | 5. Cerrar sesion y volver a entrar       |" -ForegroundColor Yellow
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host ""
+
+}
+
+# ------------------------------------------------------------
+# FUNCION 8: Crear usuario dinamicamente
+# Permite crear un usuario nuevo ingresando los datos
+# manualmente. Aplica automaticamente:
+#   - OU correcta (Cuates o NoCuates)
+#   - Horario de acceso correspondiente
+#   - Carpeta personal con cuota (5MB o 10MB)
+#   - Apantallamiento de archivos (.mp3 .mp4 .exe .msi)
+# ------------------------------------------------------------
+function Crear-UsuarioDinamico {
+
+    Write-Host ""
+    Write-Host "  +==========================================+" -ForegroundColor Cyan
+    Write-Host "  |       CREAR USUARIO DINAMICAMENTE        |" -ForegroundColor Cyan
+    Write-Host "  +==========================================+" -ForegroundColor Cyan
+    Write-Host ""
+
+    # --- Verificar que el servidor es DC ---
+    try {
+        $dominio = Get-ADDomain -ErrorAction Stop
+    } catch {
+        Write-Host "  [ERROR] Este servidor no es Domain Controller o AD no esta disponible." -ForegroundColor Red
+        Write-Host "  Ejecuta primero las opciones 1 y 2." -ForegroundColor Yellow
+        Write-Host ""
+        return
+    }
+
+    $dcBase      = $dominio.DistinguishedName
+    $carpetaRaiz = "C:\Usuarios"
+
+    # --- Pedir datos del usuario ---
+    Write-Host "  Ingresa los datos del nuevo usuario:" -ForegroundColor White
+    Write-Host ""
+
+    $nombre = Read-Host "  Nombre (ej: Juan)"
+    if ([string]::IsNullOrWhiteSpace($nombre)) {
+        Write-Host "  [ERROR] El nombre no puede estar vacio." -ForegroundColor Red
+        return
+    }
+
+    $apellido = Read-Host "  Apellido (ej: Garcia)"
+    if ([string]::IsNullOrWhiteSpace($apellido)) {
+        Write-Host "  [ERROR] El apellido no puede estar vacio." -ForegroundColor Red
+        return
+    }
+
+    $usuario = Read-Host "  Usuario (ej: jgarcia, sin espacios ni caracteres especiales)"
+    if ([string]::IsNullOrWhiteSpace($usuario)) {
+        Write-Host "  [ERROR] El usuario no puede estar vacio." -ForegroundColor Red
+        return
+    }
+    # Verificar que el usuario no existe
+    try {
+        Get-ADUser -Identity $usuario -ErrorAction Stop | Out-Null
+        Write-Host "  [ERROR] El usuario '$usuario' ya existe en el dominio." -ForegroundColor Red
+        return
+    } catch {
+        # No existe, podemos continuar
+    }
+
+    $password = Read-Host "  Password (ej: Password123!, minimo 8 caracteres con mayuscula, numero y simbolo)"
+    if ([string]::IsNullOrWhiteSpace($password)) {
+        Write-Host "  [ERROR] El password no puede estar vacio." -ForegroundColor Red
+        return
+    }
+
+    # --- Seleccionar departamento ---
+    Write-Host ""
+    Write-Host "  Departamento:" -ForegroundColor White
+    Write-Host "    1. Cuates   (horario 08:00-15:00, cuota 10 MB)" -ForegroundColor Cyan
+    Write-Host "    2. NoCuates (horario 15:00-02:00, cuota  5 MB)" -ForegroundColor Cyan
+    Write-Host ""
+    $deptoOpcion = Read-Host "  Selecciona el departamento (1 o 2)"
+
+    if ($deptoOpcion -eq "1") {
+        $departamento = "Cuates"
+    } elseif ($deptoOpcion -eq "2") {
+        $departamento = "NoCuates"
+    } else {
+        Write-Host "  [ERROR] Opcion invalida. Debes elegir 1 o 2." -ForegroundColor Red
+        return
+    }
+
+    # --- Confirmar datos ---
+    Write-Host ""
+    Write-Host "  +------------------------------------------+" -ForegroundColor Yellow
+    Write-Host "  | RESUMEN DEL USUARIO A CREAR              |" -ForegroundColor Yellow
+    Write-Host "  +------------------------------------------+" -ForegroundColor Yellow
+    Write-Host "  | Nombre      : $nombre $apellido" -ForegroundColor White
+    Write-Host "  | Usuario     : $usuario" -ForegroundColor White
+    Write-Host "  | UPN         : $usuario@practica8.local" -ForegroundColor White
+    Write-Host "  | Departamento: $departamento" -ForegroundColor White
+    if ($departamento -eq "Cuates") {
+        Write-Host "  | Horario     : 08:00 AM - 03:00 PM" -ForegroundColor White
+        Write-Host "  | Cuota       : 10 MB" -ForegroundColor White
+    } else {
+        Write-Host "  | Horario     : 03:00 PM - 02:00 AM" -ForegroundColor White
+        Write-Host "  | Cuota       :  5 MB" -ForegroundColor White
+    }
+    Write-Host "  | Apantallam. : .mp3 .mp4 .exe .msi bloq. |" -ForegroundColor White
+    Write-Host "  +------------------------------------------+" -ForegroundColor Yellow
+    Write-Host ""
+
+    $confirmar = Read-Host "  Confirmas la creacion del usuario? (s/n)"
+    if ($confirmar -ne "s") {
+        Write-Host ""
+        Write-Host "  Operacion cancelada por el usuario." -ForegroundColor Yellow
+        Write-Host ""
+        return
+    }
+
+    Write-Host ""
+
+    # ==========================================================
+    # PASO 1: Crear usuario en AD
+    # ==========================================================
+    Write-Host "  [1/5] Creando usuario en Active Directory..." -ForegroundColor Yellow
+    try {
+        $passwordSegura = ConvertTo-SecureString $password -AsPlainText -Force
+        $ouDestino      = "OU=$departamento,$dcBase"
+
+        New-ADUser `
+            -Name "$nombre $apellido" `
+            -GivenName $nombre `
+            -Surname $apellido `
+            -SamAccountName $usuario `
+            -UserPrincipalName "$usuario@practica8.local" `
+            -Path $ouDestino `
+            -AccountPassword $passwordSegura `
+            -Enabled $true `
+            -PasswordNeverExpires $true `
+            -ChangePasswordAtLogon $false
+
+        Write-Host "  [OK] Usuario '$usuario' creado en OU $departamento." -ForegroundColor Green
+    } catch {
+        Write-Host "  [ERROR] No se pudo crear el usuario: $($_.Exception.Message)" -ForegroundColor Red
+        return
+    }
+
+    # ==========================================================
+    # PASO 2: Agregar al grupo correspondiente
+    # ==========================================================
+    Write-Host ""
+    Write-Host "  [2/5] Agregando al grupo $departamento..." -ForegroundColor Yellow
+    try {
+        Add-ADGroupMember -Identity $departamento -Members $usuario -ErrorAction Stop
+        Write-Host "  [OK] Usuario agregado al grupo '$departamento'." -ForegroundColor Green
+    } catch {
+        Write-Host "  [AVISO] No se pudo agregar al grupo: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+
+    # ==========================================================
+    # PASO 3: Aplicar horario de acceso
+    # ==========================================================
+    Write-Host ""
+    Write-Host "  [3/5] Aplicando horario de acceso (UTC-7)..." -ForegroundColor Yellow
+
+    function Build-LogonHours {
+        param([int[]]$HorasUTC)
+        $bits = New-Object bool[] 168
+        for ($dia = 0; $dia -lt 7; $dia++) {
+            foreach ($hora in $HorasUTC) {
+                $bits[$dia * 24 + $hora] = $true
+            }
+        }
+        $bytes = New-Object byte[] 21
+        for ($i = 0; $i -lt 168; $i++) {
+            if ($bits[$i]) {
+                $bytes[[math]::Floor($i / 8)] = $bytes[[math]::Floor($i / 8)] -bor (1 -shl ($i % 8))
+            }
+        }
+        return $bytes
+    }
+
+    try {
+        if ($departamento -eq "Cuates") {
+            $horasUTC = @(15,16,17,18,19,20,21)
+        } else {
+            $horasUTC = @(22,23,0,1,2,3,4,5,6,7,8)
+        }
+
+        $bytesHorario = Build-LogonHours -HorasUTC $horasUTC
+        Set-ADUser -Identity $usuario -Clear logonHours
+        Set-ADUser -Identity $usuario -Replace @{logonHours = ([byte[]]$bytesHorario)}
+        Write-Host "  [OK] Horario aplicado correctamente." -ForegroundColor Green
+    } catch {
+        Write-Host "  [AVISO] No se pudo aplicar el horario: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+
+    # ==========================================================
+    # PASO 4: Crear carpeta y aplicar cuota FSRM
+    # ==========================================================
+    Write-Host ""
+    Write-Host "  [4/5] Creando carpeta y aplicando cuota FSRM..." -ForegroundColor Yellow
+
+    $carpetaUsuario = "$carpetaRaiz\$usuario"
+
+    # Crear carpeta si no existe
+    if (-not (Test-Path $carpetaUsuario)) {
+        try {
+            New-Item -Path $carpetaUsuario -ItemType Directory | Out-Null
+            Write-Host "  [OK] Carpeta creada: $carpetaUsuario" -ForegroundColor Green
+        } catch {
+            Write-Host "  [AVISO] No se pudo crear la carpeta: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host "  [OK] La carpeta ya existe: $carpetaUsuario" -ForegroundColor Yellow
+    }
+
+    # Aplicar cuota
+    try {
+        if ($departamento -eq "Cuates") {
+            $plantillaNombre = "Practica8-Cuates-10MB"
+            $tamanoBytes     = 10MB
+            $tamanoTexto     = "10 MB"
+        } else {
+            $plantillaNombre = "Practica8-NoCuates-5MB"
+            $tamanoBytes     = 5MB
+            $tamanoTexto     = "5 MB"
+        }
+
+        $cuotaExistente  = Get-FsrmQuota -Path $carpetaUsuario -ErrorAction SilentlyContinue
+        $existePlantilla = Get-FsrmQuotaTemplate -Name $plantillaNombre -ErrorAction SilentlyContinue
+
+        if ($cuotaExistente) {
+            if ($existePlantilla) {
+                Set-FsrmQuota -Path $carpetaUsuario -Template $plantillaNombre | Out-Null
+            } else {
+                Set-FsrmQuota -Path $carpetaUsuario -Size $tamanoBytes -SoftLimit:$false | Out-Null
+            }
+        } else {
+            if ($existePlantilla) {
+                New-FsrmQuota -Path $carpetaUsuario -Template $plantillaNombre | Out-Null
+            } else {
+                New-FsrmQuota -Path $carpetaUsuario -Size $tamanoBytes -SoftLimit:$false | Out-Null
+            }
+        }
+        Write-Host "  [OK] Cuota aplicada: $tamanoTexto" -ForegroundColor Green
+    } catch {
+        Write-Host "  [AVISO] No se pudo aplicar la cuota: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+
+    # ==========================================================
+    # PASO 5: Aplicar apantallamiento de archivos
+    # ==========================================================
+    Write-Host ""
+    Write-Host "  [5/5] Aplicando apantallamiento de archivos..." -ForegroundColor Yellow
+
+    $plantillaScreen = "Practica8-Apantallamiento"
+
+    try {
+        $plantillaExiste = Get-FsrmFileScreenTemplate -Name $plantillaScreen -ErrorAction SilentlyContinue
+        if (-not $plantillaExiste) {
+            Write-Host "  [AVISO] La plantilla de apantallamiento no existe." -ForegroundColor Yellow
+            Write-Host "          Ejecuta primero la opcion 6 para crearla." -ForegroundColor Yellow
+        } else {
+            $screenExistente = Get-FsrmFileScreen -Path $carpetaUsuario -ErrorAction SilentlyContinue
+            if ($screenExistente) {
+                Set-FsrmFileScreen -Path $carpetaUsuario -Template $plantillaScreen | Out-Null
+            } else {
+                New-FsrmFileScreen -Path $carpetaUsuario -Template $plantillaScreen | Out-Null
+            }
+            Write-Host "  [OK] Apantallamiento aplicado (.mp3 .mp4 .exe .msi bloqueados)." -ForegroundColor Green
+        }
+    } catch {
+        Write-Host "  [AVISO] No se pudo aplicar el apantallamiento: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+
+    # --- Resumen final ---
+    Write-Host ""
+    Write-Host "  +==========================================+" -ForegroundColor Cyan
+    Write-Host "  | USUARIO CREADO EXITOSAMENTE              |" -ForegroundColor Cyan
+    Write-Host "  +------------------------------------------+" -ForegroundColor Cyan
+    Write-Host "  | Usuario     : $usuario@practica8.local" -ForegroundColor Green
+    Write-Host "  | Departamento: $departamento" -ForegroundColor Green
+    Write-Host "  | Carpeta     : $carpetaUsuario" -ForegroundColor Green
+    Write-Host "  +------------------------------------------+" -ForegroundColor Cyan
+    Write-Host "  | Configuraciones aplicadas:               |" -ForegroundColor White
+    Write-Host "  |   [OK] Usuario en AD                     |" -ForegroundColor Green
+    Write-Host "  |   [OK] Grupo de seguridad                |" -ForegroundColor Green
+    Write-Host "  |   [OK] Horario de acceso                 |" -ForegroundColor Green
+    Write-Host "  |   [OK] Cuota FSRM                        |" -ForegroundColor Green
+    Write-Host "  |   [OK] Apantallamiento de archivos       |" -ForegroundColor Green
+    Write-Host "  +==========================================+" -ForegroundColor Cyan
+    Write-Host ""
 }
