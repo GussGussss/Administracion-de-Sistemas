@@ -33,6 +33,7 @@ do {
     Write-Host "  |  5. Configurar cuotas FSRM               |" -ForegroundColor White
     Write-Host "  |  6. Configurar apantallamiento FSRM      |" -ForegroundColor White
     Write-Host "  |  7. Configurar AppLocker                 |" -ForegroundColor White
+    Write-Host "  |  8. Crear usuario dinamicamente          |" -ForegroundColor White
     Write-Host "  |                                          |" -ForegroundColor Cyan
     Write-Host "  |  0. Salir                                |" -ForegroundColor Yellow
     Write-Host "  |                                          |" -ForegroundColor Cyan
@@ -49,6 +50,7 @@ do {
         "5" { Configurar-CuotasFSRM }
         "6" { Configurar-Apantallamiento }
         "7" { Configurar-AppLocker }
+        "8" { Crear-UsuarioDinamico }
         "0" { Write-Host "`n  Saliendo...`n" -ForegroundColor Yellow }
         default { Write-Host "`n  Opcion invalida, intenta de nuevo." -ForegroundColor Red; pause }
     }
