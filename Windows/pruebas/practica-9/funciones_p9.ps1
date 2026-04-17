@@ -107,3 +107,78 @@ function Crear-UsuariosAdmin {
     Write-Host "`n  Presiona Enter para volver al menu..." -ForegroundColor Cyan
     Pause | Out-Null
 }
+
+# ------------------------------------------------------------
+# FUNCION 3: Aplicar Permisos RBAC y Delegacion
+# ------------------------------------------------------------
+function Aplicar-PermisosRBAC {
+    Write-Host "`n  +==========================================+" -ForegroundColor Cyan
+    Write-Host "  |    APLICAR PERMISOS RBAC Y DELEGACION    |" -ForegroundColor Cyan
+    Write-Host "  +==========================================+`n" -ForegroundColor Cyan
+
+    try {
+        $dominio = Get-ADDomain -ErrorAction Stop
+    } catch {
+        Write-Host "  [ERROR] El servidor no es Domain Controller o no hay conexion a AD." -ForegroundColor Red
+        Pause | Out-Null
+        return
+    }
+
+    $dcBase  = $dominio.DistinguishedName
+    $netbios = $dominio.NetBIOSName
+
+    # =========================================================
+    # ROL 1: Operador de Identidad (admin_identidad)
+    # Tareas: Gestion total sobre objetos 'user' en OUs Cuates y NoCuates
+    # =========================================================
+    Write-Host "  Configurando Rol 1: admin_identidad..." -ForegroundColor Yellow
+    # /I:T significa "Inherit To All Subobjects" (heredar a todo). 
+    # GA = Generic All (Control Total), pero restringido EXCLUSIVAMENTE a la clase ;user
+    dsacls "OU=Cuates,$dcBase" /I:T /G "$netbios\admin_identidad:GA;;user" | Out-Null
+    dsacls "OU=NoCuates,$dcBase" /I:T /G "$netbios\admin_identidad:GA;;user" | Out-Null
+    Write-Host "  [OK] admin_identidad: Control total sobre usuarios en OUs asignado." -ForegroundColor Green
+
+    # =========================================================
+    # ROL 2: Operador de Almacenamiento (admin_storage)
+    # Restriccion: DENEGAR permiso de Resetear Contrasenas
+    # =========================================================
+    Write-Host "`n  Configurando Rol 2: admin_storage..." -ForegroundColor Yellow
+    # /D es Deny (Denegar). CA es Control Access.
+    # Esta regla se aplica a la raiz del dominio y se hereda hacia abajo, bloqueando el Reset.
+    dsacls "$dcBase" /I:S /D "$netbios\admin_storage:CA;Reset Password;user" | Out-Null
+    Write-Host "  [OK] admin_storage: DENEGADO explicito para Resetear Contrasenas (Test 1 listo)." -ForegroundColor Green
+
+    # =========================================================
+    # ROL 3: Admin de Politicas (admin_politicas)
+    # Tareas: Modificar GPOs existentes y vincularlas
+    # =========================================================
+    Write-Host "`n  Configurando Rol 3: admin_politicas..." -ForegroundColor Yellow
+    # 1. Agregarlo al grupo nativo para que pueda editar objetos GPO (Group Policy Creator Owners)
+    try {
+        Add-ADGroupMember -Identity "Group Policy Creator Owners" -Members "admin_politicas" -ErrorAction Stop
+        Write-Host "  [OK] admin_politicas: Agregado a 'Group Policy Creator Owners'." -ForegroundColor Green
+    } catch {
+        Write-Host "  [AVISO] admin_politicas ya pertenece a 'Group Policy Creator Owners' o hubo un problema." -ForegroundColor DarkGray
+    }
+    
+    # 2. Darle permiso para Vincular (Link) GPOs en las OUs. gPLink es el atributo que controla esto.
+    dsacls "OU=Cuates,$dcBase" /I:T /G "$netbios\admin_politicas:RPWP;gPLink" | Out-Null
+    dsacls "OU=NoCuates,$dcBase" /I:T /G "$netbios\admin_politicas:RPWP;gPLink" | Out-Null
+    Write-Host "  [OK] admin_politicas: Permiso para vincular GPOs a OUs asignado." -ForegroundColor Green
+
+    # =========================================================
+    # ROL 4: Auditor de Seguridad (admin_auditoria)
+    # Tareas: Lectura de logs (Security Logs). Sin permisos de escritura.
+    # =========================================================
+    Write-Host "`n  Configurando Rol 4: admin_auditoria..." -ForegroundColor Yellow
+    # El grupo nativo 'Event Log Readers' permite leer los Eventos de Seguridad sin ser admin.
+    try {
+        Add-ADGroupMember -Identity "Event Log Readers" -Members "admin_auditoria" -ErrorAction Stop
+        Write-Host "  [OK] admin_auditoria: Agregado a 'Event Log Readers'." -ForegroundColor Green
+    } catch {
+        Write-Host "  [AVISO] admin_auditoria ya pertenece a 'Event Log Readers'." -ForegroundColor DarkGray
+    }
+
+    Write-Host "`n  Presiona Enter para volver al menu..." -ForegroundColor Cyan
+    Pause | Out-Null
+}
