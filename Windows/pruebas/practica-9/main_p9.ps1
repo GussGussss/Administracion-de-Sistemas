@@ -24,7 +24,7 @@ do {
     Write-Host "  |                                          |" -ForegroundColor Cyan
     Write-Host "  |  1. Preparar Entorno y Descargar MFA     |" -ForegroundColor White
     Write-Host "  |  2. Crear Usuarios de Administracion     |" -ForegroundColor White
-    Write-Host "  |  3. [Pendiente] Aplicar Permisos RBAC    |" -ForegroundColor DarkGray
+    Write-Host "  |  3. Aplicar Permisos RBAC                |" -ForegroundColor White
     Write-Host "  |  4. [Pendiente] Configurar FGPP          |" -ForegroundColor DarkGray
     Write-Host "  |  5. [Pendiente] Configurar Auditoria     |" -ForegroundColor DarkGray
     Write-Host "  |  6. [Pendiente] Instalar y Activar MFA   |" -ForegroundColor DarkGray
