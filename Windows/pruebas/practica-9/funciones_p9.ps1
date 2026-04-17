@@ -422,7 +422,7 @@ function Instalar-MFA {
         }
     }
 
-    # 2. Buscar el instalador (.exe o .msi). Tomaremos el mas pesado (el instalador real)
+    # 2. Buscar el instalador (.exe o .msi). Tomaremos el mas pesado
     $instaladores = Get-ChildItem -Path $rutaDescarga -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Extension -match "\.(exe|msi)$" } | Sort-Object Length -Descending
     $instalador = $instaladores | Select-Object -First 1
     
@@ -434,24 +434,21 @@ function Instalar-MFA {
     }
 
     Write-Host "  [INFO] Encontrado instalador: $($instalador.Name) ($([math]::Round($instalador.Length / 1MB, 2)) MB)" -ForegroundColor Cyan
-    Write-Host "  [INFO] Instalando multiOTP Credential Provider en modo silencioso..." -ForegroundColor Yellow
+    Write-Host "  [INFO] Lanzando instalador CON INTERFAZ GRAFICA. Revisa las ventanas de instalacion..." -ForegroundColor Yellow
     
     try {
-        # CORRECCION: Diferenciar la forma de instalar un EXE vs un MSI
+        # CORRECCION: Quitar modos silenciosos (/qn y /S) para depurar la instalacion visualmente
         if ($instalador.Extension -eq ".msi") {
-            # Los MSI requieren llamar a msiexec.exe explicitamente
-            $argumentos = "/i `"$($instalador.FullName)`" /qn"
-            $procesoInstalacion = Start-Process -FilePath "msiexec.exe" -ArgumentList $argumentos -Wait -PassThru -NoNewWindow
+            $argumentos = "/i `"$($instalador.FullName)`""
+            $procesoInstalacion = Start-Process -FilePath "msiexec.exe" -ArgumentList $argumentos -Wait -PassThru
         } else {
-            # Los EXE se pueden llamar directamente
-            $procesoInstalacion = Start-Process -FilePath $instalador.FullName -ArgumentList "/S" -Wait -PassThru -NoNewWindow
+            $procesoInstalacion = Start-Process -FilePath $instalador.FullName -Wait -PassThru
         }
         
         if ($procesoInstalacion.ExitCode -eq 0) {
             Write-Host "  [OK] MFA instalado correctamente en el sistema." -ForegroundColor Green
         } else {
             Write-Host "  [AVISO] El instalador termino con codigo $($procesoInstalacion.ExitCode)." -ForegroundColor Yellow
-            Write-Host "  Continuando de todas formas (puede requerir reinicio)..." -ForegroundColor Yellow
         }
     } catch {
         Write-Host "  [ERROR] Fallo la ejecucion del instalador: $($_.Exception.Message)" -ForegroundColor Red
@@ -463,12 +460,11 @@ function Instalar-MFA {
     $rutaMultiOTP = "C:\multiOTP"
     $exeMultiOTP = "$rutaMultiOTP\multiotp.exe"
 
-    # Darle unos segundos al sistema por si la instalacion esta terminando en segundo plano
     Start-Sleep -Seconds 3
 
     if (-not (Test-Path $exeMultiOTP)) {
         Write-Host "  [ERROR] No se encuentra el motor de multiOTP en $rutaMultiOTP." -ForegroundColor Red
-        Write-Host "  Es posible que la instalacion silenciosa haya fallado." -ForegroundColor Red
+        Write-Host "  Revisa si el instalador lo coloco en otra ruta (como C:\Program Files\multiOTP...)" -ForegroundColor Red
         Pause | Out-Null
         return
     }
@@ -500,7 +496,6 @@ function Instalar-MFA {
             Write-Host "     para ver el Codigo QR y escanearlo con la app:" -ForegroundColor White
             Write-Host "     $urlQR`n" -ForegroundColor Cyan
         } else {
-            # Si no hay URL, dar el codigo en texto
             $claveSecreta = & $exeMultiOTP -user-info $usuarioMFA | Where-Object { $_ -match "TOTP secret" }
             Write-Host "`n  1. Ingresa esta clave secreta manualmente en tu app:" -ForegroundColor White
             Write-Host "     $claveSecreta`n" -ForegroundColor Cyan
@@ -508,7 +503,6 @@ function Instalar-MFA {
         
         Write-Host "  2. IMPORTANTE: Antes de cerrar sesion para probarlo," -ForegroundColor Yellow
         Write-Host "     asegurate de tener tu codigo listo en el celular." -ForegroundColor Yellow
-        Write-Host "  3. Puede que necesites reiniciar el servidor para que la pantalla de inicio de sesion cambie." -ForegroundColor Yellow
         
     } catch {
         Write-Host "  [ERROR] Fallo al configurar el usuario en multiOTP: $($_.Exception.Message)" -ForegroundColor Red
