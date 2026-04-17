@@ -1,0 +1,1 @@
+write-host "funciones practica 9"

@@ -1,0 +1,1 @@
+write-host "main practica 9"
