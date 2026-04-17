@@ -319,90 +319,6 @@ function Configurar-FGPP {
 
 
 # ------------------------------------------------------------
-# FUNCION 5: Configurar Auditoria y Script de Monitoreo
-# ------------------------------------------------------------
-function Configurar-Auditoria {
-    Write-Host "`n  +==========================================+" -ForegroundColor Cyan
-    Write-Host "  |    HARDENING DE AUDITORIA Y EXTRACCION   |" -ForegroundColor Cyan
-    Write-Host "  +==========================================+`n" -ForegroundColor Cyan
-
-    # =========================================================
-    # PARTE 1: Habilitar Politicas de Auditoria (auditpol)
-    # =========================================================
-    Write-Host "  [1/2] Configurando politicas de auditoria avanzada..." -ForegroundColor Yellow
-    
-    try {
-        # Habilitar auditoria de Logon/Logoff (Inicio de sesion)
-        auditpol /set /subcategory:"Logon" /success:enable /failure:enable | Out-Null
-        
-        # Opcional (pero recomendado para buenas practicas): Auditoria de Acceso a Objetos
-        auditpol /set /subcategory:"File System" /success:enable /failure:enable | Out-Null
-        
-        Write-Host "  [OK] Auditoria habilitada exitosamente. El servidor ahora registra intentos de acceso." -ForegroundColor Green
-    } catch {
-        Write-Host "  [ERROR] No se pudo configurar auditpol: $($_.Exception.Message)" -ForegroundColor Red
-        Pause | Out-Null
-        return
-    }
-
-    # =========================================================
-    # PARTE 2: Script de Extraccion (Ultimos 10 eventos 4625)
-    # =========================================================
-    Write-Host "`n  [2/2] Ejecutando extraccion de Logs de Seguridad (ID 4625)..." -ForegroundColor Yellow
-    
-    $rutaReporte = "C:\MFA_Setup\Reporte_AccesosDenegados.txt"
-    $eventosMax = 10
-
-    try {
-        # Extraer eventos usando Get-WinEvent (es mucho mas rapido que Get-EventLog)
-        $eventos = Get-WinEvent -FilterHashtable @{LogName='Security'; Id=4625} -MaxEvents $eventosMax -ErrorAction SilentlyContinue
-
-        if (-not $eventos) {
-            Write-Host "  [AVISO] No se encontraron eventos de Acceso Denegado (ID 4625) en el registro." -ForegroundColor Yellow
-            Write-Host "  Esto es normal si nadie se ha equivocado de contrasena recientemente." -ForegroundColor Yellow
-            
-            # Generar reporte vacio para cumplir la practica
-            "==================================================" | Out-File $rutaReporte
-            "REPORTE DE AUDITORIA - ACCESOS DENEGADOS (ID 4625)" | Out-File $rutaReporte -Append
-            "Fecha de generacion: $(Get-Date)" | Out-File $rutaReporte -Append
-            "==================================================" | Out-File $rutaReporte -Append
-            "No se encontraron intentos fallidos recientes." | Out-File $rutaReporte -Append
-            
-        } else {
-            "==================================================" | Out-File $rutaReporte
-            "REPORTE DE AUDITORIA - ACCESOS DENEGADOS (ID 4625)" | Out-File $rutaReporte -Append
-            "Fecha de generacion: $(Get-Date)" | Out-File $rutaReporte -Append
-            "Eventos extraidos: $($eventos.Count)" | Out-File $rutaReporte -Append
-            "==================================================`n" | Out-File $rutaReporte -Append
-
-            foreach ($e in $eventos) {
-                # El mensaje del evento es largo, extraemos solo lo importante
-                $mensajeCorto = ($e.Message -split "`r`n")[0..5] -join " | "
-                
-                "FECHA   : $($e.TimeCreated)" | Out-File $rutaReporte -Append
-                "ID      : $($e.Id)" | Out-File $rutaReporte -Append
-                "DETALLE : $mensajeCorto" | Out-File $rutaReporte -Append
-                "--------------------------------------------------" | Out-File $rutaReporte -Append
-            }
-        }
-        
-        Write-Host "  [OK] Reporte generado exitosamente en: $rutaReporte" -ForegroundColor Green
-        
-        # Mostrar el contenido del reporte en pantalla
-        Write-Host "`n  --- CONTENIDO DEL REPORTE ---" -ForegroundColor Cyan
-        Get-Content $rutaReporte | Write-Host -ForegroundColor White
-        Write-Host "  -----------------------------" -ForegroundColor Cyan
-
-    } catch {
-        Write-Host "  [ERROR] Fallo la extraccion de eventos: $($_.Exception.Message)" -ForegroundColor Red
-    }
-
-    Write-Host "`n  Presiona Enter para volver al menu..." -ForegroundColor Cyan
-    Pause | Out-Null
-}
-
-
-# ------------------------------------------------------------
 # FUNCION 6: Instalar y Activar MFA (Google Authenticator)
 # ------------------------------------------------------------
 function Instalar-MFA {
@@ -412,76 +328,98 @@ function Instalar-MFA {
 
     $rutaDescarga = "C:\MFA_Setup"
     
-    # 1. Verificar si hay zips que no se han descomprimido
+    # =========================================================
+    # PASO 1: INSTALAR DEPENDENCIA (Visual C++ Redistributable)
+    # =========================================================
+    Write-Host "  [1/3] Verificando pre-requisitos (Visual C++ Redistributable)..." -ForegroundColor Yellow
+    $vcRedistUrl = "https://aka.ms/vs/16/release/vc_redist.x64.exe"
+    $vcRedistPath = "$rutaDescarga\vc_redist.x64.exe"
+    
+    if (-not (Test-Path $vcRedistPath)) {
+        Write-Host "  [INFO] Descargando VC++ Redistributable..." -ForegroundColor Cyan
+        try {
+            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+            Invoke-WebRequest -Uri $vcRedistUrl -OutFile $vcRedistPath -UseBasicParsing
+        } catch {
+            Write-Host "  [ERROR] Fallo la descarga de VC++: $($_.Exception.Message)" -ForegroundColor Red
+            Pause | Out-Null
+            return
+        }
+    }
+    
+    Write-Host "  [INFO] Instalando VC++ silenciosamente..." -ForegroundColor Cyan
+    # Codigos de salida normales: 0 (Exito), 1638 (Ya instalado), 3010 (Requiere reinicio)
+    $procVC = Start-Process -FilePath $vcRedistPath -ArgumentList "/install /quiet /norestart" -Wait -PassThru
+    if ($procVC.ExitCode -in @(0, 1638, 3010)) {
+        Write-Host "  [OK] VC++ Redistributable listo." -ForegroundColor Green
+    } else {
+        Write-Host "  [AVISO] VC++ termino con codigo $($procVC.ExitCode). Podria fallar el MFA." -ForegroundColor Yellow
+    }
+
+    # =========================================================
+    # PASO 2: EXTRAER E INSTALAR MULTIOTP
+    # =========================================================
+    Write-Host "`n  [2/3] Preparando instalador de multiOTP..." -ForegroundColor Yellow
     $archivosZip = Get-ChildItem -Path $rutaDescarga -Filter "*.zip" -ErrorAction SilentlyContinue
     
     foreach ($zip in $archivosZip) {
         $rutaDestinoZip = "$rutaDescarga\Extracted_$($zip.BaseName)"
         if (-not (Test-Path $rutaDestinoZip)) {
-            Write-Host "  [INFO] Descomprimiendo $($zip.Name)..." -ForegroundColor Yellow
             Expand-Archive -Path $zip.FullName -DestinationPath $rutaDestinoZip -Force
         }
     }
 
-    # 2. Buscar el instalador (.exe o .msi). Tomaremos el mas pesado
-    $instaladores = Get-ChildItem -Path $rutaDescarga -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Extension -match "\.(exe|msi)$" } | Sort-Object Length -Descending
+    # Buscar el instalador, asegurandonos de NO agarrar el vc_redist que acabamos de bajar
+    $instaladores = Get-ChildItem -Path $rutaDescarga -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Extension -match "\.(exe|msi)$" -and $_.Name -notmatch "vc_redist" } | Sort-Object Length -Descending
     $instalador = $instaladores | Select-Object -First 1
     
     if (-not $instalador) {
-        Write-Host "  [ERROR] No se encontro ningun instalador .exe o .msi en la carpeta." -ForegroundColor Red
-        Write-Host "  Ejecuta la Opcion 1 asegurandote de tener internet para descargarlo." -ForegroundColor Yellow
+        Write-Host "  [ERROR] No se encontro el instalador de multiOTP." -ForegroundColor Red
         Pause | Out-Null
         return
     }
 
-    Write-Host "  [INFO] Encontrado instalador: $($instalador.Name) ($([math]::Round($instalador.Length / 1MB, 2)) MB)" -ForegroundColor Cyan
-    Write-Host "  [INFO] Lanzando instalador CON INTERFAZ GRAFICA. Revisa las ventanas de instalacion..." -ForegroundColor Yellow
-    
+    Write-Host "  [INFO] Instalando $($instalador.Name) en modo silencioso..." -ForegroundColor Cyan
     try {
-        # CORRECCION: Ejecutar el MSI usando el operador de llamada '&' nativo de la consola
+        # VOLVEMOS AL MODO SILENCIOSO AHORA QUE YA TIENE SUS REQUISITOS
         if ($instalador.Extension -eq ".msi") {
-            # Se abre la interfaz grafica normal del MSI
-            $proceso = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i `"$($instalador.FullName)`"" -Wait -PassThru
+            $argumentos = "/i `"$($instalador.FullName)`" /qn"
+            $procesoInstalacion = Start-Process -FilePath "msiexec.exe" -ArgumentList $argumentos -Wait -PassThru
         } else {
-            $proceso = Start-Process -FilePath $instalador.FullName -Wait -PassThru
+            $procesoInstalacion = Start-Process -FilePath $instalador.FullName -ArgumentList "/S" -Wait -PassThru
         }
         
-        if ($proceso.ExitCode -eq 0) {
-            Write-Host "  [OK] Instalador finalizado correctamente." -ForegroundColor Green
+        if ($procesoInstalacion.ExitCode -eq 0) {
+            Write-Host "  [OK] MFA instalado correctamente en el sistema." -ForegroundColor Green
         } else {
-            Write-Host "  [AVISO] El instalador termino con codigo $($proceso.ExitCode). Revisa si hubo algun error visual." -ForegroundColor Yellow
+            Write-Host "  [AVISO] El instalador MFA termino con codigo $($procesoInstalacion.ExitCode)." -ForegroundColor Yellow
         }
     } catch {
-        Write-Host "  [ERROR] Fallo la ejecucion del instalador: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "  [ERROR] Fallo instalacion MFA: $($_.Exception.Message)" -ForegroundColor Red
         Pause | Out-Null
         return
     }
 
-    # multiOTP se instala por defecto en esta ruta
     $rutaMultiOTP = "C:\multiOTP"
     $exeMultiOTP = "$rutaMultiOTP\multiotp.exe"
 
     Start-Sleep -Seconds 3
 
     if (-not (Test-Path $exeMultiOTP)) {
-        Write-Host "  [ERROR] No se encuentra el motor de multiOTP en $rutaMultiOTP." -ForegroundColor Red
-        Write-Host "  Revisa si cancelaste la instalacion o si la instalaste en otra ruta." -ForegroundColor Red
+        Write-Host "  [ERROR] No se encuentra multiotp.exe en $rutaMultiOTP." -ForegroundColor Red
         Pause | Out-Null
         return
     }
 
     # =========================================================
-    # CONFIGURAR MFA PARA EL ADMINISTRADOR
+    # PASO 3: CONFIGURAR MFA PARA EL ADMINISTRADOR
     # =========================================================
-    Write-Host "`n  Configurando MFA para la cuenta actual (Administrator)..." -ForegroundColor Yellow
-    
+    Write-Host "`n  [3/3] Configurando MFA para Administrator..." -ForegroundColor Yellow
     $usuarioMFA = "Administrator"
     
     try {
-        # 1. Crear el usuario en la base de datos local de multiOTP
         & $exeMultiOTP -fastcreatenopin $usuarioMFA | Out-Null
         
-        # 2. Generar el secreto TOTP (Google Authenticator)
         Write-Host "  [OK] Generando clave secreta TOTP..." -ForegroundColor Green
         $resultadoQR = & $exeMultiOTP -display-user-qrcode $usuarioMFA
         
@@ -489,12 +427,10 @@ function Instalar-MFA {
         Write-Host "  |  ATENCION: ESCANEA ESTO CON GOOGLE AUTHENTICATOR EN TU CEL  |" -ForegroundColor Magenta
         Write-Host "  +-------------------------------------------------------------+" -ForegroundColor Magenta
         
-        # Filtrar la URL web
         $urlQR = $resultadoQR | Where-Object { $_ -match "http" }
         
         if ($urlQR) {
-            Write-Host "`n  1. Abre este enlace en un navegador web en tu PC principal" -ForegroundColor White
-            Write-Host "     para ver el Codigo QR y escanearlo con la app:" -ForegroundColor White
+            Write-Host "`n  1. Abre este enlace en tu navegador para ver tu Codigo QR:" -ForegroundColor White
             Write-Host "     $urlQR`n" -ForegroundColor Cyan
         } else {
             $claveSecreta = & $exeMultiOTP -user-info $usuarioMFA | Where-Object { $_ -match "TOTP secret" }
@@ -502,11 +438,10 @@ function Instalar-MFA {
             Write-Host "     $claveSecreta`n" -ForegroundColor Cyan
         }
         
-        Write-Host "  2. IMPORTANTE: Antes de cerrar sesion para probarlo," -ForegroundColor Yellow
-        Write-Host "     asegurate de tener tu codigo listo en el celular." -ForegroundColor Yellow
+        Write-Host "  2. IMPORTANTE: Ten tu celular a la mano antes de cerrar sesion." -ForegroundColor Yellow
         
     } catch {
-        Write-Host "  [ERROR] Fallo al configurar el usuario en multiOTP: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "  [ERROR] Fallo configuracion de usuario: $($_.Exception.Message)" -ForegroundColor Red
     }
 
     Write-Host "`n  Presiona Enter para volver al menu..." -ForegroundColor Cyan
