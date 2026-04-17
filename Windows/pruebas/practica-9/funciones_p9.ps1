@@ -34,19 +34,31 @@ function Preparar-EntornoMFA {
         }
     }
 
-    # 3. Descargar si es necesario
+# 3. Descargar si es necesario
     if ($procederDescarga) {
         Write-Host "  [INFO] Descargando multiOTP Credential Provider. Esto puede tomar un momento..." -ForegroundColor Cyan
+        
+        # Forzar protocolos de seguridad modernos (TLS 1.2)
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        
         try {
-            # === CORRECCION APLICADA: Forzar protocolo TLS 1.2 para GitHub ===
-            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+            # PLAN A: Disfrazar PowerShell como navegador (ESTO ES CLAVE PARA GITHUB)
+            $headers = @{ "User-Agent" = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/114.0.0.0 Safari/537.36" }
             
-            # Se usa UseBasicParsing porque Server Core no tiene Internet Explorer engine
-            Invoke-WebRequest -Uri $urlMFA -OutFile $archivoInstalador -UseBasicParsing
-            Write-Host "  [OK] Descarga completada exitosamente." -ForegroundColor Green
+            Invoke-WebRequest -Uri $urlMFA -OutFile $archivoInstalador -UseBasicParsing -Headers $headers
+            Write-Host "  [OK] Descarga completada exitosamente (Plan A)." -ForegroundColor Green
         } catch {
-            Write-Host "  [ERROR] Fallo la descarga. Verifica que el servidor tenga salida a internet." -ForegroundColor Red
-            Write-Host "  Detalle: $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host "  [AVISO] Fallo Invoke-WebRequest. Intentando Plan B (.NET WebClient)..." -ForegroundColor Yellow
+            try {
+                # PLAN B: Usar WebClient nativo de .NET con User-Agent inyectado
+                $webClient = New-Object System.Net.WebClient
+                $webClient.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                $webClient.DownloadFile($urlMFA, $archivoInstalador)
+                Write-Host "  [OK] Descarga completada exitosamente (Plan B)." -ForegroundColor Green
+            } catch {
+                Write-Host "  [ERROR] Ambos metodos fallaron." -ForegroundColor Red
+                Write-Host "  Detalle final: $($_.Exception.Message)" -ForegroundColor Red
+            }
         }
     }
 
