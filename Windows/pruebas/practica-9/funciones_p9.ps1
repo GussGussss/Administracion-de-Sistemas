@@ -422,23 +422,25 @@ function Instalar-MFA {
         }
     }
 
-    # 2. Buscar el instalador .exe recursivamente (por si esta dentro de carpetas extraidas)
-    # Filtramos para asegurarnos de que el nombre del exe contenga "multiOTP" y no agarrar otro exe perdido
-    $instalador = Get-ChildItem -Path $rutaDescarga -Filter "*multiOTP*.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+    # 2. Buscar el instalador (.exe o .msi). Tomaremos el mas pesado (el instalador real)
+    $instaladores = Get-ChildItem -Path $rutaDescarga -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Extension -match "\.(exe|msi)$" } | Sort-Object Length -Descending
+    $instalador = $instaladores | Select-Object -First 1
     
     if (-not $instalador) {
-        Write-Host "  [ERROR] No se encontro el instalador .exe de multiOTP ni en zips ni en carpetas." -ForegroundColor Red
+        Write-Host "  [ERROR] No se encontro ningun instalador .exe o .msi en la carpeta." -ForegroundColor Red
         Write-Host "  Ejecuta la Opcion 1 asegurandote de tener internet para descargarlo." -ForegroundColor Yellow
         Pause | Out-Null
         return
     }
 
-    Write-Host "  [INFO] Encontrado instalador: $($instalador.Name)" -ForegroundColor Cyan
+    Write-Host "  [INFO] Encontrado instalador: $($instalador.Name) ($([math]::Round($instalador.Length / 1MB, 2)) MB)" -ForegroundColor Cyan
     Write-Host "  [INFO] Instalando multiOTP Credential Provider en modo silencioso..." -ForegroundColor Yellow
     
     try {
-        # Instalar en modo silencioso
-        $procesoInstalacion = Start-Process -FilePath $instalador.FullName -ArgumentList "/S" -Wait -PassThru -NoNewWindow
+        # Instalar en modo silencioso (/S para exes, /qn para msi)
+        $argumentoSilencioso = if ($instalador.Extension -eq ".msi") { "/i `"$($instalador.FullName)`" /qn" } else { "/S" }
+        
+        $procesoInstalacion = Start-Process -FilePath $instalador.FullName -ArgumentList $argumentoSilencioso -Wait -PassThru -NoNewWindow
         
         if ($procesoInstalacion.ExitCode -eq 0) {
             Write-Host "  [OK] MFA instalado correctamente en el sistema." -ForegroundColor Green
