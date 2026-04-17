@@ -27,7 +27,7 @@ do {
     Write-Host "  |  3. Aplicar Permisos RBAC                |" -ForegroundColor White
     Write-Host "  |  4. Configurar FGPP                      |" -ForegroundColor White
     Write-Host "  |  5. Configurar Auditoria                 |" -ForegroundColor White
-    Write-Host "  |  6. [Pendiente] Instalar y Activar MFA   |" -ForegroundColor DarkGray
+    Write-Host "  |  6. Instalar y Activar MFA               |" -ForegroundColor White
     Write-Host "  |                                          |" -ForegroundColor Cyan
     Write-Host "  |  0. Salir                                |" -ForegroundColor Yellow
     Write-Host "  |                                          |" -ForegroundColor Cyan
@@ -42,7 +42,7 @@ do {
         "3" { Aplicar-PermisosRBAC }
         "4" { Configurar-FGPP }
         "5" { Configurar-Auditoria }
-        "6" { Write-Host "`n  [INFO] Funcion en construccion...`n" -ForegroundColor Yellow; pause }
+        "6" { Instalar-MFA }
         "0" { Write-Host "`n  Saliendo...`n" -ForegroundColor Yellow }
         default { Write-Host "`n  Opcion invalida, intenta de nuevo." -ForegroundColor Red; pause }
     }
