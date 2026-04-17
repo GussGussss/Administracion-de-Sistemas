@@ -403,7 +403,7 @@ function Instalar-MFA {
 
     Start-Sleep -Seconds 5
 
-    # =========================================================
+# =========================================================
     # PASO 3: RASTREAR MOTOR Y CONFIGURAR ADMINISTRADOR
     # =========================================================
     Write-Host "`n  [3/3] Buscando motor de configuracion (multiotp.exe)..." -ForegroundColor Yellow
@@ -436,25 +436,22 @@ function Instalar-MFA {
         & "$exeMultiOTP" -fastcreatenopin $usuarioMFA | Out-Null
         
         Write-Host "  [OK] Generando clave secreta TOTP..." -ForegroundColor Green
-        $resultadoQR = & "$exeMultiOTP" -display-user-qrcode $usuarioMFA
+        
+        # 2. Obtener la informacion CRUDA del sistema (sin filtros que nos oculten cosas)
+        $qrCrudo = & "$exeMultiOTP" -display-user-qrcode $usuarioMFA 2>&1
+        $infoCruda = & "$exeMultiOTP" -user-info $usuarioMFA 2>&1
         
         Write-Host "`n  +-------------------------------------------------------------+" -ForegroundColor Magenta
         Write-Host "  |  ATENCION: ESCANEA ESTO CON GOOGLE AUTHENTICATOR EN TU CEL  |" -ForegroundColor Magenta
         Write-Host "  +-------------------------------------------------------------+" -ForegroundColor Magenta
         
-        $urlQR = $resultadoQR | Where-Object { $_ -match "http" }
+        Write-Host "`n  --- ENLACE DEL CODIGO QR ---" -ForegroundColor Yellow
+        Write-Host $qrCrudo -ForegroundColor Cyan
         
-        if ($urlQR) {
-            Write-Host "`n  1. Abre este enlace en tu navegador para ver tu Codigo QR:" -ForegroundColor White
-            Write-Host "     $urlQR`n" -ForegroundColor Cyan
-        } else {
-            # Si hay advertencias de PHP que contaminan la salida, las filtramos
-            $claveSecreta = & "$exeMultiOTP" -user-info $usuarioMFA | Where-Object { $_ -match "TOTP secret" -and $_ -notmatch "PHP Warning" }
-            Write-Host "`n  1. Ingresa esta clave secreta manualmente en tu app:" -ForegroundColor White
-            Write-Host "     $claveSecreta`n" -ForegroundColor Cyan
-        }
+        Write-Host "`n  --- DETALLES DE LA CUENTA (Busca la linea 'TOTP secret') ---" -ForegroundColor Yellow
+        Write-Host $infoCruda -ForegroundColor Cyan
         
-        Write-Host "  2. IMPORTANTE: Ten tu celular a la mano antes de cerrar sesion." -ForegroundColor Yellow
+        Write-Host "`n  2. IMPORTANTE: Ten tu celular a la mano antes de cerrar sesion." -ForegroundColor White
         
     } catch {
         Write-Host "  [ERROR] Fallo configuracion de usuario: $($_.Exception.Message)" -ForegroundColor Red
