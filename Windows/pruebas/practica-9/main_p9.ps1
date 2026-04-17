@@ -34,17 +34,16 @@ do {
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host ""
 
-    $opcion = Read-Host "  Selecciona una opcion"
+   $opcion = Read-Host "  Selecciona una opcion"
 
     switch ($opcion) {
         "1" { Preparar-EntornoMFA }
         "2" { Crear-UsuariosAdmin }
-        "3" { Write-Host "`n  [INFO] Funcion en construccion...`n" -ForegroundColor Yellow; pause }
+        "3" { Aplicar-PermisosRBAC }
         "4" { Write-Host "`n  [INFO] Funcion en construccion...`n" -ForegroundColor Yellow; pause }
         "5" { Write-Host "`n  [INFO] Funcion en construccion...`n" -ForegroundColor Yellow; pause }
         "6" { Write-Host "`n  [INFO] Funcion en construccion...`n" -ForegroundColor Yellow; pause }
         "0" { Write-Host "`n  Saliendo...`n" -ForegroundColor Yellow }
         default { Write-Host "`n  Opcion invalida, intenta de nuevo." -ForegroundColor Red; pause }
     }
-
 } while ($opcion -ne "0")
