@@ -236,7 +236,9 @@ function Configurar-FGPP {
     $fgppAdmin = "Practica09-FGPP-Admins"
     
     try {
-        $existeAdmin = Get-ADFineGrainedPasswordPolicy -Identity $fgppAdmin -ErrorAction SilentlyContinue
+        # CORRECCION: Usar -Filter en lugar de -Identity para evitar errores si no existe
+        $existeAdmin = Get-ADFineGrainedPasswordPolicy -Filter "Name -eq '$fgppAdmin'"
+        
         if ($existeAdmin) {
             Write-Host "  [OK] La directiva '$fgppAdmin' ya existe." -ForegroundColor Yellow
         } else {
@@ -276,11 +278,12 @@ function Configurar-FGPP {
     $fgppStd = "Practica09-FGPP-Standard"
     
     try {
-        $existeStd = Get-ADFineGrainedPasswordPolicy -Identity $fgppStd -ErrorAction SilentlyContinue
+        # CORRECCION: Usar -Filter en lugar de -Identity
+        $existeStd = Get-ADFineGrainedPasswordPolicy -Filter "Name -eq '$fgppStd'"
+        
         if ($existeStd) {
             Write-Host "  [OK] La directiva '$fgppStd' ya existe." -ForegroundColor Yellow
         } else {
-            # Nota: Le damos Precedence 20. El numero mas bajo manda.
             New-ADFineGrainedPasswordPolicy -Name $fgppStd `
                 -DisplayName "FGPP Estandar Cuates y NoCuates" `
                 -Precedence 20 `
@@ -313,6 +316,7 @@ function Configurar-FGPP {
     Write-Host "`n  Presiona Enter para volver al menu..." -ForegroundColor Cyan
     Pause | Out-Null
 }
+
 
 # ------------------------------------------------------------
 # FUNCION 5: Configurar Auditoria y Script de Monitoreo
