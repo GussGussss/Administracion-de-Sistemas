@@ -400,3 +400,86 @@ function Configurar-Auditoria {
     Write-Host "`n  Presiona Enter para volver al menu..." -ForegroundColor Cyan
     Pause | Out-Null
 }
+
+# ------------------------------------------------------------
+# FUNCION 6: Instalar y Activar MFA (Google Authenticator)
+# ------------------------------------------------------------
+function Instalar-MFA {
+    Write-Host "`n  +==========================================+" -ForegroundColor Cyan
+    Write-Host "  |    INSTALAR Y ACTIVAR MULTI-FACTOR MFA   |" -ForegroundColor Cyan
+    Write-Host "  +==========================================+`n" -ForegroundColor Cyan
+
+    $rutaDescarga = "C:\MFA_Setup"
+    
+    # Buscar el instalador .exe dentro de los archivos extraidos
+    $instalador = Get-ChildItem -Path $rutaDescarga -Filter "*.exe" -Recurse | Select-Object -First 1
+    
+    if (-not $instalador) {
+        Write-Host "  [ERROR] No se encontro el instalador .exe de multiOTP." -ForegroundColor Red
+        Write-Host "  Ejecuta la Opcion 1 primero para descargarlo." -ForegroundColor Yellow
+        Pause | Out-Null
+        return
+    }
+
+    Write-Host "  [INFO] Instalando multiOTP Credential Provider en modo silencioso..." -ForegroundColor Yellow
+    try {
+        # Instalar en modo silencioso
+        Start-Process -FilePath $instalador.FullName -ArgumentList "/S" -Wait -NoNewWindow
+        Write-Host "  [OK] MFA instalado en el sistema operativo." -ForegroundColor Green
+    } catch {
+        Write-Host "  [ERROR] Fallo la instalacion: $($_.Exception.Message)" -ForegroundColor Red
+        return
+    }
+
+    # multiOTP se instala por defecto en esta ruta
+    $rutaMultiOTP = "C:\multiOTP"
+    $exeMultiOTP = "$rutaMultiOTP\multiotp.exe"
+
+    if (-not (Test-Path $exeMultiOTP)) {
+        Write-Host "  [ERROR] No se encuentra el motor de multiOTP en $rutaMultiOTP." -ForegroundColor Red
+        return
+    }
+
+    # =========================================================
+    # CONFIGURAR MFA PARA EL ADMINISTRADOR
+    # =========================================================
+    Write-Host "`n  Configurando MFA para la cuenta actual (Administrator)..." -ForegroundColor Yellow
+    
+    $usuarioMFA = "Administrator"
+    
+    try {
+        # 1. Crear el usuario en la base de datos local de multiOTP
+        & $exeMultiOTP -fastcreatenopin $usuarioMFA | Out-Null
+        
+        # 2. Generar el secreto TOTP (Google Authenticator) y mostrar el enlace del QR
+        Write-Host "  [OK] Generando clave secreta TOTP..." -ForegroundColor Green
+        $resultadoQR = & $exeMultiOTP -display-user-qrcode $usuarioMFA
+        
+        Write-Host "`n  +-------------------------------------------------------------+" -ForegroundColor Magenta
+        Write-Host "  |  ATENCION: ESCANEA ESTO CON GOOGLE AUTHENTICATOR EN TU CEL  |" -ForegroundColor Magenta
+        Write-Host "  +-------------------------------------------------------------+" -ForegroundColor Magenta
+        
+        # El comando display-user-qrcode devuelve una URL web donde puedes ver el codigo QR.
+        # Filtramos la salida para mostrarte solo la URL
+        $urlQR = $resultadoQR | Where-Object { $_ -match "http" }
+        
+        if ($urlQR) {
+            Write-Host "`n  1. Abre este enlace en un navegador para ver tu Codigo QR:" -ForegroundColor White
+            Write-Host "     $urlQR`n" -ForegroundColor Cyan
+        } else {
+            # Si por algo no da la URL, forzamos a que nos de la clave en texto plano
+            $claveSecreta = & $exeMultiOTP -user-info $usuarioMFA | Where-Object { $_ -match "TOTP secret" }
+            Write-Host "`n  1. Ingresa esta clave secreta manualmente en tu app:" -ForegroundColor White
+            Write-Host "     $claveSecreta`n" -ForegroundColor Cyan
+        }
+        
+        Write-Host "  2. Para probarlo, cierra sesion y vuelve a entrar." -ForegroundColor White
+        Write-Host "     Te pedira tu contrasena normal y luego el token de tu app." -ForegroundColor White
+        
+    } catch {
+        Write-Host "  [ERROR] Fallo al configurar el usuario en multiOTP." -ForegroundColor Red
+    }
+
+    Write-Host "`n  Presiona Enter para volver al menu..." -ForegroundColor Cyan
+    Pause | Out-Null
+}
