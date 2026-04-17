@@ -432,19 +432,30 @@ function Instalar-MFA {
     $usuarioMFA = "Administrator"
     
     try {
-        # 1. Crear el usuario
-        & "$exeMultiOTP" -fastcreatenopin $usuarioMFA | Out-Null
+        # CORRECCION: "Viajar" a la carpeta de multiOTP para que el exe encuentre su base de datos
+        $directorioBase = Split-Path $exeMultiOTP
+        Push-Location $directorioBase
+
+        # 1. Crear el usuario (sin ocultar la salida para ver si funciona)
+        Write-Host "  [INFO] Registrando usuario en la base de datos de MFA..." -ForegroundColor Yellow
+        $creacion = & ".\multiotp.exe" -fastcreatenopin $usuarioMFA 2>&1
         
         Write-Host "  [OK] Generando clave secreta TOTP..." -ForegroundColor Green
         
-        # 2. Obtener la informacion CRUDA del sistema (sin filtros que nos oculten cosas)
-        $qrCrudo = & "$exeMultiOTP" -display-user-qrcode $usuarioMFA 2>&1
-        $infoCruda = & "$exeMultiOTP" -user-info $usuarioMFA 2>&1
+        # 2. Obtener la informacion
+        $qrCrudo = & ".\multiotp.exe" -display-user-qrcode $usuarioMFA 2>&1
+        $infoCruda = & ".\multiotp.exe" -user-info $usuarioMFA 2>&1
         
+        # Regresar a la carpeta original de nuestro script
+        Pop-Location
+
         Write-Host "`n  +-------------------------------------------------------------+" -ForegroundColor Magenta
         Write-Host "  |  ATENCION: ESCANEA ESTO CON GOOGLE AUTHENTICATOR EN TU CEL  |" -ForegroundColor Magenta
         Write-Host "  +-------------------------------------------------------------+" -ForegroundColor Magenta
         
+        Write-Host "`n  --- SALIDA DE CREACION ---" -ForegroundColor Yellow
+        Write-Host $creacion -ForegroundColor Cyan
+
         Write-Host "`n  --- ENLACE DEL CODIGO QR ---" -ForegroundColor Yellow
         Write-Host $qrCrudo -ForegroundColor Cyan
         
