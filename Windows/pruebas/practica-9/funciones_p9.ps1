@@ -36,29 +36,47 @@ function Preparar-EntornoMFA {
 
 # 3. Descargar si es necesario
     if ($procederDescarga) {
-        Write-Host "  [INFO] Descargando multiOTP Credential Provider. Esto puede tomar un momento..." -ForegroundColor Cyan
+        Write-Host "  [INFO] Conectando a la API de GitHub para buscar la ultima version..." -ForegroundColor Cyan
         
         # Forzar protocolos de seguridad modernos (TLS 1.2)
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
         
         try {
-            # PLAN A: Disfrazar PowerShell como navegador (ESTO ES CLAVE PARA GITHUB)
-            $headers = @{ "User-Agent" = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/114.0.0.0 Safari/537.36" }
+            $headers = @{ "User-Agent" = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) PowerShell" }
             
-            Invoke-WebRequest -Uri $urlMFA -OutFile $archivoInstalador -UseBasicParsing -Headers $headers
-            Write-Host "  [OK] Descarga completada exitosamente (Plan A)." -ForegroundColor Green
-        } catch {
-            Write-Host "  [AVISO] Fallo Invoke-WebRequest. Intentando Plan B (.NET WebClient)..." -ForegroundColor Yellow
-            try {
-                # PLAN B: Usar WebClient nativo de .NET con User-Agent inyectado
-                $webClient = New-Object System.Net.WebClient
-                $webClient.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
-                $webClient.DownloadFile($urlMFA, $archivoInstalador)
-                Write-Host "  [OK] Descarga completada exitosamente (Plan B)." -ForegroundColor Green
-            } catch {
-                Write-Host "  [ERROR] Ambos metodos fallaron." -ForegroundColor Red
-                Write-Host "  Detalle final: $($_.Exception.Message)" -ForegroundColor Red
+            # PLAN DINAMICO: Preguntar a GitHub cual es la version más nueva
+            $apiUrl = "https://api.github.com/repos/multiOTP/multiOTPCredentialProvider/releases/latest"
+            $release = Invoke-RestMethod -Uri $apiUrl -Headers $headers -UseBasicParsing
+            
+            # Buscar el archivo descargable (.zip o .exe) dentro del release
+            $asset = $release.assets | Where-Object { $_.name -like "*.zip" -or $_.name -like "*.exe" } | Select-Object -First 1
+            
+            if (-not $asset) {
+                Write-Host "  [ERROR] No se encontraron instaladores en la ultima version." -ForegroundColor Red
+                return
             }
+
+            $urlDinamica = $asset.browser_download_url
+            $nombreArchivo = $asset.name
+            $rutaArchivo = "$rutaDescarga\$nombreArchivo"
+
+            Write-Host "  [INFO] Descargando $($release.tag_name) ($nombreArchivo)..." -ForegroundColor Yellow
+            
+            # Descargar el archivo real
+            Invoke-WebRequest -Uri $urlDinamica -OutFile $rutaArchivo -UseBasicParsing -Headers $headers
+            
+            # Si el desarrollador subio un .zip (como lo hacen ahora), lo extraemos automaticamente
+            if ($rutaArchivo.EndsWith(".zip")) {
+                Write-Host "  [INFO] Archivo ZIP detectado. Extrayendo contenido en $rutaDescarga..." -ForegroundColor Yellow
+                Expand-Archive -Path $rutaArchivo -DestinationPath $rutaDescarga -Force
+                Write-Host "  [OK] Descarga y extraccion completada exitosamente." -ForegroundColor Green
+            } else {
+                Write-Host "  [OK] Descarga completada exitosamente." -ForegroundColor Green
+            }
+
+        } catch {
+            Write-Host "  [ERROR] Fallo la descarga desde la API de GitHub." -ForegroundColor Red
+            Write-Host "  Detalle final: $($_.Exception.Message)" -ForegroundColor Red
         }
     }
 
