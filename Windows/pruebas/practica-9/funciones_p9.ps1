@@ -212,3 +212,104 @@ function Aplicar-PermisosRBAC {
     Write-Host "`n  Presiona Enter para volver al menu..." -ForegroundColor Cyan
     Pause | Out-Null
 }
+
+# ------------------------------------------------------------
+# FUNCION 4: Configurar Directivas de Contrasena (FGPP)
+# ------------------------------------------------------------
+function Configurar-FGPP {
+    Write-Host "`n  +==========================================+" -ForegroundColor Cyan
+    Write-Host "  |    CONFIGURAR DIRECTIVAS FGPP (PSOs)     |" -ForegroundColor Cyan
+    Write-Host "  +==========================================+`n" -ForegroundColor Cyan
+
+    try {
+        Get-ADDomain -ErrorAction Stop | Out-Null
+    } catch {
+        Write-Host "  [ERROR] El servidor no es DC o AD no responde." -ForegroundColor Red
+        Pause | Out-Null
+        return
+    }
+
+    # =========================================================
+    # POLITICA 1: ADMINISTRADORES (12 Caracteres)
+    # =========================================================
+    Write-Host "  Creando directiva estricta para Administradores (12 caracteres)..." -ForegroundColor Yellow
+    $fgppAdmin = "Practica09-FGPP-Admins"
+    
+    try {
+        $existeAdmin = Get-ADFineGrainedPasswordPolicy -Identity $fgppAdmin -ErrorAction SilentlyContinue
+        if ($existeAdmin) {
+            Write-Host "  [OK] La directiva '$fgppAdmin' ya existe." -ForegroundColor Yellow
+        } else {
+            New-ADFineGrainedPasswordPolicy -Name $fgppAdmin `
+                -DisplayName "FGPP Alta Seguridad Administradores" `
+                -Precedence 10 `
+                -ComplexityEnabled $true `
+                -ReversibleEncryptionEnabled $false `
+                -PasswordHistoryCount 5 `
+                -MinPasswordLength 12 `
+                -MinPasswordAge "1.00:00:00" `
+                -MaxPasswordAge "90.00:00:00" `
+                -LockoutThreshold 5 `
+                -LockoutObservationWindow "00:15:00" `
+                -LockoutDuration "00:30:00"
+            Write-Host "  [CREADO] Directiva '$fgppAdmin' generada." -ForegroundColor Green
+        }
+
+        # Aplicar la directiva a los usuarios admin
+        $sujetosAdmin = @("Domain Admins", "admin_identidad", "admin_storage", "admin_politicas", "admin_auditoria")
+        foreach ($sujeto in $sujetosAdmin) {
+            try {
+                Add-ADFineGrainedPasswordPolicySubject -Identity $fgppAdmin -Subjects $sujeto -ErrorAction Stop
+                Write-Host "    -> Aplicada a: $sujeto" -ForegroundColor DarkGreen
+            } catch {
+                # Ignorar error si ya esta aplicada
+            }
+        }
+    } catch {
+        Write-Host "  [ERROR] Fallo al configurar FGPP Admins: $($_.Exception.Message)" -ForegroundColor Red
+    }
+
+    # =========================================================
+    # POLITICA 2: USUARIOS ESTANDAR (8 Caracteres)
+    # =========================================================
+    Write-Host "`n  Creando directiva base para Estandar (8 caracteres)..." -ForegroundColor Yellow
+    $fgppStd = "Practica09-FGPP-Standard"
+    
+    try {
+        $existeStd = Get-ADFineGrainedPasswordPolicy -Identity $fgppStd -ErrorAction SilentlyContinue
+        if ($existeStd) {
+            Write-Host "  [OK] La directiva '$fgppStd' ya existe." -ForegroundColor Yellow
+        } else {
+            # Nota: Le damos Precedence 20. El numero mas bajo manda.
+            New-ADFineGrainedPasswordPolicy -Name $fgppStd `
+                -DisplayName "FGPP Estandar Cuates y NoCuates" `
+                -Precedence 20 `
+                -ComplexityEnabled $true `
+                -ReversibleEncryptionEnabled $false `
+                -PasswordHistoryCount 3 `
+                -MinPasswordLength 8 `
+                -MinPasswordAge "1.00:00:00" `
+                -MaxPasswordAge "90.00:00:00" `
+                -LockoutThreshold 5 `
+                -LockoutObservationWindow "00:15:00" `
+                -LockoutDuration "00:30:00"
+            Write-Host "  [CREADO] Directiva '$fgppStd' generada." -ForegroundColor Green
+        }
+
+        # Aplicar a las OUs/Grupos de Cuates y NoCuates
+        $sujetosStd = @("Cuates", "NoCuates")
+        foreach ($sujeto in $sujetosStd) {
+            try {
+                Add-ADFineGrainedPasswordPolicySubject -Identity $fgppStd -Subjects $sujeto -ErrorAction Stop
+                Write-Host "    -> Aplicada al grupo: $sujeto" -ForegroundColor DarkGreen
+            } catch {
+                # Ignorar error si ya esta aplicada
+            }
+        }
+    } catch {
+        Write-Host "  [ERROR] Fallo al configurar FGPP Standard: $($_.Exception.Message)" -ForegroundColor Red
+    }
+
+    Write-Host "`n  Presiona Enter para volver al menu..." -ForegroundColor Cyan
+    Pause | Out-Null
+}
