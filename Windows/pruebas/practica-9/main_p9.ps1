@@ -26,7 +26,7 @@ do {
     Write-Host "  |  2. Crear Usuarios de Administracion     |" -ForegroundColor White
     Write-Host "  |  3. Aplicar Permisos RBAC                |" -ForegroundColor White
     Write-Host "  |  4. Configurar FGPP                      |" -ForegroundColor White
-    Write-Host "  |  5. [Pendiente] Configurar Auditoria     |" -ForegroundColor DarkGray
+    Write-Host "  |  5. Configurar Auditoria                 |" -ForegroundColor White
     Write-Host "  |  6. [Pendiente] Instalar y Activar MFA   |" -ForegroundColor DarkGray
     Write-Host "  |                                          |" -ForegroundColor Cyan
     Write-Host "  |  0. Salir                                |" -ForegroundColor Yellow
