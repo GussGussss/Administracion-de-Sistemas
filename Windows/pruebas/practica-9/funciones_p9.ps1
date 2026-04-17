@@ -38,6 +38,9 @@ function Preparar-EntornoMFA {
     if ($procederDescarga) {
         Write-Host "  [INFO] Descargando multiOTP Credential Provider. Esto puede tomar un momento..." -ForegroundColor Cyan
         try {
+            # === CORRECCION APLICADA: Forzar protocolo TLS 1.2 para GitHub ===
+            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+            
             # Se usa UseBasicParsing porque Server Core no tiene Internet Explorer engine
             Invoke-WebRequest -Uri $urlMFA -OutFile $archivoInstalador -UseBasicParsing
             Write-Host "  [OK] Descarga completada exitosamente." -ForegroundColor Green
@@ -50,7 +53,6 @@ function Preparar-EntornoMFA {
     Write-Host "`n  Presiona Enter para volver al menu..." -ForegroundColor Cyan
     Pause | Out-Null
 }
-
 # ------------------------------------------------------------
 # FUNCION 2: Crear Usuarios de Administracion (Sin permisos aun)
 # ------------------------------------------------------------
