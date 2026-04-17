@@ -438,18 +438,18 @@ function Instalar-MFA {
     Write-Host "  [INFO] Lanzando instalador CON INTERFAZ GRAFICA. Revisa las ventanas de instalacion..." -ForegroundColor Yellow
     
     try {
-        # CORRECCION: Quitar modos silenciosos (/qn y /S) para depurar la instalacion visualmente
+        # CORRECCION: Ejecutar el MSI usando el operador de llamada '&' nativo de la consola
         if ($instalador.Extension -eq ".msi") {
-            $argumentos = "/i `"$($instalador.FullName)`""
-            $procesoInstalacion = Start-Process -FilePath "msiexec.exe" -ArgumentList $argumentos -Wait -PassThru
+            # Se abre la interfaz grafica normal del MSI
+            $proceso = Start-Process -FilePath "msiexec.exe" -ArgumentList "/i `"$($instalador.FullName)`"" -Wait -PassThru
         } else {
-            $procesoInstalacion = Start-Process -FilePath $instalador.FullName -Wait -PassThru
+            $proceso = Start-Process -FilePath $instalador.FullName -Wait -PassThru
         }
         
-        if ($procesoInstalacion.ExitCode -eq 0) {
-            Write-Host "  [OK] MFA instalado correctamente en el sistema." -ForegroundColor Green
+        if ($proceso.ExitCode -eq 0) {
+            Write-Host "  [OK] Instalador finalizado correctamente." -ForegroundColor Green
         } else {
-            Write-Host "  [AVISO] El instalador termino con codigo $($procesoInstalacion.ExitCode)." -ForegroundColor Yellow
+            Write-Host "  [AVISO] El instalador termino con codigo $($proceso.ExitCode). Revisa si hubo algun error visual." -ForegroundColor Yellow
         }
     } catch {
         Write-Host "  [ERROR] Fallo la ejecucion del instalador: $($_.Exception.Message)" -ForegroundColor Red
@@ -465,7 +465,7 @@ function Instalar-MFA {
 
     if (-not (Test-Path $exeMultiOTP)) {
         Write-Host "  [ERROR] No se encuentra el motor de multiOTP en $rutaMultiOTP." -ForegroundColor Red
-        Write-Host "  Revisa si el instalador lo coloco en otra ruta (como C:\Program Files\multiOTP...)" -ForegroundColor Red
+        Write-Host "  Revisa si cancelaste la instalacion o si la instalaste en otra ruta." -ForegroundColor Red
         Pause | Out-Null
         return
     }
