@@ -11,9 +11,6 @@ function Preparar-EntornoMFA {
     Write-Host "  +==========================================+`n" -ForegroundColor Cyan
 
     $rutaDescarga = "C:\MFA_Setup"
-    $archivoInstalador = "$rutaDescarga\multiOTP_CP_Installer.exe"
-    # URL oficial directa del release de Github de multiOTP
-    $urlMFA = "https://github.com/multiOTP/multiOTPCredentialProvider/releases/download/5.9.5.3/multiOTPCredentialProvider-5.9.5.3-x64-Release.exe"
 
     # 1. Crear carpeta si no existe
     if (-not (Test-Path $rutaDescarga)) {
@@ -21,20 +18,21 @@ function Preparar-EntornoMFA {
         Write-Host "  [OK] Carpeta creada: $rutaDescarga" -ForegroundColor Green
     }
 
-    # 2. Logica de validacion de descarga
+    # 2. Logica de validacion de descarga (CORREGIDA PARA ZIPS)
     $procederDescarga = $true
+    $archivosExistentes = Get-ChildItem -Path $rutaDescarga -Filter "multiOTP*" -ErrorAction SilentlyContinue
 
-    if (Test-Path $archivoInstalador) {
-        Write-Host "  [AVISO] El instalador de MFA ya se encuentra descargado en el sistema." -ForegroundColor Yellow
-        $respuesta = Read-Host "  Deseas volver a descargarlo y sobreescribirlo? (s/n)"
+    if ($archivosExistentes) {
+        Write-Host "  [AVISO] Ya existen archivos de multiOTP descargados en el servidor." -ForegroundColor Yellow
+        $respuesta = Read-Host "  Deseas conectarte a internet para descargar la ultima version? (s/n)"
         
         if ($respuesta.ToLower() -ne 's') {
             $procederDescarga = $false
-            Write-Host "  [OK] Omitiendo descarga del instalador..." -ForegroundColor Green
+            Write-Host "  [OK] Omitiendo descarga. Se usaran los archivos locales (No requiere internet)." -ForegroundColor Green
         }
     }
 
-# 3. Descargar si es necesario
+    # 3. Descargar si es necesario
     if ($procederDescarga) {
         Write-Host "  [INFO] Conectando a la API de GitHub para buscar la ultima version..." -ForegroundColor Cyan
         
