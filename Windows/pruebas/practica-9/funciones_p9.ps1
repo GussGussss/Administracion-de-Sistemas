@@ -329,14 +329,15 @@ function Instalar-MFA {
     $rutaDescarga = "C:\MFA_Setup"
     
     # =========================================================
-    # PASO 1: INSTALAR DEPENDENCIA (Visual C++ Redistributable)
+    # PASO 1: INSTALAR DEPENDENCIA (Visual C++ 2022 Redistributable)
     # =========================================================
     Write-Host "  [1/3] Verificando pre-requisitos (Visual C++ Redistributable)..." -ForegroundColor Yellow
-    $vcRedistUrl = "https://aka.ms/vs/16/release/vc_redist.x64.exe"
-    $vcRedistPath = "$rutaDescarga\vc_redist.x64.exe"
+    # CORRECCION: Usar enlace a VS 2022 (v17) para satisfacer el requisito 14.44+ de PHP
+    $vcRedistUrl = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
+    $vcRedistPath = "$rutaDescarga\vc_redist_2022_x64.exe" # Nombre nuevo para forzar descarga
     
     if (-not (Test-Path $vcRedistPath)) {
-        Write-Host "  [INFO] Descargando VC++ Redistributable..." -ForegroundColor Cyan
+        Write-Host "  [INFO] Descargando VC++ 2022 Redistributable..." -ForegroundColor Cyan
         try {
             [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
             Invoke-WebRequest -Uri $vcRedistUrl -OutFile $vcRedistPath -UseBasicParsing
@@ -347,13 +348,16 @@ function Instalar-MFA {
         }
     }
     
-    Write-Host "  [INFO] Instalando VC++ silenciosamente..." -ForegroundColor Cyan
+    Write-Host "  [INFO] Instalando VC++ 2022 silenciosamente..." -ForegroundColor Cyan
     $procVC = Start-Process -FilePath $vcRedistPath -ArgumentList "/install /quiet /norestart" -Wait -PassThru
     if ($procVC.ExitCode -in @(0, 1638, 3010)) {
-        Write-Host "  [OK] VC++ Redistributable listo." -ForegroundColor Green
+        Write-Host "  [OK] VC++ 2022 Redistributable listo." -ForegroundColor Green
     } else {
-        Write-Host "  [AVISO] VC++ termino con codigo $($procVC.ExitCode)." -ForegroundColor Yellow
+        Write-Host "  [AVISO] VC++ termino con codigo $($procVC.ExitCode). Podria fallar el MFA." -ForegroundColor Yellow
     }
+
+    # Darle tiempo a Windows de registrar la nueva DLL 14.44
+    Start-Sleep -Seconds 3
 
     # =========================================================
     # PASO 2: EXTRAER E INSTALAR MULTIOTP
@@ -397,7 +401,6 @@ function Instalar-MFA {
         return
     }
 
-    # Esperamos un poco para que Windows termine de escribir los archivos
     Start-Sleep -Seconds 5
 
     # =========================================================
@@ -405,7 +408,6 @@ function Instalar-MFA {
     # =========================================================
     Write-Host "`n  [3/3] Buscando motor de configuracion (multiotp.exe)..." -ForegroundColor Yellow
     
-    # CORRECCION: Buscar dinamicamente en C:\, C:\Program Files, etc.
     $exeMultiOTP = $null
     $rutasBuscar = @("C:\Program Files", "C:\multiOTP", "C:\Program Files (x86)")
     
@@ -430,7 +432,7 @@ function Instalar-MFA {
     $usuarioMFA = "Administrator"
     
     try {
-        # 1. Crear el usuario en la base local (usamos & con comillas dobles por si hay espacios en la ruta)
+        # 1. Crear el usuario
         & "$exeMultiOTP" -fastcreatenopin $usuarioMFA | Out-Null
         
         Write-Host "  [OK] Generando clave secreta TOTP..." -ForegroundColor Green
@@ -446,7 +448,8 @@ function Instalar-MFA {
             Write-Host "`n  1. Abre este enlace en tu navegador para ver tu Codigo QR:" -ForegroundColor White
             Write-Host "     $urlQR`n" -ForegroundColor Cyan
         } else {
-            $claveSecreta = & "$exeMultiOTP" -user-info $usuarioMFA | Where-Object { $_ -match "TOTP secret" }
+            # Si hay advertencias de PHP que contaminan la salida, las filtramos
+            $claveSecreta = & "$exeMultiOTP" -user-info $usuarioMFA | Where-Object { $_ -match "TOTP secret" -and $_ -notmatch "PHP Warning" }
             Write-Host "`n  1. Ingresa esta clave secreta manualmente en tu app:" -ForegroundColor White
             Write-Host "     $claveSecreta`n" -ForegroundColor Cyan
         }
