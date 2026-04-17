@@ -403,7 +403,7 @@ function Instalar-MFA {
 
     Start-Sleep -Seconds 5
 
-# =========================================================
+    # =========================================================
     # PASO 3: RASTREAR MOTOR Y CONFIGURAR ADMINISTRADOR
     # =========================================================
     Write-Host "`n  [3/3] Buscando motor de configuracion (multiotp.exe)..." -ForegroundColor Yellow
@@ -431,12 +431,16 @@ function Instalar-MFA {
     Write-Host "`n  Configurando MFA para Administrator..." -ForegroundColor Yellow
     $usuarioMFA = "Administrator"
     
-    try {
-        # CORRECCION: "Viajar" a la carpeta de multiOTP para que el exe encuentre su base de datos
+try {
+        # Viajar a la carpeta de multiOTP
         $directorioBase = Split-Path $exeMultiOTP
         Push-Location $directorioBase
 
-        # 1. Crear el usuario (sin ocultar la salida para ver si funciona)
+        # 0. Limpiar intentos corruptos anteriores
+        Write-Host "  [INFO] Limpiando registros antiguos del usuario..." -ForegroundColor DarkGray
+        & ".\multiotp.exe" -delete $usuarioMFA 2>&1 | Out-Null
+
+        # 1. Crear el usuario limpiamente
         Write-Host "  [INFO] Registrando usuario en la base de datos de MFA..." -ForegroundColor Yellow
         $creacion = & ".\multiotp.exe" -fastcreatenopin $usuarioMFA 2>&1
         
@@ -446,7 +450,7 @@ function Instalar-MFA {
         $qrCrudo = & ".\multiotp.exe" -display-user-qrcode $usuarioMFA 2>&1
         $infoCruda = & ".\multiotp.exe" -user-info $usuarioMFA 2>&1
         
-        # Regresar a la carpeta original de nuestro script
+        # Regresar a la carpeta original
         Pop-Location
 
         Write-Host "`n  +-------------------------------------------------------------+" -ForegroundColor Magenta
