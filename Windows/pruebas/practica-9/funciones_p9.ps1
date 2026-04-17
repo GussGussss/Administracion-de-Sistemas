@@ -437,16 +437,21 @@ function Instalar-MFA {
     Write-Host "  [INFO] Instalando multiOTP Credential Provider en modo silencioso..." -ForegroundColor Yellow
     
     try {
-        # Instalar en modo silencioso (/S para exes, /qn para msi)
-        $argumentoSilencioso = if ($instalador.Extension -eq ".msi") { "/i `"$($instalador.FullName)`" /qn" } else { "/S" }
-        
-        $procesoInstalacion = Start-Process -FilePath $instalador.FullName -ArgumentList $argumentoSilencioso -Wait -PassThru -NoNewWindow
+        # CORRECCION: Diferenciar la forma de instalar un EXE vs un MSI
+        if ($instalador.Extension -eq ".msi") {
+            # Los MSI requieren llamar a msiexec.exe explicitamente
+            $argumentos = "/i `"$($instalador.FullName)`" /qn"
+            $procesoInstalacion = Start-Process -FilePath "msiexec.exe" -ArgumentList $argumentos -Wait -PassThru -NoNewWindow
+        } else {
+            # Los EXE se pueden llamar directamente
+            $procesoInstalacion = Start-Process -FilePath $instalador.FullName -ArgumentList "/S" -Wait -PassThru -NoNewWindow
+        }
         
         if ($procesoInstalacion.ExitCode -eq 0) {
             Write-Host "  [OK] MFA instalado correctamente en el sistema." -ForegroundColor Green
         } else {
             Write-Host "  [AVISO] El instalador termino con codigo $($procesoInstalacion.ExitCode)." -ForegroundColor Yellow
-            Write-Host "  Continuando de todas formas..." -ForegroundColor Yellow
+            Write-Host "  Continuando de todas formas (puede requerir reinicio)..." -ForegroundColor Yellow
         }
     } catch {
         Write-Host "  [ERROR] Fallo la ejecucion del instalador: $($_.Exception.Message)" -ForegroundColor Red
@@ -458,9 +463,12 @@ function Instalar-MFA {
     $rutaMultiOTP = "C:\multiOTP"
     $exeMultiOTP = "$rutaMultiOTP\multiotp.exe"
 
+    # Darle unos segundos al sistema por si la instalacion esta terminando en segundo plano
+    Start-Sleep -Seconds 3
+
     if (-not (Test-Path $exeMultiOTP)) {
         Write-Host "  [ERROR] No se encuentra el motor de multiOTP en $rutaMultiOTP." -ForegroundColor Red
-        Write-Host "  Es posible que la instalacion haya fallado o requerido interfaz grafica." -ForegroundColor Red
+        Write-Host "  Es posible que la instalacion silenciosa haya fallado." -ForegroundColor Red
         Pause | Out-Null
         return
     }
@@ -500,6 +508,7 @@ function Instalar-MFA {
         
         Write-Host "  2. IMPORTANTE: Antes de cerrar sesion para probarlo," -ForegroundColor Yellow
         Write-Host "     asegurate de tener tu codigo listo en el celular." -ForegroundColor Yellow
+        Write-Host "  3. Puede que necesites reiniciar el servidor para que la pantalla de inicio de sesion cambie." -ForegroundColor Yellow
         
     } catch {
         Write-Host "  [ERROR] Fallo al configurar el usuario en multiOTP: $($_.Exception.Message)" -ForegroundColor Red
