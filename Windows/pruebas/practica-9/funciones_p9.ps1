@@ -401,6 +401,7 @@ function Configurar-Auditoria {
     Pause | Out-Null
 }
 
+
 # ------------------------------------------------------------
 # FUNCION 6: Instalar y Activar MFA (Google Authenticator)
 # ------------------------------------------------------------
