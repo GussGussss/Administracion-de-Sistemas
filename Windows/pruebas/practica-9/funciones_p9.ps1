@@ -348,12 +348,11 @@ function Instalar-MFA {
     }
     
     Write-Host "  [INFO] Instalando VC++ silenciosamente..." -ForegroundColor Cyan
-    # Codigos de salida normales: 0 (Exito), 1638 (Ya instalado), 3010 (Requiere reinicio)
     $procVC = Start-Process -FilePath $vcRedistPath -ArgumentList "/install /quiet /norestart" -Wait -PassThru
     if ($procVC.ExitCode -in @(0, 1638, 3010)) {
         Write-Host "  [OK] VC++ Redistributable listo." -ForegroundColor Green
     } else {
-        Write-Host "  [AVISO] VC++ termino con codigo $($procVC.ExitCode). Podria fallar el MFA." -ForegroundColor Yellow
+        Write-Host "  [AVISO] VC++ termino con codigo $($procVC.ExitCode)." -ForegroundColor Yellow
     }
 
     # =========================================================
@@ -369,7 +368,6 @@ function Instalar-MFA {
         }
     }
 
-    # Buscar el instalador, asegurandonos de NO agarrar el vc_redist que acabamos de bajar
     $instaladores = Get-ChildItem -Path $rutaDescarga -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Extension -match "\.(exe|msi)$" -and $_.Name -notmatch "vc_redist" } | Sort-Object Length -Descending
     $instalador = $instaladores | Select-Object -First 1
     
@@ -381,7 +379,6 @@ function Instalar-MFA {
 
     Write-Host "  [INFO] Instalando $($instalador.Name) en modo silencioso..." -ForegroundColor Cyan
     try {
-        # VOLVEMOS AL MODO SILENCIOSO AHORA QUE YA TIENE SUS REQUISITOS
         if ($instalador.Extension -eq ".msi") {
             $argumentos = "/i `"$($instalador.FullName)`" /qn"
             $procesoInstalacion = Start-Process -FilePath "msiexec.exe" -ArgumentList $argumentos -Wait -PassThru
@@ -400,28 +397,44 @@ function Instalar-MFA {
         return
     }
 
-    $rutaMultiOTP = "C:\multiOTP"
-    $exeMultiOTP = "$rutaMultiOTP\multiotp.exe"
+    # Esperamos un poco para que Windows termine de escribir los archivos
+    Start-Sleep -Seconds 5
 
-    Start-Sleep -Seconds 3
+    # =========================================================
+    # PASO 3: RASTREAR MOTOR Y CONFIGURAR ADMINISTRADOR
+    # =========================================================
+    Write-Host "`n  [3/3] Buscando motor de configuracion (multiotp.exe)..." -ForegroundColor Yellow
+    
+    # CORRECCION: Buscar dinamicamente en C:\, C:\Program Files, etc.
+    $exeMultiOTP = $null
+    $rutasBuscar = @("C:\Program Files", "C:\multiOTP", "C:\Program Files (x86)")
+    
+    foreach ($ruta in $rutasBuscar) {
+        if (Test-Path $ruta) {
+            $encontrado = Get-ChildItem -Path $ruta -Filter "multiotp.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($encontrado) {
+                $exeMultiOTP = $encontrado.FullName
+                Write-Host "  [OK] Motor encontrado en: $exeMultiOTP" -ForegroundColor Green
+                break
+            }
+        }
+    }
 
-    if (-not (Test-Path $exeMultiOTP)) {
-        Write-Host "  [ERROR] No se encuentra multiotp.exe en $rutaMultiOTP." -ForegroundColor Red
+    if (-not $exeMultiOTP) {
+        Write-Host "  [ERROR] No se encontro multiotp.exe despues de la instalacion." -ForegroundColor Red
         Pause | Out-Null
         return
     }
 
-    # =========================================================
-    # PASO 3: CONFIGURAR MFA PARA EL ADMINISTRADOR
-    # =========================================================
-    Write-Host "`n  [3/3] Configurando MFA para Administrator..." -ForegroundColor Yellow
+    Write-Host "`n  Configurando MFA para Administrator..." -ForegroundColor Yellow
     $usuarioMFA = "Administrator"
     
     try {
-        & $exeMultiOTP -fastcreatenopin $usuarioMFA | Out-Null
+        # 1. Crear el usuario en la base local (usamos & con comillas dobles por si hay espacios en la ruta)
+        & "$exeMultiOTP" -fastcreatenopin $usuarioMFA | Out-Null
         
         Write-Host "  [OK] Generando clave secreta TOTP..." -ForegroundColor Green
-        $resultadoQR = & $exeMultiOTP -display-user-qrcode $usuarioMFA
+        $resultadoQR = & "$exeMultiOTP" -display-user-qrcode $usuarioMFA
         
         Write-Host "`n  +-------------------------------------------------------------+" -ForegroundColor Magenta
         Write-Host "  |  ATENCION: ESCANEA ESTO CON GOOGLE AUTHENTICATOR EN TU CEL  |" -ForegroundColor Magenta
@@ -433,7 +446,7 @@ function Instalar-MFA {
             Write-Host "`n  1. Abre este enlace en tu navegador para ver tu Codigo QR:" -ForegroundColor White
             Write-Host "     $urlQR`n" -ForegroundColor Cyan
         } else {
-            $claveSecreta = & $exeMultiOTP -user-info $usuarioMFA | Where-Object { $_ -match "TOTP secret" }
+            $claveSecreta = & "$exeMultiOTP" -user-info $usuarioMFA | Where-Object { $_ -match "TOTP secret" }
             Write-Host "`n  1. Ingresa esta clave secreta manualmente en tu app:" -ForegroundColor White
             Write-Host "     $claveSecreta`n" -ForegroundColor Cyan
         }
