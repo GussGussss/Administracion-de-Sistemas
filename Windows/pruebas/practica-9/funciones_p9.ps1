@@ -436,37 +436,39 @@ try {
         $directorioBase = Split-Path $exeMultiOTP
         Push-Location $directorioBase
 
-        # 0. Limpiar intentos corruptos anteriores
-        Write-Host "  [INFO] Limpiando registros antiguos del usuario..." -ForegroundColor DarkGray
-        & ".\multiotp.exe" -delete $usuarioMFA 2>&1 | Out-Null
+        Write-Host "  [INFO] Evadiendo bug de Active Directory. Forzando inyeccion manual..." -ForegroundColor DarkGray
+        
+        # 0. Generar nuestro propio secreto matematico (Base32 de 16 caracteres)
+        $alfabeto = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+        $miSecreto = -join ((1..16) | ForEach-Object { $alfabeto[(Get-Random -Maximum $alfabeto.Length)] })
 
-        # 1. Crear el usuario limpiamente
-        Write-Host "  [INFO] Registrando usuario en la base de datos de MFA..." -ForegroundColor Yellow
-        $creacion = & ".\multiotp.exe" -fastcreatenopin $usuarioMFA 2>&1
+        # 1. Limpiar rastro viejo
+        & ".\multiotp.exe" -delete $usuarioMFA 2>&1 | Out-Null
         
-        Write-Host "  [OK] Generando clave secreta TOTP..." -ForegroundColor Green
-        
-        # 2. Obtener la informacion
-        $qrCrudo = & ".\multiotp.exe" -display-user-qrcode $usuarioMFA 2>&1
-        $infoCruda = & ".\multiotp.exe" -user-info $usuarioMFA 2>&1
+        # 2. Obligar a multiOTP a tragarse nuestro secreto
+        & ".\multiotp.exe" -create $usuarioMFA 2>&1 | Out-Null
+        & ".\multiotp.exe" -set $usuarioMFA algorithm=TOTP 2>&1 | Out-Null
+        & ".\multiotp.exe" -fastcreatenopin $usuarioMFA $miSecreto 2>&1 | Out-Null
+        & ".\multiotp.exe" -set $usuarioMFA totpsecret=$miSecreto 2>&1 | Out-Null
         
         # Regresar a la carpeta original
         Pop-Location
 
         Write-Host "`n  +-------------------------------------------------------------+" -ForegroundColor Magenta
-        Write-Host "  |  ATENCION: ESCANEA ESTO CON GOOGLE AUTHENTICATOR EN TU CEL  |" -ForegroundColor Magenta
+        Write-Host "  |  ATENCION: ABRE GOOGLE AUTHENTICATOR EN TU CELULAR          |" -ForegroundColor Magenta
         Write-Host "  +-------------------------------------------------------------+" -ForegroundColor Magenta
         
-        Write-Host "`n  --- SALIDA DE CREACION ---" -ForegroundColor Yellow
-        Write-Host $creacion -ForegroundColor Cyan
-
-        Write-Host "`n  --- ENLACE DEL CODIGO QR ---" -ForegroundColor Yellow
-        Write-Host $qrCrudo -ForegroundColor Cyan
+        Write-Host "`n  Como el sistema bloqueaba el QR, hemos generado una clave maestra manualmente." -ForegroundColor Yellow
+        Write-Host "  En tu app de Google Authenticator:" -ForegroundColor White
+        Write-Host "  1. Presiona el boton '+' (Agregar un codigo)" -ForegroundColor White
+        Write-Host "  2. Selecciona 'Ingresar clave de configuracion' (Enter setup key)" -ForegroundColor White
+        Write-Host "  3. Escribe los siguientes datos:`n" -ForegroundColor White
         
-        Write-Host "`n  --- DETALLES DE LA CUENTA (Busca la linea 'TOTP secret') ---" -ForegroundColor Yellow
-        Write-Host $infoCruda -ForegroundColor Cyan
+        Write-Host "     Nombre de la cuenta : Administrador" -ForegroundColor Cyan
+        Write-Host "     Llave / Secreto     : $miSecreto" -ForegroundColor Green
+        Write-Host "     Tipo de llave       : Basada en tiempo (Time based)`n" -ForegroundColor Cyan
         
-        Write-Host "`n  2. IMPORTANTE: Ten tu celular a la mano antes de cerrar sesion." -ForegroundColor White
+        Write-Host "  IMPORTANTE: Agregalo a tu celular ANTES de cerrar sesion." -ForegroundColor Red
         
     } catch {
         Write-Host "  [ERROR] Fallo configuracion de usuario: $($_.Exception.Message)" -ForegroundColor Red
