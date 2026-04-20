@@ -508,19 +508,15 @@ function Activar-MFA {
     Write-Host "  |    ACTIVAR MFA Y GENERAR CLAVE CELULAR   |" -ForegroundColor Cyan
     Write-Host "  +==========================================+`n" -ForegroundColor Cyan
 
-    # Buscar el motor de multiOTP
     Write-Host "  [INFO] Buscando motor de configuracion (multiotp.exe)..." -ForegroundColor Yellow
     $exeMultiOTP = $null
-    $rutasBuscar = @("C:\Program Files", "C:\multiOTP", "C:\Program Files (x86)")
+    $rutasBuscar = @("C:\Program Files\multiOTP", "C:\multiOTP", "C:\Program Files (x86)\multiOTP")
     
     foreach ($ruta in $rutasBuscar) {
-        if (Test-Path $ruta) {
-            $encontrado = Get-ChildItem -Path $ruta -Filter "multiotp.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($encontrado) {
-                $exeMultiOTP = $encontrado.FullName
-                Write-Host "  [OK] Motor encontrado en: $exeMultiOTP" -ForegroundColor Green
-                break
-            }
+        if (Test-Path "$ruta\multiotp.exe") {
+            $exeMultiOTP = "$ruta\multiotp.exe"
+            Write-Host "  [OK] Motor encontrado en: $exeMultiOTP" -ForegroundColor Green
+            break
         }
     }
 
@@ -530,38 +526,34 @@ function Activar-MFA {
         return
     }
 
-    # Identidades a registrar (Local y Dominio)
-    $usuarioLocal = "Administrator"
+    # ¡EL SECRETO DEL ÉXITO! Registrar TODAS las formas posibles en las que Windows llama al usuario
     $dominio = $env:USERDOMAIN
-    $usuarioDominio = "Administrator@$dominio"
+    $identidades = @(
+        "Administrator",
+        "Administrator@$dominio",
+        "$dominio\Administrator"   # <-- ¡Este era el formato que nos estaba bloqueando!
+    )
 
-    Write-Host "`n  Configurando MFA para '$usuarioLocal' y '$usuarioDominio'..." -ForegroundColor Yellow
+    Write-Host "`n  [INFO] Evadiendo bug de Active Directory. Forzando inyeccion manual..." -ForegroundColor DarkGray
     
     try {
         $directorioBase = Split-Path $exeMultiOTP
         Push-Location $directorioBase
-
-        Write-Host "  [INFO] Evadiendo bug de Active Directory. Forzando inyeccion manual..." -ForegroundColor DarkGray
         
-        # Generar secreto
+        # Generar un solo secreto maestro
         $alfabeto = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
         $miSecreto = -join ((1..16) | ForEach-Object { $alfabeto[(Get-Random -Maximum $alfabeto.Length)] })
 
-        # --- REGISTRO PARA USUARIO LOCAL ---
-        & ".\multiotp.exe" -delete $usuarioLocal 2>&1 | Out-Null
-        & ".\multiotp.exe" -create $usuarioLocal 2>&1 | Out-Null
-        & ".\multiotp.exe" -set $usuarioLocal algorithm=TOTP 2>&1 | Out-Null
-        & ".\multiotp.exe" -fastcreatenopin $usuarioLocal $miSecreto 2>&1 | Out-Null
-        & ".\multiotp.exe" -set $usuarioLocal totpsecret=$miSecreto 2>&1 | Out-Null
-
-        # --- REGISTRO PARA USUARIO DE DOMINIO ---
-        & ".\multiotp.exe" -delete $usuarioDominio 2>&1 | Out-Null
-        & ".\multiotp.exe" -create $usuarioDominio 2>&1 | Out-Null
-        & ".\multiotp.exe" -set $usuarioDominio algorithm=TOTP 2>&1 | Out-Null
-        & ".\multiotp.exe" -fastcreatenopin $usuarioDominio $miSecreto 2>&1 | Out-Null
-        & ".\multiotp.exe" -set $usuarioDominio totpsecret=$miSecreto 2>&1 | Out-Null
+        # Inyectar el mismo secreto a todas las identidades
+        foreach ($id in $identidades) {
+            & ".\multiotp.exe" -delete $id 2>&1 | Out-Null
+            & ".\multiotp.exe" -create $id 2>&1 | Out-Null
+            & ".\multiotp.exe" -set $id algorithm=TOTP 2>&1 | Out-Null
+            & ".\multiotp.exe" -fastcreatenopin $id $miSecreto 2>&1 | Out-Null
+            & ".\multiotp.exe" -set $id totpsecret=$miSecreto 2>&1 | Out-Null
+        }
         
-        Write-Host "  [OK] Identidades clonadas exitosamente en la base de datos." -ForegroundColor Green
+        Write-Host "  [OK] Base de datos sincronizada. Identidad NetBIOS registrada." -ForegroundColor Green
 
         Pop-Location
 
@@ -569,17 +561,14 @@ function Activar-MFA {
         Write-Host "  |  ATENCION: ABRE GOOGLE AUTHENTICATOR EN TU CELULAR          |" -ForegroundColor Magenta
         Write-Host "  +-------------------------------------------------------------+" -ForegroundColor Magenta
         
-        Write-Host "`n  Como el sistema bloqueaba el QR, hemos generado una clave maestra manualmente." -ForegroundColor Yellow
-        Write-Host "  En tu app de Google Authenticator:" -ForegroundColor White
+        Write-Host "`n  En tu app de Google Authenticator:" -ForegroundColor White
         Write-Host "  1. Presiona el boton '+' (Agregar un codigo)" -ForegroundColor White
-        Write-Host "  2. Selecciona 'Ingresar clave de configuracion' (Enter setup key)" -ForegroundColor White
+        Write-Host "  2. Selecciona 'Ingresar clave de configuracion'" -ForegroundColor White
         Write-Host "  3. Escribe los siguientes datos:`n" -ForegroundColor White
         
-        Write-Host "     Nombre de la cuenta : Admin Server" -ForegroundColor Cyan
+        Write-Host "     Nombre de la cuenta : Admin Server Final" -ForegroundColor Cyan
         Write-Host "     Llave / Secreto     : $miSecreto" -ForegroundColor Green
         Write-Host "     Tipo de llave       : Basada en tiempo (Time based)`n" -ForegroundColor Cyan
-        
-        Write-Host "  IMPORTANTE: Agregalo a tu celular ANTES de cerrar sesion." -ForegroundColor Red
         
     } catch {
         Write-Host "  [ERROR] Fallo configuracion de usuario: $($_.Exception.Message)" -ForegroundColor Red
