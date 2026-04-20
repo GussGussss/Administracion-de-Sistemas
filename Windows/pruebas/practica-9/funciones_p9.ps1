@@ -387,19 +387,31 @@ function Configurar-Auditoria {
 }
 
 # ------------------------------------------------------------
-# FUNCION 6: Instalar y Activar MFA (Google Authenticator)
+# FUNCION 6: Instalar Dependencias y MFA
 # ------------------------------------------------------------
 function Instalar-MFA {
     Write-Host "`n  +==========================================+" -ForegroundColor Cyan
-    Write-Host "  |    INSTALAR Y ACTIVAR MULTI-FACTOR MFA   |" -ForegroundColor Cyan
+    Write-Host "  |    INSTALAR DEPENDENCIAS Y MOTOR MFA     |" -ForegroundColor Cyan
     Write-Host "  +==========================================+`n" -ForegroundColor Cyan
+
+    # 0. VALIDACION: Verificar si ya esta instalado para no repetir el Wizard
+    $rutasBuscar = @("C:\Program Files\multiOTP", "C:\multiOTP", "C:\Program Files (x86)\multiOTP")
+    foreach ($ruta in $rutasBuscar) {
+        if (Test-Path "$ruta\multiotp.exe") {
+            Write-Host "  [OK] multiOTP ya se encuentra instalado en: $ruta" -ForegroundColor Green
+            Write-Host "  [AVISO] Omitiendo instalacion para evitar duplicados. Ve a la Opcion 7." -ForegroundColor Yellow
+            Write-Host "`n  Presiona Enter para volver al menu..." -ForegroundColor Cyan
+            Pause | Out-Null
+            return # Salimos de la funcion inmediatamente
+        }
+    }
 
     $rutaDescarga = "C:\MFA_Setup"
     
     # =========================================================
-    # PASO 1: INSTALAR DEPENDENCIA (Visual C++ 2022 Redistributable)
+    # PASO 1: INSTALAR DEPENDENCIA (Visual C++ 2022)
     # =========================================================
-    Write-Host "  [1/3] Verificando pre-requisitos (Visual C++ Redistributable)..." -ForegroundColor Yellow
+    Write-Host "  [1/2] Verificando pre-requisitos (Visual C++ Redistributable)..." -ForegroundColor Yellow
     $vcRedistUrl = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
     $vcRedistPath = "$rutaDescarga\vc_redist_2022_x64.exe" 
     
@@ -428,7 +440,7 @@ function Instalar-MFA {
     # =========================================================
     # PASO 2: EXTRAER E INSTALAR MULTIOTP (INTERACTIVO)
     # =========================================================
-    Write-Host "`n  [2/3] Preparando instalador de multiOTP..." -ForegroundColor Yellow
+    Write-Host "`n  [2/2] Preparando instalador de multiOTP..." -ForegroundColor Yellow
     $archivosZip = Get-ChildItem -Path $rutaDescarga -Filter "*.zip" -ErrorAction SilentlyContinue
     
     foreach ($zip in $archivosZip) {
@@ -447,7 +459,6 @@ function Instalar-MFA {
         return
     }
 
-    # CORRECCION: Instrucciones en pantalla e instalacion interactiva (sin /qn)
     Write-Host "`n  [INFO] Lanzando instalador $($instalador.Name) de forma INTERACTIVA..." -ForegroundColor Cyan
     Write-Host "  =======================================================" -ForegroundColor Yellow
     Write-Host "  INSTRUCCIONES PARA LA VENTANA QUE VA A APARECER:" -ForegroundColor White
@@ -472,17 +483,22 @@ function Instalar-MFA {
         }
     } catch {
         Write-Host "  [ERROR] Fallo instalacion MFA: $($_.Exception.Message)" -ForegroundColor Red
-        Pause | Out-Null
-        return
     }
 
-    Start-Sleep -Seconds 5
+    Write-Host "`n  Presiona Enter para volver al menu..." -ForegroundColor Cyan
+    Pause | Out-Null
+}
 
-    # =========================================================
-    # PASO 3: RASTREAR MOTOR Y CONFIGURAR ADMINISTRADOR
-    # =========================================================
-    Write-Host "`n  [3/3] Buscando motor de configuracion (multiotp.exe)..." -ForegroundColor Yellow
-    
+# ------------------------------------------------------------
+# FUNCION 7: Activar y Generar Token MFA
+# ------------------------------------------------------------
+function Activar-MFA {
+    Write-Host "`n  +==========================================+" -ForegroundColor Cyan
+    Write-Host "  |    ACTIVAR MFA Y GENERAR CLAVE CELULAR   |" -ForegroundColor Cyan
+    Write-Host "  +==========================================+`n" -ForegroundColor Cyan
+
+    # Buscar el motor de multiOTP
+    Write-Host "  [INFO] Buscando motor de configuracion (multiotp.exe)..." -ForegroundColor Yellow
     $exeMultiOTP = $null
     $rutasBuscar = @("C:\Program Files", "C:\multiOTP", "C:\Program Files (x86)")
     
@@ -498,7 +514,7 @@ function Instalar-MFA {
     }
 
     if (-not $exeMultiOTP) {
-        Write-Host "  [ERROR] No se encontro multiotp.exe despues de la instalacion." -ForegroundColor Red
+        Write-Host "  [ERROR] No se encontro multiotp.exe. Por favor ejecuta la Opcion 6 primero." -ForegroundColor Red
         Pause | Out-Null
         return
     }
@@ -507,26 +523,22 @@ function Instalar-MFA {
     $usuarioMFA = "Administrator"
     
     try {
-        # Viajar a la carpeta de multiOTP
         $directorioBase = Split-Path $exeMultiOTP
         Push-Location $directorioBase
 
         Write-Host "  [INFO] Evadiendo bug de Active Directory. Forzando inyeccion manual..." -ForegroundColor DarkGray
         
-        # 0. Generar nuestro propio secreto matematico (Base32 de 16 caracteres)
+        # Generar secreto
         $alfabeto = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
         $miSecreto = -join ((1..16) | ForEach-Object { $alfabeto[(Get-Random -Maximum $alfabeto.Length)] })
 
-        # 1. Limpiar rastro viejo
+        # Limpiar e inyectar
         & ".\multiotp.exe" -delete $usuarioMFA 2>&1 | Out-Null
-        
-        # 2. Obligar a multiOTP a tragarse nuestro secreto
         & ".\multiotp.exe" -create $usuarioMFA 2>&1 | Out-Null
         & ".\multiotp.exe" -set $usuarioMFA algorithm=TOTP 2>&1 | Out-Null
         & ".\multiotp.exe" -fastcreatenopin $usuarioMFA $miSecreto 2>&1 | Out-Null
         & ".\multiotp.exe" -set $usuarioMFA totpsecret=$miSecreto 2>&1 | Out-Null
         
-        # Regresar a la carpeta original
         Pop-Location
 
         Write-Host "`n  +-------------------------------------------------------------+" -ForegroundColor Magenta
