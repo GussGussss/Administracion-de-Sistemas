@@ -332,9 +332,8 @@ function Instalar-MFA {
     # PASO 1: INSTALAR DEPENDENCIA (Visual C++ 2022 Redistributable)
     # =========================================================
     Write-Host "  [1/3] Verificando pre-requisitos (Visual C++ Redistributable)..." -ForegroundColor Yellow
-    # CORRECCION: Usar enlace a VS 2022 (v17) para satisfacer el requisito 14.44+ de PHP
     $vcRedistUrl = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
-    $vcRedistPath = "$rutaDescarga\vc_redist_2022_x64.exe" # Nombre nuevo para forzar descarga
+    $vcRedistPath = "$rutaDescarga\vc_redist_2022_x64.exe" 
     
     if (-not (Test-Path $vcRedistPath)) {
         Write-Host "  [INFO] Descargando VC++ 2022 Redistributable..." -ForegroundColor Cyan
@@ -353,14 +352,13 @@ function Instalar-MFA {
     if ($procVC.ExitCode -in @(0, 1638, 3010)) {
         Write-Host "  [OK] VC++ 2022 Redistributable listo." -ForegroundColor Green
     } else {
-        Write-Host "  [AVISO] VC++ termino con codigo $($procVC.ExitCode). Podria fallar el MFA." -ForegroundColor Yellow
+        Write-Host "  [AVISO] VC++ termino con codigo $($procVC.ExitCode)." -ForegroundColor Yellow
     }
 
-    # Darle tiempo a Windows de registrar la nueva DLL 14.44
     Start-Sleep -Seconds 3
 
     # =========================================================
-    # PASO 2: EXTRAER E INSTALAR MULTIOTP
+    # PASO 2: EXTRAER E INSTALAR MULTIOTP (INTERACTIVO)
     # =========================================================
     Write-Host "`n  [2/3] Preparando instalador de multiOTP..." -ForegroundColor Yellow
     $archivosZip = Get-ChildItem -Path $rutaDescarga -Filter "*.zip" -ErrorAction SilentlyContinue
@@ -381,13 +379,22 @@ function Instalar-MFA {
         return
     }
 
-    Write-Host "  [INFO] Instalando $($instalador.Name) en modo silencioso..." -ForegroundColor Cyan
+    # CORRECCION: Instrucciones en pantalla e instalacion interactiva (sin /qn)
+    Write-Host "`n  [INFO] Lanzando instalador $($instalador.Name) de forma INTERACTIVA..." -ForegroundColor Cyan
+    Write-Host "  =======================================================" -ForegroundColor Yellow
+    Write-Host "  INSTRUCCIONES PARA LA VENTANA QUE VA A APARECER:" -ForegroundColor White
+    Write-Host "  1. Marca la casilla 'No remote server, local multiOTP only'" -ForegroundColor White
+    Write-Host "  2. En la opcion Logon, selecciona 'Local and Remote'" -ForegroundColor White
+    Write-Host "  3. En la opcion Unlock, selecciona 'Local and Remote'" -ForegroundColor White
+    Write-Host "  4. Dale Next a todo hasta Finalizar." -ForegroundColor White
+    Write-Host "  =======================================================`n" -ForegroundColor Yellow
+    
     try {
         if ($instalador.Extension -eq ".msi") {
-            $argumentos = "/i `"$($instalador.FullName)`" /qn"
+            $argumentos = "/i `"$($instalador.FullName)`""
             $procesoInstalacion = Start-Process -FilePath "msiexec.exe" -ArgumentList $argumentos -Wait -PassThru
         } else {
-            $procesoInstalacion = Start-Process -FilePath $instalador.FullName -ArgumentList "/S" -Wait -PassThru
+            $procesoInstalacion = Start-Process -FilePath $instalador.FullName -Wait -PassThru
         }
         
         if ($procesoInstalacion.ExitCode -eq 0) {
@@ -431,7 +438,7 @@ function Instalar-MFA {
     Write-Host "`n  Configurando MFA para Administrator..." -ForegroundColor Yellow
     $usuarioMFA = "Administrator"
     
-try {
+    try {
         # Viajar a la carpeta de multiOTP
         $directorioBase = Split-Path $exeMultiOTP
         Push-Location $directorioBase
