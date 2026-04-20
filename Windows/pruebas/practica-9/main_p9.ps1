@@ -16,8 +16,8 @@ if (-not ([Security.Principal.WindowsPrincipal] `
 
 # Bucle principal del menu
 do {
-    Write-Host ""
-    Write-Host "  +==========================================+" -ForegroundColor Cyan
+    Clear-Host
+    Write-Host "`n  +==========================================+" -ForegroundColor Cyan
     Write-Host "  |        PRACTICA 09 - HARDENING AD        |" -ForegroundColor Cyan
     Write-Host "  |        RBAC, FGPP, Auditoria y MFA       |" -ForegroundColor Cyan
     Write-Host "  +==========================================+" -ForegroundColor Cyan
@@ -27,23 +27,24 @@ do {
     Write-Host "  |  3. Aplicar Permisos RBAC                |" -ForegroundColor White
     Write-Host "  |  4. Configurar FGPP                      |" -ForegroundColor White
     Write-Host "  |  5. Configurar Auditoria                 |" -ForegroundColor White
-    Write-Host "  |  6. Instalar y Activar MFA               |" -ForegroundColor White
+    Write-Host "  |  6. Instalar Dependencias y Motor MFA    |" -ForegroundColor White
+    Write-Host "  |  7. Activar MFA y Generar Clave Celular  |" -ForegroundColor White
     Write-Host "  |                                          |" -ForegroundColor Cyan
-    Write-Host "  |  0. Salir                                |" -ForegroundColor Yellow
+    Write-Host "  |  0. Salir                                |" -ForegroundColor Red
     Write-Host "  |                                          |" -ForegroundColor Cyan
-    Write-Host "  +==========================================+" -ForegroundColor Cyan
-    Write-Host ""
+    Write-Host "  +==========================================+`n" -ForegroundColor Cyan
 
-   $opcion = Read-Host "  Selecciona una opcion"
+    $opcion = Read-Host "  Selecciona una opcion"
 
     switch ($opcion) {
-        "1" { Preparar-EntornoMFA }
-        "2" { Crear-UsuariosAdmin }
-        "3" { Aplicar-PermisosRBAC }
-        "4" { Configurar-FGPP }
-        "5" { Configurar-Auditoria }
-        "6" { Instalar-MFA }
-        "0" { Write-Host "`n  Saliendo...`n" -ForegroundColor Yellow }
-        default { Write-Host "`n  Opcion invalida, intenta de nuevo." -ForegroundColor Red; pause }
+        '1' { Preparar-EntornoMFA }
+        '2' { Crear-UsuariosAdmin }
+        '3' { Aplicar-PermisosRBAC }
+        '4' { Configurar-FGPP }
+        '5' { Configurar-Auditoria }
+        '6' { Instalar-MFA }
+        '7' { Activar-MFA }
+        '0' { Write-Host "`n  Saliendo... ¡Excelente trabajo de Hardening!" -ForegroundColor Green; break }
+        default { Write-Host "`n  [ERROR] Opcion no valida. Intenta de nuevo." -ForegroundColor Red; Start-Sleep -Seconds 2 }
     }
-} while ($opcion -ne "0")
+} while ($opcion -ne '0')
