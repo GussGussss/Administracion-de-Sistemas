@@ -16,7 +16,6 @@ if (-not ([Security.Principal.WindowsPrincipal] `
 
 # Bucle principal del menu
 do {
-    Clear-Host
     Write-Host "`n  +==========================================+" -ForegroundColor Cyan
     Write-Host "  |        PRACTICA 09 - HARDENING AD        |" -ForegroundColor Cyan
     Write-Host "  |        RBAC, FGPP, Auditoria y MFA       |" -ForegroundColor Cyan
