@@ -317,6 +317,74 @@ function Configurar-FGPP {
     Pause | Out-Null
 }
 
+# ------------------------------------------------------------
+# FUNCION 5: Configurar Auditoria y Script de Monitoreo
+# ------------------------------------------------------------
+function Configurar-Auditoria {
+    Write-Host "`n  +==========================================+" -ForegroundColor Cyan
+    Write-Host "  |    HARDENING DE AUDITORIA Y EXTRACCION   |" -ForegroundColor Cyan
+    Write-Host "  +==========================================+`n" -ForegroundColor Cyan
+
+    Write-Host "  [1/2] Configurando politicas de auditoria avanzada..." -ForegroundColor Yellow
+    
+    try {
+        auditpol /set /subcategory:"Logon" /success:enable /failure:enable | Out-Null
+        auditpol /set /subcategory:"File System" /success:enable /failure:enable | Out-Null
+        Write-Host "  [OK] Auditoria habilitada exitosamente. El servidor ahora registra intentos de acceso." -ForegroundColor Green
+    } catch {
+        Write-Host "  [ERROR] No se pudo configurar auditpol: $($_.Exception.Message)" -ForegroundColor Red
+        Pause | Out-Null
+        return
+    }
+
+    Write-Host "`n  [2/2] Ejecutando extraccion de Logs de Seguridad (ID 4625)..." -ForegroundColor Yellow
+    
+    $rutaReporte = "C:\MFA_Setup\Reporte_AccesosDenegados.txt"
+    $eventosMax = 10
+
+    try {
+        $eventos = Get-WinEvent -FilterHashtable @{LogName='Security'; Id=4625} -MaxEvents $eventosMax -ErrorAction SilentlyContinue
+
+        if (-not $eventos) {
+            Write-Host "  [AVISO] No se encontraron eventos de Acceso Denegado (ID 4625) en el registro." -ForegroundColor Yellow
+            Write-Host "  Esto es normal si nadie se ha equivocado de contrasena recientemente." -ForegroundColor Yellow
+            
+            "==================================================" | Out-File $rutaReporte
+            "REPORTE DE AUDITORIA - ACCESOS DENEGADOS (ID 4625)" | Out-File $rutaReporte -Append
+            "Fecha de generacion: $(Get-Date)" | Out-File $rutaReporte -Append
+            "==================================================" | Out-File $rutaReporte -Append
+            "No se encontraron intentos fallidos recientes." | Out-File $rutaReporte -Append
+            
+        } else {
+            "==================================================" | Out-File $rutaReporte
+            "REPORTE DE AUDITORIA - ACCESOS DENEGADOS (ID 4625)" | Out-File $rutaReporte -Append
+            "Fecha de generacion: $(Get-Date)" | Out-File $rutaReporte -Append
+            "Eventos extraidos: $($eventos.Count)" | Out-File $rutaReporte -Append
+            "==================================================`n" | Out-File $rutaReporte -Append
+
+            foreach ($e in $eventos) {
+                $mensajeCorto = ($e.Message -split "`r`n")[0..5] -join " | "
+                
+                "FECHA   : $($e.TimeCreated)" | Out-File $rutaReporte -Append
+                "ID      : $($e.Id)" | Out-File $rutaReporte -Append
+                "DETALLE : $mensajeCorto" | Out-File $rutaReporte -Append
+                "--------------------------------------------------" | Out-File $rutaReporte -Append
+            }
+        }
+        
+        Write-Host "  [OK] Reporte generado exitosamente en: $rutaReporte" -ForegroundColor Green
+        
+        Write-Host "`n  --- CONTENIDO DEL REPORTE ---" -ForegroundColor Cyan
+        Get-Content $rutaReporte | Write-Host -ForegroundColor White
+        Write-Host "  -----------------------------" -ForegroundColor Cyan
+
+    } catch {
+        Write-Host "  [ERROR] Fallo la extraccion de eventos: $($_.Exception.Message)" -ForegroundColor Red
+    }
+
+    Write-Host "`n  Presiona Enter para volver al menu..." -ForegroundColor Cyan
+    Pause | Out-Null
+}
 
 # ------------------------------------------------------------
 # FUNCION 6: Instalar y Activar MFA (Google Authenticator)
