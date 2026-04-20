@@ -530,8 +530,12 @@ function Activar-MFA {
         return
     }
 
-    Write-Host "`n  Configurando MFA para Administrator..." -ForegroundColor Yellow
-    $usuarioMFA = "Administrator"
+    # Identidades a registrar (Local y Dominio)
+    $usuarioLocal = "Administrator"
+    $dominio = $env:USERDOMAIN
+    $usuarioDominio = "Administrator@$dominio"
+
+    Write-Host "`n  Configurando MFA para '$usuarioLocal' y '$usuarioDominio'..." -ForegroundColor Yellow
     
     try {
         $directorioBase = Split-Path $exeMultiOTP
@@ -543,13 +547,22 @@ function Activar-MFA {
         $alfabeto = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
         $miSecreto = -join ((1..16) | ForEach-Object { $alfabeto[(Get-Random -Maximum $alfabeto.Length)] })
 
-        # Limpiar e inyectar
-        & ".\multiotp.exe" -delete $usuarioMFA 2>&1 | Out-Null
-        & ".\multiotp.exe" -create $usuarioMFA 2>&1 | Out-Null
-        & ".\multiotp.exe" -set $usuarioMFA algorithm=TOTP 2>&1 | Out-Null
-        & ".\multiotp.exe" -fastcreatenopin $usuarioMFA $miSecreto 2>&1 | Out-Null
-        & ".\multiotp.exe" -set $usuarioMFA totpsecret=$miSecreto 2>&1 | Out-Null
+        # --- REGISTRO PARA USUARIO LOCAL ---
+        & ".\multiotp.exe" -delete $usuarioLocal 2>&1 | Out-Null
+        & ".\multiotp.exe" -create $usuarioLocal 2>&1 | Out-Null
+        & ".\multiotp.exe" -set $usuarioLocal algorithm=TOTP 2>&1 | Out-Null
+        & ".\multiotp.exe" -fastcreatenopin $usuarioLocal $miSecreto 2>&1 | Out-Null
+        & ".\multiotp.exe" -set $usuarioLocal totpsecret=$miSecreto 2>&1 | Out-Null
+
+        # --- REGISTRO PARA USUARIO DE DOMINIO ---
+        & ".\multiotp.exe" -delete $usuarioDominio 2>&1 | Out-Null
+        & ".\multiotp.exe" -create $usuarioDominio 2>&1 | Out-Null
+        & ".\multiotp.exe" -set $usuarioDominio algorithm=TOTP 2>&1 | Out-Null
+        & ".\multiotp.exe" -fastcreatenopin $usuarioDominio $miSecreto 2>&1 | Out-Null
+        & ".\multiotp.exe" -set $usuarioDominio totpsecret=$miSecreto 2>&1 | Out-Null
         
+        Write-Host "  [OK] Identidades clonadas exitosamente en la base de datos." -ForegroundColor Green
+
         Pop-Location
 
         Write-Host "`n  +-------------------------------------------------------------+" -ForegroundColor Magenta
@@ -562,7 +575,7 @@ function Activar-MFA {
         Write-Host "  2. Selecciona 'Ingresar clave de configuracion' (Enter setup key)" -ForegroundColor White
         Write-Host "  3. Escribe los siguientes datos:`n" -ForegroundColor White
         
-        Write-Host "     Nombre de la cuenta : Administrador" -ForegroundColor Cyan
+        Write-Host "     Nombre de la cuenta : Admin Server" -ForegroundColor Cyan
         Write-Host "     Llave / Secreto     : $miSecreto" -ForegroundColor Green
         Write-Host "     Tipo de llave       : Basada en tiempo (Time based)`n" -ForegroundColor Cyan
         
