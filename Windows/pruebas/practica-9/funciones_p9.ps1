@@ -394,24 +394,35 @@ function Instalar-MFA {
     Write-Host "  |    INSTALAR DEPENDENCIAS Y MOTOR MFA     |" -ForegroundColor Cyan
     Write-Host "  +==========================================+`n" -ForegroundColor Cyan
 
-    # 0. VALIDACION: Verificar si ya esta instalado para no repetir el Wizard
+    $rutaDescarga = "C:\MFA_Setup"
+
+    # 0. VALIDACION: Verificar si ya esta instalado y preguntar si reconfigurar
     $rutasBuscar = @("C:\Program Files\multiOTP", "C:\multiOTP", "C:\Program Files (x86)\multiOTP")
+    $yaInstalado = $false
+    
     foreach ($ruta in $rutasBuscar) {
         if (Test-Path "$ruta\multiotp.exe") {
+            $yaInstalado = $true
             Write-Host "  [OK] multiOTP ya se encuentra instalado en: $ruta" -ForegroundColor Green
-            Write-Host "  [AVISO] Omitiendo instalacion para evitar duplicados. Ve a la Opcion 7." -ForegroundColor Yellow
-            Write-Host "`n  Presiona Enter para volver al menu..." -ForegroundColor Cyan
-            Pause | Out-Null
-            return # Salimos de la funcion inmediatamente
+            break
         }
     }
 
-    $rutaDescarga = "C:\MFA_Setup"
-    
+    if ($yaInstalado) {
+        $reinstalar = Read-Host "  [?] Deseas volver a abrir el instalador para reconfigurarlo? (s/n)"
+        if ($reinstalar.ToLower() -ne 's') {
+            Write-Host "  [AVISO] Omitiendo instalacion. Ve a la Opcion 7." -ForegroundColor Yellow
+            Write-Host "`n  Presiona Enter para volver al menu..." -ForegroundColor Cyan
+            Pause | Out-Null
+            return # Salimos de la funcion si el usuario elige 'n'
+        }
+        Write-Host "  [INFO] Forzando el asistente de instalacion..." -ForegroundColor Cyan
+    }
+
     # =========================================================
     # PASO 1: INSTALAR DEPENDENCIA (Visual C++ 2022)
     # =========================================================
-    Write-Host "  [1/2] Verificando pre-requisitos (Visual C++ Redistributable)..." -ForegroundColor Yellow
+    Write-Host "`n  [1/2] Verificando pre-requisitos (Visual C++ Redistributable)..." -ForegroundColor Yellow
     $vcRedistUrl = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
     $vcRedistPath = "$rutaDescarga\vc_redist_2022_x64.exe" 
     
