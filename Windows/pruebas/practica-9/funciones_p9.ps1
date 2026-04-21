@@ -586,7 +586,7 @@ function Test-FGPP {
     } catch { Write-Host "  [ERROR] $($_.Exception.Message)" -ForegroundColor Red }
 }
 
-# --- TEST 3: Verificar estado de multiOTP (CORREGIDO) ---
+# --- TEST 3: Verificar estado de multiOTP (CORREGIDO v2) ---
 function Test-EstadoMFA {
     Write-Host "`n  TEST 3 -- Estado de MFA (multiOTP)" -ForegroundColor Cyan
     Write-Host "  -----------------------------------" -ForegroundColor Cyan
@@ -598,43 +598,75 @@ function Test-EstadoMFA {
     }
     Write-Host "  [OK] multiOTP encontrado: $multiotpExe" -ForegroundColor Green
 
-    # CORRECCION CLAVE: siempre ejecutar desde el directorio de multiotp.exe
     $dir = Split-Path $multiotpExe
     Push-Location $dir
 
-    # Listar usuarios registrados
+    # ---- Listar usuarios: leer directamente los archivos .db de multiOTP ----
+    # multiotp guarda cada usuario como un archivo en la carpeta 'users'
     Write-Host "`n  Usuarios registrados en multiOTP:" -ForegroundColor Yellow
-    $lista = & ".\multiotp.exe" -list-users 2>&1
-    if ($lista) {
-        $lista | ForEach-Object { Write-Host "    $_" -ForegroundColor White }
-    } else {
-        # Algunos builds usan -list en lugar de -list-users
-        $lista2 = & ".\multiotp.exe" -list 2>&1
-        if ($lista2 -notmatch "ERROR") {
-            $lista2 | ForEach-Object { Write-Host "    $_" -ForegroundColor White }
+    $carpetaUsers = Join-Path $dir "users"
+    if (Test-Path $carpetaUsers) {
+        $archivos = Get-ChildItem -Path $carpetaUsers -Filter "*.db" -ErrorAction SilentlyContinue
+        if ($archivos -and $archivos.Count -gt 0) {
+            foreach ($f in $archivos) {
+                Write-Host "    [+] $($f.BaseName)" -ForegroundColor Green
+            }
+            Write-Host "  [PASS] $($archivos.Count) usuario(s) registrados." -ForegroundColor Green
         } else {
-            Write-Host "    [WARN] No hay usuarios registrados o el comando fallo." -ForegroundColor Yellow
-            Write-Host "    Ejecuta la Opcion 7 para registrar el usuario." -ForegroundColor Yellow
+            Write-Host "    [WARN] Carpeta 'users' vacia. Ejecuta la Opcion 7." -ForegroundColor Yellow
+        }
+    } else {
+        # Fallback: intentar con el comando display (no requiere parametros adicionales)
+        $display = & ".\multiotp.exe" -display-log 2>&1
+        Write-Host "    (carpeta users no encontrada en $dir)" -ForegroundColor DarkGray
+        Write-Host "    Resultado -display-log: $display"     -ForegroundColor DarkGray
+    }
+
+    # ---- Configuracion de bloqueo ----
+    Write-Host "`n  Configuracion de bloqueo MFA (3 fallos = 30 min):" -ForegroundColor Yellow
+    # Leer el archivo de configuracion global directamente
+    $cfgFile = Join-Path $dir "config\multiotp.json"
+    if (-not (Test-Path $cfgFile)) { $cfgFile = Join-Path $dir "multiotp.json" }
+    if (Test-Path $cfgFile) {
+        $json = Get-Content $cfgFile -Raw -ErrorAction SilentlyContinue | ConvertFrom-Json -ErrorAction SilentlyContinue
+        if ($json) {
+            $maxBlock = if ($json.MaxBlockFailures)   { $json.MaxBlockFailures   } else { "N/D" }
+            $maxDelay = if ($json.MaxDelayedFailures) { $json.MaxDelayedFailures } else { "N/D" }
+            $delay    = if ($json.FailureDelayInSeconds) { $json.FailureDelayInSeconds } else { "N/D" }
+            Write-Host "    MaxBlockFailures   : $maxBlock  (debe ser 3)" -ForegroundColor White
+            Write-Host "    MaxDelayedFailures : $maxDelay  (debe ser 3)" -ForegroundColor White
+            Write-Host "    FailureDelay (seg) : $delay     (debe ser 1800 = 30 min)" -ForegroundColor White
+            if ($maxBlock -eq 3 -or $maxDelay -eq 3) {
+                Write-Host "  [PASS] Bloqueo por 3 fallos configurado correctamente." -ForegroundColor Green
+            } else {
+                Write-Host "  [WARN] Bloqueo no confirmado. Ejecuta la Opcion 7 de nuevo." -ForegroundColor Yellow
+            }
+        }
+    } else {
+        Write-Host "    Config JSON no encontrado. Verificando con -showconfig..." -ForegroundColor DarkGray
+        $cfg = & ".\multiotp.exe" -showconfig 2>&1
+        if ($cfg) {
+            $cfg | Where-Object { $_ -match "(?i)(block|delay|failure|lock)" } |
+                ForEach-Object { Write-Host "    $_" -ForegroundColor White }
+        } else {
+            Write-Host "    [INFO] Bloqueo aplicado via -config en Opcion 7." -ForegroundColor DarkGray
+            Write-Host "    [INFO] Se validara en el Test 4 (3 fallos -> lockout)." -ForegroundColor DarkGray
         }
     }
 
-    # Mostrar configuracion de bloqueo
-    Write-Host "`n  Configuracion de bloqueo MFA:" -ForegroundColor Yellow
-    $cfg = & ".\multiotp.exe" -config 2>&1
-    if ($cfg) {
-        # Filtrar solo las lineas relevantes al bloqueo
-        $cfg | Where-Object { $_ -match "(MaxBlock|MaxDelay|Failure|block|delay|lock)" } |
-            ForEach-Object { Write-Host "    $_" -ForegroundColor White }
-    }
-
-    # Verificar que el secreto del Administrator esta guardado
+    # ---- Verificar Administrator ----
     Write-Host "`n  Verificando registro del Administrator..." -ForegroundColor Yellow
-    $checkAdmin = & ".\multiotp.exe" -check-user Administrator 2>&1
-    if ($checkAdmin -match "(?i)(ok|exist|found|1)") {
-        Write-Host "  [PASS] Administrator esta registrado en multiOTP." -ForegroundColor Green
+    $dbAdmin = Join-Path $dir "users\Administrator.db"
+    if (Test-Path $dbAdmin) {
+        Write-Host "  [PASS] Administrator.db existe -> usuario registrado correctamente." -ForegroundColor Green
     } else {
-        Write-Host "  [WARN] No se confirmo el registro de Administrator." -ForegroundColor Yellow
-        Write-Host "         Vuelve a ejecutar la Opcion 7."               -ForegroundColor Yellow
+        # Buscar variantes (DOMINIO_Administrator, etc.)
+        $cualquiera = Get-ChildItem -Path (Join-Path $dir "users") -Filter "*dministrator*" -ErrorAction SilentlyContinue
+        if ($cualquiera) {
+            Write-Host "  [PASS] Encontrado: $($cualquiera.Name) -> usuario registrado." -ForegroundColor Green
+        } else {
+            Write-Host "  [WARN] No se encontro Administrator.db. Ejecuta la Opcion 7." -ForegroundColor Yellow
+        }
     }
 
     Pop-Location
