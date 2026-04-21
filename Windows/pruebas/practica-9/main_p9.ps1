@@ -16,7 +16,7 @@ do {
     Write-Host ""
     Write-Host "  +============================================+" -ForegroundColor Cyan
     Write-Host "  |     PRACTICA 09 — HARDENING AD             |" -ForegroundColor Cyan
-    Write-Host "  |     RBAC · FGPP · Auditoria · MFA          |" -ForegroundColor Cyan
+    Write-Host "  |    RBAC - FGPP  - Auditoria - MFA          |" -ForegroundColor Cyan
     Write-Host "  +============================================+" -ForegroundColor Cyan
     Write-Host "  |                                            |" -ForegroundColor Cyan
     Write-Host "  |  1. Preparar entorno y descargar MFA       |" -ForegroundColor White
