@@ -14,24 +14,24 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 
 do {
     Write-Host ""
-    Write-Host "  +============================================+" -ForegroundColor Cyan
-    Write-Host "  |     PRACTICA 09 — HARDENING AD             |" -ForegroundColor Cyan
-    Write-Host "  |    RBAC - FGPP  - Auditoria - MFA          |" -ForegroundColor Cyan
-    Write-Host "  +============================================+" -ForegroundColor Cyan
-    Write-Host "  |                                            |" -ForegroundColor Cyan
-    Write-Host "  |  1. Preparar entorno y descargar MFA       |" -ForegroundColor White
-    Write-Host "  |  2. Crear usuarios de administracion       |" -ForegroundColor White
-    Write-Host "  |  3. Aplicar permisos RBAC (delegacion)     |" -ForegroundColor White
-    Write-Host "  |  4. Configurar FGPP (politicas contrasena) |" -ForegroundColor White
-    Write-Host "  |  5. Configurar auditoria y generar reporte |" -ForegroundColor White
-    Write-Host "  |  6. Instalar dependencias y motor MFA      |" -ForegroundColor White
-    Write-Host "  |  7. Activar MFA y generar clave celular    |" -ForegroundColor White
-    Write-Host "  |  8. Ejecutar todos los tests de evaluacion |" -ForegroundColor Yellow
-    Write-Host "  |                                            |" -ForegroundColor Cyan
-    Write-Host "  |  0. Salir                                  |" -ForegroundColor Red
-    Write-Host "  |                                            |" -ForegroundColor Cyan
-    Write-Host "  +============================================+`n" -ForegroundColor Cyan
-
+    Write-Host "==============================================" -ForegroundColor Cyan
+    Write-Host "|     PRACTICA 09 — HARDENING AD             |" -ForegroundColor Cyan
+    Write-Host "|    RBAC - FGPP  - Auditoria - MFA          |" -ForegroundColor Cyan
+    Write-Host "==============================================" -ForegroundColor Cyan
+    Write-Host "|                                            |" -ForegroundColor Cyan
+    Write-Host "|  1. Preparar entorno y descargar MFA       |" -ForegroundColor White
+    Write-Host "|  2. Crear usuarios de administracion       |" -ForegroundColor White
+    Write-Host "|  3. Aplicar permisos RBAC (delegacion)     |" -ForegroundColor White
+    Write-Host "|  4. Configurar FGPP (politicas contrasena) |" -ForegroundColor White
+    Write-Host "|  5. Configurar auditoria y generar reporte |" -ForegroundColor White
+    Write-Host "|  6. Instalar dependencias y motor MFA      |" -ForegroundColor White
+    Write-Host "|  7. Activar MFA y generar clave celular    |" -ForegroundColor White
+    Write-Host "|  8. Ejecutar todos los tests de evaluacion |" -ForegroundColor Yellow
+    Write-Host "|                                            |" -ForegroundColor Cyan
+    Write-Host "|  0. Salir                                  |" -ForegroundColor Red
+    Write-Host "|                                            |" -ForegroundColor Cyan
+    Write-Host "==============================================" -ForegroundColor Cyan
+    write-host ""
     $opcion = Read-Host "  Selecciona una opcion"
 
     switch ($opcion) {
