@@ -71,9 +71,9 @@ function Habilitar-LogonLocal {
 
         $contenido | Set-Content $cfgPath -Encoding Unicode
         secedit /configure /cfg $cfgPath /db "C:\MFA_Setup\secedit.sdb" /quiet 2>&1 | Out-Null
-        Write-Host "    [OK] $Usuario: logon local y RDP habilitados." -ForegroundColor Green
+        Write-Host "    [OK] ${Usuario}: logon local y RDP habilitados." -ForegroundColor Green
     } catch {
-        Write-Host "    [WARN] No se pudo habilitar logon para $Usuario`: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Host "    [WARN] No se pudo habilitar logon para ${Usuario}: $($_.Exception.Message)" -ForegroundColor Yellow
     }
 }
 
