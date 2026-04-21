@@ -1,37 +1,36 @@
 # ============================================================
-#  main_p9.ps1 - Menu principal de la Practica 09
-#  Enfoque  : Hardening, RBAC, FGPP y MFA
+#  main_p9.ps1 — Menu principal Practica 09
+#  Hardening AD, RBAC, FGPP, Auditoria y MFA (Google Authenticator)
 # ============================================================
 
-# Importar todas las funciones
 . "$PSScriptRoot\funciones_p9.ps1"
 
-# Verificar que el script se ejecuta como Administrador
-if (-not ([Security.Principal.WindowsPrincipal] `
-    [Security.Principal.WindowsIdentity]::GetCurrent() `
+# Verificar ejecucion como Administrador
+if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
     ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Write-Host "`n  ERROR: Debes ejecutar este script como Administrador.`n" -ForegroundColor Red
+    Write-Host "`n  [ERROR] Ejecuta este script como Administrador.`n" -ForegroundColor Red
     exit 1
 }
 
-# Bucle principal del menu
 do {
-    Write-Host "`n  +==========================================+" -ForegroundColor Cyan
-    Write-Host "  |        PRACTICA 09 - HARDENING AD        |" -ForegroundColor Cyan
-    Write-Host "  |        RBAC, FGPP, Auditoria y MFA       |" -ForegroundColor Cyan
-    Write-Host "  +==========================================+" -ForegroundColor Cyan
-    Write-Host "  |                                          |" -ForegroundColor Cyan
-    Write-Host "  |  1. Preparar Entorno y Descargar MFA     |" -ForegroundColor White
-    Write-Host "  |  2. Crear Usuarios de Administracion     |" -ForegroundColor White
-    Write-Host "  |  3. Aplicar Permisos RBAC                |" -ForegroundColor White
-    Write-Host "  |  4. Configurar FGPP                      |" -ForegroundColor White
-    Write-Host "  |  5. Configurar Auditoria                 |" -ForegroundColor White
-    Write-Host "  |  6. Instalar Dependencias y Motor MFA    |" -ForegroundColor White
-    Write-Host "  |  7. Activar MFA y Generar Clave Celular  |" -ForegroundColor White
-    Write-Host "  |                                          |" -ForegroundColor Cyan
-    Write-Host "  |  0. Salir                                |" -ForegroundColor Red
-    Write-Host "  |                                          |" -ForegroundColor Cyan
-    Write-Host "  +==========================================+`n" -ForegroundColor Cyan
+    Clear-Host
+    Write-Host "`n  +============================================+" -ForegroundColor Cyan
+    Write-Host "  |     PRACTICA 09 — HARDENING AD             |" -ForegroundColor Cyan
+    Write-Host "  |     RBAC · FGPP · Auditoria · MFA          |" -ForegroundColor Cyan
+    Write-Host "  +============================================+" -ForegroundColor Cyan
+    Write-Host "  |                                            |" -ForegroundColor Cyan
+    Write-Host "  |  1. Preparar entorno y descargar MFA       |" -ForegroundColor White
+    Write-Host "  |  2. Crear usuarios de administracion       |" -ForegroundColor White
+    Write-Host "  |  3. Aplicar permisos RBAC (delegacion)     |" -ForegroundColor White
+    Write-Host "  |  4. Configurar FGPP (politicas contrasena) |" -ForegroundColor White
+    Write-Host "  |  5. Configurar auditoria y generar reporte |" -ForegroundColor White
+    Write-Host "  |  6. Instalar dependencias y motor MFA      |" -ForegroundColor White
+    Write-Host "  |  7. Activar MFA y generar clave celular    |" -ForegroundColor White
+    Write-Host "  |  8. Ejecutar todos los tests de evaluacion |" -ForegroundColor Yellow
+    Write-Host "  |                                            |" -ForegroundColor Cyan
+    Write-Host "  |  0. Salir                                  |" -ForegroundColor Red
+    Write-Host "  |                                            |" -ForegroundColor Cyan
+    Write-Host "  +============================================+`n" -ForegroundColor Cyan
 
     $opcion = Read-Host "  Selecciona una opcion"
 
@@ -43,7 +42,11 @@ do {
         '5' { Configurar-Auditoria }
         '6' { Instalar-MFA }
         '7' { Activar-MFA }
-        '0' { Write-Host "`n  Saliendo... ¡Excelente trabajo de Hardening!" -ForegroundColor Green; break }
-        default { Write-Host "`n  [ERROR] Opcion no valida. Intenta de nuevo." -ForegroundColor Red; Start-Sleep -Seconds 2 }
+        '8' { Ejecutar-Tests }
+        '0' { Write-Host "`n  Saliendo. Buen trabajo de Hardening!" -ForegroundColor Green }
+        default {
+            Write-Host "`n  [ERROR] Opcion no valida." -ForegroundColor Red
+            Start-Sleep -Seconds 2
+        }
     }
 } while ($opcion -ne '0')
