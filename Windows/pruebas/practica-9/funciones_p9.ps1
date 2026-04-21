@@ -590,15 +590,20 @@ function Test-DelegacionRBAC {
     }
     Write-Host "  Usuario de prueba: $($usuarioPrueba.SamAccountName)" -ForegroundColor DarkGray
 
-    # ---- ACCION A: verificar via dsacls (mas confiable que Get-Acl en AD) ----
+    # ---- ACCION A: verificar via dsacls raw ----
     Write-Host "`n  ACCION A: Verificando que admin_identidad PUEDE resetear contrasenas..." -ForegroundColor Yellow
-    $dsaclsOut = dsacls "$ouCuates" 2>&1
-    $lineasId  = $dsaclsOut | Select-String "admin_identidad"
-    if ($lineasId) {
+
+    # dsacls devuelve texto plano — buscamos cualquier linea que mencione admin_identidad
+    $dsRaw = dsacls "$ouCuates" 2>&1 | Out-String
+    if ($dsRaw -match "admin_identidad") {
+        # Extraer solo las lineas relevantes para mostrar
+        $lineas = ($dsRaw -split "`n") | Where-Object { $_ -match "admin_identidad" }
         Write-Host "  [PASS] ACCION A: admin_identidad tiene permisos en la OU Cuates:" -ForegroundColor Green
-        $lineasId | Select-Object -First 6 | ForEach-Object { Write-Host "         $_" -ForegroundColor DarkGray }
+        $lineas | Select-Object -First 6 | ForEach-Object {
+            Write-Host "         $($_.Trim())" -ForegroundColor DarkGray
+        }
     } else {
-        Write-Host "  [WARN] ACCION A: No se detectaron permisos de admin_identidad en dsacls." -ForegroundColor Yellow
+        Write-Host "  [WARN] ACCION A: dsacls no encontro admin_identidad en la OU." -ForegroundColor Yellow
         Write-Host "         Ejecuta la Opcion 3 y repite el test." -ForegroundColor Yellow
     }
 
