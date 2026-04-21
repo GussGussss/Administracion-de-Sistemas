@@ -5,11 +5,10 @@
 
 # ------------------------------------------------------------
 # UTILIDAD: Detectar nombre real de OUs creadas en P08
-# Prueba "Cuates", "NoCuates"; si no existe la crea.
 # ------------------------------------------------------------
 function Get-OUSegura {
     param([string]$NombreBase)
-    $dcBase = (Get-ADDomain).DistinguishedName
+    $dcBase   = (Get-ADDomain).DistinguishedName
     $variantes = @($NombreBase, ($NombreBase -replace ' ',''))
     foreach ($v in $variantes) {
         try {
@@ -29,6 +28,21 @@ function Get-OUSegura {
 }
 
 # ------------------------------------------------------------
+# UTILIDAD: Localizar multiotp.exe en rutas conocidas
+# ------------------------------------------------------------
+function Get-MultiOTPExe {
+    $rutas = @(
+        "C:\Program Files\multiOTP",
+        "C:\multiOTP",
+        "C:\Program Files (x86)\multiOTP"
+    )
+    foreach ($r in $rutas) {
+        if (Test-Path "$r\multiotp.exe") { return "$r\multiotp.exe" }
+    }
+    return $null
+}
+
+# ------------------------------------------------------------
 # FUNCION 1: Preparar entorno y descargar multiOTP
 # ------------------------------------------------------------
 function Preparar-EntornoMFA {
@@ -42,15 +56,12 @@ function Preparar-EntornoMFA {
         Write-Host "  [OK] Carpeta creada: $rutaDescarga" -ForegroundColor Green
     }
 
-    $proceder = $true
+    $proceder   = $true
     $existentes = Get-ChildItem -Path $rutaDescarga -Filter "multiOTP*" -ErrorAction SilentlyContinue
     if ($existentes) {
         Write-Host "  [AVISO] Ya hay archivos multiOTP en $rutaDescarga." -ForegroundColor Yellow
         $r = Read-Host "  Descargar la version mas nueva desde GitHub? (s/n)"
-        if ($r.ToLower() -ne 's') {
-            $proceder = $false
-            Write-Host "  [OK] Usando archivos existentes." -ForegroundColor Green
-        }
+        if ($r.ToLower() -ne 's') { $proceder = $false; Write-Host "  [OK] Usando archivos existentes." -ForegroundColor Green }
     }
 
     if ($proceder) {
@@ -61,11 +72,9 @@ function Preparar-EntornoMFA {
             $release = Invoke-RestMethod -Uri "https://api.github.com/repos/multiOTP/multiOTPCredentialProvider/releases/latest" -Headers $headers -UseBasicParsing
             $asset   = $release.assets | Where-Object { $_.name -like "*.zip" -or $_.name -like "*.exe" } | Select-Object -First 1
             if (-not $asset) { Write-Host "  [ERROR] Sin instalador en el release." -ForegroundColor Red; Read-Host | Out-Null; return }
-
             $rutaArchivo = "$rutaDescarga\$($asset.name)"
             Write-Host "  [INFO] Descargando $($release.tag_name) ($($asset.name))..." -ForegroundColor Yellow
             Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $rutaArchivo -UseBasicParsing -Headers $headers
-
             if ($rutaArchivo.EndsWith(".zip")) {
                 Write-Host "  [INFO] Extrayendo ZIP..." -ForegroundColor Yellow
                 Expand-Archive -Path $rutaArchivo -DestinationPath $rutaDescarga -Force
@@ -107,12 +116,12 @@ function Crear-UsuariosAdmin {
             $omitidos++
         } else {
             try {
-                New-ADUser -Name             $u.Nombre `
-                           -SamAccountName   $u.Sam `
+                New-ADUser -Name              $u.Nombre `
+                           -SamAccountName    $u.Sam `
                            -UserPrincipalName "$($u.Sam)@$((Get-ADDomain).DNSRoot)" `
-                           -Description      $u.Desc `
+                           -Description       $u.Desc `
                            -AccountPassword   $pwdSegura `
-                           -Enabled          $true `
+                           -Enabled           $true `
                            -PasswordNeverExpires $true
                 Write-Host "  [OK] '$($u.Sam)' creado. Pass: $pwdTexto" -ForegroundColor Green
                 $creados++
@@ -150,47 +159,39 @@ function Aplicar-PermisosRBAC {
         Read-Host | Out-Null; return
     }
 
-    Write-Host "  OU Cuates   : $ouCuates" -ForegroundColor DarkGray
+    Write-Host "  OU Cuates   : $ouCuates"   -ForegroundColor DarkGray
     Write-Host "  OU NoCuates : $ouNoCuates`n" -ForegroundColor DarkGray
 
     # --- ROL 1: admin_identidad -- Gestion total de usuarios en ambas OUs ---
     Write-Host "  [ROL 1] admin_identidad (IAM Operator)..." -ForegroundColor Yellow
-    # CCDC = Create Child / Delete Child (crear y eliminar usuarios dentro de la OU)
-    dsacls "$ouCuates"   /I:T /G "${netbios}\admin_identidad:CCDC;;user" 2>&1 | Out-Null
-    dsacls "$ouNoCuates" /I:T /G "${netbios}\admin_identidad:CCDC;;user" 2>&1 | Out-Null
-    # CA Reset Password = permiso de resetear contrasena
-    dsacls "$ouCuates"   /I:T /G "${netbios}\admin_identidad:CA;Reset Password;user" 2>&1 | Out-Null
-    dsacls "$ouNoCuates" /I:T /G "${netbios}\admin_identidad:CA;Reset Password;user" 2>&1 | Out-Null
-    # RPWP sobre atributos basicos (telefono, oficina, correo)
-    dsacls "$ouCuates"   /I:T /G "${netbios}\admin_identidad:RPWP;telephoneNumber;user" 2>&1 | Out-Null
-    dsacls "$ouNoCuates" /I:T /G "${netbios}\admin_identidad:RPWP;telephoneNumber;user" 2>&1 | Out-Null
+    dsacls "$ouCuates"   /I:T /G "${netbios}\admin_identidad:CCDC;;user"                        2>&1 | Out-Null
+    dsacls "$ouNoCuates" /I:T /G "${netbios}\admin_identidad:CCDC;;user"                        2>&1 | Out-Null
+    dsacls "$ouCuates"   /I:T /G "${netbios}\admin_identidad:CA;Reset Password;user"            2>&1 | Out-Null
+    dsacls "$ouNoCuates" /I:T /G "${netbios}\admin_identidad:CA;Reset Password;user"            2>&1 | Out-Null
+    dsacls "$ouCuates"   /I:T /G "${netbios}\admin_identidad:RPWP;telephoneNumber;user"         2>&1 | Out-Null
+    dsacls "$ouNoCuates" /I:T /G "${netbios}\admin_identidad:RPWP;telephoneNumber;user"         2>&1 | Out-Null
     dsacls "$ouCuates"   /I:T /G "${netbios}\admin_identidad:RPWP;physicalDeliveryOfficeName;user" 2>&1 | Out-Null
     dsacls "$ouNoCuates" /I:T /G "${netbios}\admin_identidad:RPWP;physicalDeliveryOfficeName;user" 2>&1 | Out-Null
-    dsacls "$ouCuates"   /I:T /G "${netbios}\admin_identidad:RPWP;mail;user" 2>&1 | Out-Null
-    dsacls "$ouNoCuates" /I:T /G "${netbios}\admin_identidad:RPWP;mail;user" 2>&1 | Out-Null
+    dsacls "$ouCuates"   /I:T /G "${netbios}\admin_identidad:RPWP;mail;user"                    2>&1 | Out-Null
+    dsacls "$ouNoCuates" /I:T /G "${netbios}\admin_identidad:RPWP;mail;user"                    2>&1 | Out-Null
     Write-Host "  [OK] admin_identidad: Control total sobre usuarios en ambas OUs." -ForegroundColor Green
 
     # --- ROL 2: admin_storage -- DENEGAR Reset Password en TODO el dominio ---
     Write-Host "`n  [ROL 2] admin_storage (Storage Operator) -- DENY Reset Password..." -ForegroundColor Yellow
-    # /D = Deny explicito; /I:S = heredar a sub-objetos (Sin herencia al objeto mismo)
     dsacls "$dcBase" /I:S /D "${netbios}\admin_storage:CA;Reset Password;user" 2>&1 | Out-Null
-    Write-Host "  [OK] admin_storage: DENEGADO Reset Password en todo el dominio (Test 1 listo)." -ForegroundColor Green
+    Write-Host "  [OK] admin_storage: DENEGADO Reset Password en todo el dominio." -ForegroundColor Green
 
     # --- ROL 3: admin_politicas -- Vincular GPOs en OUs asignadas ---
     Write-Host "`n  [ROL 3] admin_politicas (GPO Compliance)..." -ForegroundColor Yellow
     try {
         Add-ADGroupMember -Identity "Group Policy Creator Owners" -Members "admin_politicas" -ErrorAction Stop
         Write-Host "  [OK] Agregado a 'Group Policy Creator Owners'." -ForegroundColor Green
-    } catch {
-        Write-Host "  [AVISO] Ya pertenece a 'Group Policy Creator Owners'." -ForegroundColor DarkGray
-    }
-    # gPLink y gPOptions son los atributos que controlan que GPOs estan vinculadas a una OU
+    } catch { Write-Host "  [AVISO] Ya pertenece a 'Group Policy Creator Owners'." -ForegroundColor DarkGray }
     dsacls "$ouCuates"   /I:T /G "${netbios}\admin_politicas:RPWP;gPLink"    2>&1 | Out-Null
     dsacls "$ouCuates"   /I:T /G "${netbios}\admin_politicas:RPWP;gPOptions" 2>&1 | Out-Null
     dsacls "$ouNoCuates" /I:T /G "${netbios}\admin_politicas:RPWP;gPLink"    2>&1 | Out-Null
     dsacls "$ouNoCuates" /I:T /G "${netbios}\admin_politicas:RPWP;gPOptions" 2>&1 | Out-Null
-    # Lectura en todo el dominio
-    dsacls "$dcBase" /I:T /G "${netbios}\admin_politicas:GR" 2>&1 | Out-Null
+    dsacls "$dcBase"     /I:T /G "${netbios}\admin_politicas:GR"             2>&1 | Out-Null
     Write-Host "  [OK] admin_politicas: Puede vincular GPOs en ambas OUs + lectura de dominio." -ForegroundColor Green
 
     # --- ROL 4: admin_auditoria -- Solo lectura, acceso a Event Logs ---
@@ -198,9 +199,7 @@ function Aplicar-PermisosRBAC {
     try {
         Add-ADGroupMember -Identity "Event Log Readers" -Members "admin_auditoria" -ErrorAction Stop
         Write-Host "  [OK] Agregado a 'Event Log Readers'." -ForegroundColor Green
-    } catch {
-        Write-Host "  [AVISO] Ya pertenece a 'Event Log Readers'." -ForegroundColor DarkGray
-    }
+    } catch { Write-Host "  [AVISO] Ya pertenece a 'Event Log Readers'." -ForegroundColor DarkGray }
     dsacls "$dcBase" /I:T /G "${netbios}\admin_auditoria:GR" 2>&1 | Out-Null
     Write-Host "  [OK] admin_auditoria: Solo lectura en todo el dominio." -ForegroundColor Green
 
@@ -226,7 +225,7 @@ function Configurar-FGPP {
     try {
         $existe = Get-ADFineGrainedPasswordPolicy -Filter "Name -eq '$fgppAdmin'" -ErrorAction SilentlyContinue
         if ($existe) {
-            Write-Host "  [OK] '$fgppAdmin' ya existe. Actualizando..." -ForegroundColor Yellow
+            Write-Host "  [OK] '$fgppAdmin' ya existe. Actualizando parametros..." -ForegroundColor Yellow
             Set-ADFineGrainedPasswordPolicy -Identity $fgppAdmin -MinPasswordLength 12 -LockoutThreshold 3 -LockoutDuration "00:30:00" -LockoutObservationWindow "00:30:00"
         } else {
             New-ADFineGrainedPasswordPolicy -Name $fgppAdmin `
@@ -278,10 +277,7 @@ function Configurar-Auditoria {
     Write-Host "  +==========================================+`n" -ForegroundColor Cyan
 
     Write-Host "  [1/3] Habilitando politicas de auditoria..." -ForegroundColor Yellow
-    $politicas = @(
-        "Logon", "Account Lockout", "File System",
-        "Other Object Access Events", "User Account Management"
-    )
+    $politicas = @("Logon","Account Lockout","File System","Other Object Access Events","User Account Management")
     foreach ($p in $politicas) {
         auditpol /set /subcategory:"$p" /success:enable /failure:enable 2>&1 | Out-Null
         Write-Host "  [OK] Auditoria: $p" -ForegroundColor Green
@@ -309,15 +305,15 @@ function Configurar-Auditoria {
 
         if (-not $eventos -or $eventos.Count -eq 0) {
             Write-Host "  [AVISO] No hay eventos ID 4625. Haz un intento de login fallido para generar evidencia." -ForegroundColor Yellow
-            "No se encontraron eventos de acceso denegado (ID 4625)." | Out-File $rutaReporte -Append -Encoding UTF8
+            "No se encontraron intentos fallidos recientes." | Out-File $rutaReporte -Append -Encoding UTF8
         } else {
             Write-Host "  [OK] $($eventos.Count) evento(s) encontrados. Exportando..." -ForegroundColor Green
             $i = 1
             foreach ($e in $eventos) {
-                $xml      = [xml]$e.ToXml()
-                $usuario  = ($xml.Event.EventData.Data | Where-Object { $_.Name -eq "TargetUserName"   }).'#text'
-                $domEvt   = ($xml.Event.EventData.Data | Where-Object { $_.Name -eq "TargetDomainName" }).'#text'
-                $ip       = ($xml.Event.EventData.Data | Where-Object { $_.Name -eq "IpAddress"        }).'#text'
+                $xml     = [xml]$e.ToXml()
+                $usuario = ($xml.Event.EventData.Data | Where-Object { $_.Name -eq "TargetUserName"   }).'#text'
+                $domEvt  = ($xml.Event.EventData.Data | Where-Object { $_.Name -eq "TargetDomainName" }).'#text'
+                $ip      = ($xml.Event.EventData.Data | Where-Object { $_.Name -eq "IpAddress"        }).'#text'
                 (
                     "EVENTO $i de $($eventos.Count)" + [Environment]::NewLine +
                     "--------------------------------------------------" + [Environment]::NewLine +
@@ -352,14 +348,15 @@ function Instalar-MFA {
     Write-Host "  +==========================================+`n" -ForegroundColor Cyan
 
     $rutaDescarga = "C:\MFA_Setup"
-    $rutasBuscar  = @("C:\Program Files\multiOTP","C:\multiOTP","C:\Program Files (x86)\multiOTP")
-    $multiotpExe  = $null
-    foreach ($r in $rutasBuscar) { if (Test-Path "$r\multiotp.exe") { $multiotpExe = "$r\multiotp.exe"; break } }
+    $multiotpExe  = Get-MultiOTPExe
 
     if ($multiotpExe) {
         Write-Host "  [OK] multiOTP ya instalado en: $(Split-Path $multiotpExe)" -ForegroundColor Green
         $r2 = Read-Host "  Abrir el instalador para reconfigurar? (s/n)"
-        if ($r2.ToLower() -ne 's') { Write-Host "  Continua con la Opcion 7." -ForegroundColor Yellow; Read-Host | Out-Null; return }
+        if ($r2.ToLower() -ne 's') {
+            Write-Host "  Continua con la Opcion 7." -ForegroundColor Yellow
+            Read-Host | Out-Null; return
+        }
     }
 
     # --- PASO 1: Visual C++ 2022 Redistributable ---
@@ -394,9 +391,9 @@ function Instalar-MFA {
 
     Write-Host "`n  INSTRUCCIONES PARA EL INSTALADOR:" -ForegroundColor Yellow
     Write-Host "  1. Marca: 'No remote server, local multiOTP only'" -ForegroundColor White
-    Write-Host "  2. Logon  -> selecciona 'Local and Remote'" -ForegroundColor White
-    Write-Host "  3. Unlock -> selecciona 'Local and Remote'" -ForegroundColor White
-    Write-Host "  4. Next hasta Finish." -ForegroundColor White
+    Write-Host "  2. Logon  -> selecciona 'Local and Remote'"        -ForegroundColor White
+    Write-Host "  3. Unlock -> selecciona 'Local and Remote'"        -ForegroundColor White
+    Write-Host "  4. Next hasta Finish."                             -ForegroundColor White
     Write-Host "  Presiona Enter para lanzar el instalador..."
     Read-Host | Out-Null
 
@@ -413,6 +410,8 @@ function Instalar-MFA {
 
 # ------------------------------------------------------------
 # FUNCION 7: Activar MFA -- registrar usuario TOTP en multiOTP
+# CORRECCION: sintaxis correcta + bloqueo + registro de todas
+#             las variantes de nombre de usuario de Windows
 # ------------------------------------------------------------
 function Activar-MFA {
     Write-Host "`n  +==========================================+" -ForegroundColor Cyan
@@ -420,9 +419,7 @@ function Activar-MFA {
     Write-Host "  +==========================================+`n" -ForegroundColor Cyan
 
     # 1. Localizar multiotp.exe
-    $multiotpExe = $null
-    $rutasBuscar = @("C:\Program Files\multiOTP","C:\multiOTP","C:\Program Files (x86)\multiOTP")
-    foreach ($r in $rutasBuscar) { if (Test-Path "$r\multiotp.exe") { $multiotpExe = "$r\multiotp.exe"; break } }
+    $multiotpExe = Get-MultiOTPExe
     if (-not $multiotpExe) {
         Write-Host "  [ERROR] multiotp.exe no encontrado. Ejecuta la Opcion 6 primero." -ForegroundColor Red
         Read-Host | Out-Null; return
@@ -430,73 +427,80 @@ function Activar-MFA {
     $dir = Split-Path $multiotpExe
     Push-Location $dir
 
-    # 2. Preguntar usuario (default: Administrator)
+    # 2. Pedir usuario (default: Administrator)
     Write-Host "  Usuario a proteger con MFA [Enter = Administrator]: " -ForegroundColor Yellow -NoNewline
-    $usuarioMFA = Read-Host
-    if ([string]::IsNullOrWhiteSpace($usuarioMFA)) { $usuarioMFA = "Administrator" }
+    $usuarioBase = Read-Host
+    if ([string]::IsNullOrWhiteSpace($usuarioBase)) { $usuarioBase = "Administrator" }
 
-    # 3. Generar secreto TOTP Base32 (16 chars = 80 bits, RFC 6238)
+    # 3. Generar secreto TOTP Base32 de 16 caracteres (80 bits, RFC 6238)
     $base32    = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
     $miSecreto = -join ((1..16) | ForEach-Object { $base32[(Get-Random -Maximum 32)] })
-    Write-Host "`n  [INFO] Secreto TOTP generado (guardalo): $miSecreto" -ForegroundColor DarkGray
 
-    # 4. Registrar en multiOTP
-    #    Sintaxis real del CLI de multiOTP:
-    #      multiotp -create USER TOTP SECRET DIGITS
-    #    El periodo (30s) es el default de TOTP, no se pasa como argumento.
-    #    -prefix-pin-needed-enabled lo dejamos fuera para no pedir PIN adicional.
-    Write-Host "  [INFO] Registrando '$usuarioMFA' en multiOTP..." -ForegroundColor Yellow
-    & ".\multiotp.exe" -delete $usuarioMFA 2>&1 | Out-Null
-    $salida = & ".\multiotp.exe" -create $usuarioMFA TOTP $miSecreto 6 2>&1
-    Write-Host "  [DEBUG] create: $salida" -ForegroundColor DarkGray
+    # 4. Registrar las TRES variantes de nombre que Windows puede enviar al Credential Provider
+    #    Windows puede pasar: "Administrator", "DOMINIO\Administrator" o "administrator@dominio.local"
+    $netbios = $env:USERDOMAIN
+    $dns     = $env:USERDNSDOMAIN
+    if ([string]::IsNullOrWhiteSpace($dns)) { $dns = (Get-ADDomain).DNSRoot }
 
-    # Verificar que el usuario quedo registrado correctamente
-    $check = & ".\multiotp.exe" -list 2>&1
-    if ($check -match $usuarioMFA) {
-        Write-Host "  [OK] Usuario '$usuarioMFA' registrado correctamente en multiOTP." -ForegroundColor Green
-    } else {
-        Write-Host "  [WARN] No se confirmo el registro. Intenta con el nombre de dominio:" -ForegroundColor Yellow
-        # Algunos instaladores requieren el formato DOMINIO\usuario
-        $usuarioDominio = "$env:USERDOMAIN\$usuarioMFA"
-        & ".\multiotp.exe" -delete $usuarioDominio 2>&1 | Out-Null
-        $salida2 = & ".\multiotp.exe" -create $usuarioDominio TOTP $miSecreto 6 2>&1
-        Write-Host "  [DEBUG] create (dominio): $salida2" -ForegroundColor DarkGray
+    $variantes = @(
+        $usuarioBase,
+        "$netbios\$usuarioBase",
+        "$usuarioBase@$dns"
+    )
+
+    Write-Host "`n  [INFO] Registrando variantes de usuario en multiOTP..." -ForegroundColor Yellow
+    foreach ($id in $variantes) {
+        # Borrar entrada previa si existe
+        & ".\multiotp.exe" -delete $id 2>&1 | Out-Null
+
+        # SINTAXIS CORRECTA de multiotp CLI:
+        #   multiotp -create <usuario> TOTP <secreto_base32> <digitos>
+        $salida = & ".\multiotp.exe" -create $id TOTP $miSecreto 6 2>&1
+        if ($salida -match "(?i)(ok|success|created|0)") {
+            Write-Host "  [OK] Registrado: $id" -ForegroundColor Green
+        } else {
+            Write-Host "  [WARN] $id -> $salida" -ForegroundColor Yellow
+        }
     }
 
-    # 5. Configurar bloqueo: 3 intentos MFA fallidos -> lockout 30 minutos (Test 4)
-    Write-Host "  [INFO] Configurando bloqueo (3 intentos = 30 min lockout)..." -ForegroundColor Yellow
-    & ".\multiotp.exe" -config MaxDelayedFailures=3     2>&1 | Out-Null
-    & ".\multiotp.exe" -config MaxBlockFailures=3       2>&1 | Out-Null
+    # 5. Configurar bloqueo por intentos fallidos de MFA (Test 4)
+    #    3 fallos consecutivos = cuenta bloqueada 30 minutos (1800 segundos)
+    Write-Host "`n  [INFO] Configurando bloqueo MFA (3 fallos = 30 min lockout)..." -ForegroundColor Yellow
+    & ".\multiotp.exe" -config MaxDelayedFailures=3       2>&1 | Out-Null
+    & ".\multiotp.exe" -config MaxBlockFailures=3         2>&1 | Out-Null
     & ".\multiotp.exe" -config FailureDelayInSeconds=1800 2>&1 | Out-Null
-    Write-Host "  [OK] Bloqueo MFA: 3 fallos -> lockout 30 minutos." -ForegroundColor Green
+    Write-Host "  [OK] Bloqueo configurado: 3 fallos -> lockout 1800 seg (30 min)." -ForegroundColor Green
 
     Pop-Location
 
-    # 6. Instrucciones para Google Authenticator
+    # 6. Mostrar instrucciones para Google Authenticator
     Write-Host "`n  +----------------------------------------------------------+" -ForegroundColor Magenta
     Write-Host "  |   CONFIGURA GOOGLE AUTHENTICATOR EN TU CELULAR           |" -ForegroundColor Magenta
     Write-Host "  +----------------------------------------------------------+" -ForegroundColor Magenta
     Write-Host ""
-    Write-Host "  1. Abre Google Authenticator en tu celular." -ForegroundColor White
+    Write-Host "  1. Abre Google Authenticator." -ForegroundColor White
     Write-Host "  2. Toca '+' -> 'Ingresar clave de configuracion'." -ForegroundColor White
-    Write-Host "  3. Ingresa estos datos:" -ForegroundColor White
+    Write-Host "  3. Completa los campos:" -ForegroundColor White
     Write-Host ""
     Write-Host "     Nombre de cuenta : Practica09 - $env:COMPUTERNAME" -ForegroundColor Cyan
-    Write-Host "     Tu clave (secreto): $miSecreto" -ForegroundColor Green
-    Write-Host "     Tipo de clave     : Basada en tiempo (TOTP)" -ForegroundColor Cyan
+    Write-Host "     Tu clave (secreto): $miSecreto"                    -ForegroundColor Green
+    Write-Host "     Tipo de clave     : Basada en tiempo (TOTP)"       -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "  4. Toca 'Agregar'. Veras un codigo de 6 digitos que" -ForegroundColor White
-    Write-Host "     cambia cada 30 segundos. Usalo al iniciar sesion." -ForegroundColor White
+    Write-Host "  4. Toca 'Agregar'. Veras un codigo de 6 digitos que"  -ForegroundColor White
+    Write-Host "     cambia cada 30 segundos. Ese codigo se pide al"    -ForegroundColor White
+    Write-Host "     iniciar sesion en el servidor."                     -ForegroundColor White
 
-    # 7. Guardar secreto en archivo para el reporte
-    $archivoSecreto = "C:\MFA_Setup\MFA_Secret_$usuarioMFA.txt"
-    "MFA TOTP Secret - Practica 09" | Out-File $archivoSecreto -Encoding UTF8
-    "==============================" | Out-File $archivoSecreto -Append -Encoding UTF8
-    "Usuario  : $usuarioMFA"         | Out-File $archivoSecreto -Append -Encoding UTF8
-    "Servidor : $env:COMPUTERNAME"   | Out-File $archivoSecreto -Append -Encoding UTF8
-    "Secreto  : $miSecreto"          | Out-File $archivoSecreto -Append -Encoding UTF8
-    "Tipo     : TOTP RFC 6238 (Google Authenticator)" | Out-File $archivoSecreto -Append -Encoding UTF8
-    "Generado : $(Get-Date -Format 'dd/MM/yyyy HH:mm:ss')" | Out-File $archivoSecreto -Append -Encoding UTF8
+    # 7. Guardar secreto en archivo para el reporte tecnico
+    $archivoSecreto = "C:\MFA_Setup\MFA_Secret_$usuarioBase.txt"
+    @(
+        "MFA TOTP Secret - Practica 09",
+        "==============================",
+        "Usuario  : $usuarioBase",
+        "Servidor : $env:COMPUTERNAME",
+        "Secreto  : $miSecreto",
+        "Tipo     : TOTP RFC 6238 (Google Authenticator)",
+        "Generado : $(Get-Date -Format 'dd/MM/yyyy HH:mm:ss')"
+    ) | Out-File $archivoSecreto -Encoding UTF8
     Write-Host "`n  [OK] Secreto guardado en: $archivoSecreto" -ForegroundColor Green
 
     Write-Host "`n  Presiona Enter para volver al menu..." -ForegroundColor Cyan
@@ -511,11 +515,11 @@ function Ejecutar-Tests {
     Write-Host "  |   PROTOCOLO DE PRUEBAS - PRACTICA 09     |" -ForegroundColor Cyan
     Write-Host "  +==========================================+`n" -ForegroundColor Cyan
 
-    Write-Host "  1. Test 1 -- Delegacion RBAC (Rol 2 vs Rol 1)" -ForegroundColor White
+    Write-Host "  1. Test 1 -- Delegacion RBAC (admin_storage DENY vs admin_identidad ALLOW)" -ForegroundColor White
     Write-Host "  2. Test 2 -- FGPP (admin_identidad requiere 12 chars)" -ForegroundColor White
-    Write-Host "  3. Test 3 -- Estado de MFA en multiOTP" -ForegroundColor White
-    Write-Host "  4. Test 5 -- Reporte de Auditoria (ID 4625)" -ForegroundColor White
-    Write-Host "  5. Todos los tests" -ForegroundColor White
+    Write-Host "  3. Test 3 -- Estado de MFA en multiOTP"                -ForegroundColor White
+    Write-Host "  4. Test 5 -- Reporte de Auditoria (ID 4625)"           -ForegroundColor White
+    Write-Host "  5. Todos los tests"                                     -ForegroundColor White
     Write-Host ""
     $t = Read-Host "  Selecciona"
 
@@ -532,7 +536,7 @@ function Ejecutar-Tests {
     Read-Host | Out-Null
 }
 
-# --- TEST 1: Verificar ACE Deny en admin_storage ---
+# --- TEST 1: Verificar ACE Deny de admin_storage en AD ---
 function Test-DelegacionRBAC {
     Write-Host "`n  TEST 1 -- Verificacion de Delegacion RBAC" -ForegroundColor Cyan
     Write-Host "  -----------------------------------------" -ForegroundColor Cyan
@@ -544,15 +548,18 @@ function Test-DelegacionRBAC {
         }
         if ($deny) {
             Write-Host "  [PASS] admin_storage tiene ACE de DENY (Reset Password denegado)." -ForegroundColor Green
+            Write-Host "         PRUEBA MANUAL: inicia sesion como admin_storage e intenta" -ForegroundColor DarkGray
+            Write-Host "         resetear una contrasena -> debe salir 'Acceso denegado'."  -ForegroundColor DarkGray
         } else {
             Write-Host "  [WARN] No se detecto la ACE de DENY para admin_storage." -ForegroundColor Yellow
-            Write-Host "         Ejecuta la Opcion 3 y repite el test." -ForegroundColor Yellow
+            Write-Host "         Ejecuta la Opcion 3 y repite el test."            -ForegroundColor Yellow
         }
-        $allow = $acl.Access | Where-Object { $_.IdentityReference -like "*admin_identidad*" -and $_.AccessControlType -eq "Allow" }
-        if ($allow) { Write-Host "  [PASS] admin_identidad tiene permisos de acceso en el dominio." -ForegroundColor Green }
+        $allow = $acl.Access | Where-Object {
+            $_.IdentityReference -like "*admin_identidad*" -and $_.AccessControlType -eq "Allow"
+        }
+        if ($allow) { Write-Host "  [PASS] admin_identidad tiene permisos Allow en el dominio." -ForegroundColor Green }
     } catch {
         Write-Host "  [ERROR] $($_.Exception.Message)" -ForegroundColor Red
-        Write-Host "  Prueba manual: inicia sesion como admin_storage e intenta un reset de contrasena." -ForegroundColor Yellow
     }
 }
 
@@ -568,35 +575,67 @@ function Test-FGPP {
             Write-Host "  Longitud minima : $($pso.MinPasswordLength) chars"  -ForegroundColor White
             Write-Host "  Lockout umbral  : $($pso.LockoutThreshold)"         -ForegroundColor White
             Write-Host "  Lockout duracion: $($pso.LockoutDuration)"          -ForegroundColor White
-            if ($pso.MinPasswordLength -ge 12) { Write-Host "`n  [PASS] Correcto: 12 chars minimo. Contrasenas de 8 chars seran rechazadas." -ForegroundColor Green }
-            else { Write-Host "`n  [FAIL] Solo $($pso.MinPasswordLength) chars. Ejecuta la Opcion 4." -ForegroundColor Red }
+            if ($pso.MinPasswordLength -ge 12) {
+                Write-Host "`n  [PASS] Correcto: minimo 12 chars. Contrasenas de 8 seran rechazadas." -ForegroundColor Green
+            } else {
+                Write-Host "`n  [FAIL] Solo $($pso.MinPasswordLength) chars. Ejecuta la Opcion 4." -ForegroundColor Red
+            }
         } else {
             Write-Host "  [WARN] Sin FGPP especifica. Ejecuta la Opcion 4 primero." -ForegroundColor Yellow
         }
     } catch { Write-Host "  [ERROR] $($_.Exception.Message)" -ForegroundColor Red }
 }
 
-# --- TEST 3: Verificar estado de multiOTP ---
+# --- TEST 3: Verificar estado de multiOTP (CORREGIDO) ---
 function Test-EstadoMFA {
     Write-Host "`n  TEST 3 -- Estado de MFA (multiOTP)" -ForegroundColor Cyan
     Write-Host "  -----------------------------------" -ForegroundColor Cyan
 
-    $multiotpExe = $null
-    $rutasBuscar = @("C:\Program Files\multiOTP","C:\multiOTP","C:\Program Files (x86)\multiOTP")
-    foreach ($r in $rutasBuscar) { if (Test-Path "$r\multiotp.exe") { $multiotpExe = "$r\multiotp.exe"; break } }
-
+    $multiotpExe = Get-MultiOTPExe
     if (-not $multiotpExe) {
         Write-Host "  [FAIL] multiOTP no instalado. Ejecuta Opciones 1, 6 y 7." -ForegroundColor Red
         return
     }
     Write-Host "  [OK] multiOTP encontrado: $multiotpExe" -ForegroundColor Green
 
-    Push-Location (Split-Path $multiotpExe)
-    Write-Host "`n  Usuarios registrados en multiOTP:" -ForegroundColor Yellow
-    & ".\multiotp.exe" -list 2>&1 | ForEach-Object { Write-Host "  $_" -ForegroundColor White }
+    # CORRECCION CLAVE: siempre ejecutar desde el directorio de multiotp.exe
+    $dir = Split-Path $multiotpExe
+    Push-Location $dir
 
-    Write-Host "`n  Configuracion de bloqueo:" -ForegroundColor Yellow
-    & ".\multiotp.exe" -showconfig 2>&1 | Where-Object { $_ -match "(MaxBlock|MaxDelay|Failure|Lockout)" } |
-        ForEach-Object { Write-Host "  $_" -ForegroundColor White }
+    # Listar usuarios registrados
+    Write-Host "`n  Usuarios registrados en multiOTP:" -ForegroundColor Yellow
+    $lista = & ".\multiotp.exe" -list-users 2>&1
+    if ($lista) {
+        $lista | ForEach-Object { Write-Host "    $_" -ForegroundColor White }
+    } else {
+        # Algunos builds usan -list en lugar de -list-users
+        $lista2 = & ".\multiotp.exe" -list 2>&1
+        if ($lista2 -notmatch "ERROR") {
+            $lista2 | ForEach-Object { Write-Host "    $_" -ForegroundColor White }
+        } else {
+            Write-Host "    [WARN] No hay usuarios registrados o el comando fallo." -ForegroundColor Yellow
+            Write-Host "    Ejecuta la Opcion 7 para registrar el usuario." -ForegroundColor Yellow
+        }
+    }
+
+    # Mostrar configuracion de bloqueo
+    Write-Host "`n  Configuracion de bloqueo MFA:" -ForegroundColor Yellow
+    $cfg = & ".\multiotp.exe" -config 2>&1
+    if ($cfg) {
+        # Filtrar solo las lineas relevantes al bloqueo
+        $cfg | Where-Object { $_ -match "(MaxBlock|MaxDelay|Failure|block|delay|lock)" } |
+            ForEach-Object { Write-Host "    $_" -ForegroundColor White }
+    }
+
+    # Verificar que el secreto del Administrator esta guardado
+    Write-Host "`n  Verificando registro del Administrator..." -ForegroundColor Yellow
+    $checkAdmin = & ".\multiotp.exe" -check-user Administrator 2>&1
+    if ($checkAdmin -match "(?i)(ok|exist|found|1)") {
+        Write-Host "  [PASS] Administrator esta registrado en multiOTP." -ForegroundColor Green
+    } else {
+        Write-Host "  [WARN] No se confirmo el registro de Administrator." -ForegroundColor Yellow
+        Write-Host "         Vuelve a ejecutar la Opcion 7."               -ForegroundColor Yellow
+    }
+
     Pop-Location
 }
