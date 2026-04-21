@@ -23,7 +23,7 @@ function Get-OUSegura {
         Write-Host "  [OK] OU '$NombreBase' creada." -ForegroundColor Green
         return "OU=$NombreBase,$dcBase"
     } catch {
-        Write-Host "  [ERROR] No se pudo crear OU '$NombreBase': $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "  [ERROR] No se pudo crear OU '${NombreBase}': $($_.Exception.Message)" -ForegroundColor Red
         return $null
     }
 }
@@ -40,8 +40,6 @@ function Get-MultiOTPExe {
 
 # ------------------------------------------------------------
 # UTILIDAD: Permitir login local en el DC a un usuario
-#           Los DC solo permiten login local a Domain Admins
-#           por defecto. Esta funcion edita la politica local.
 # ------------------------------------------------------------
 function Habilitar-LogonLocal {
     param([string]$Usuario)
@@ -56,12 +54,11 @@ function Habilitar-LogonLocal {
 
         # Verificar si ya tiene el permiso
         if ($contenido -match "SeInteractiveLogonRight.*\*$sid") {
-            Write-Host "    [OK] $Usuario ya tiene permiso de logon local." -ForegroundColor DarkGray
+            Write-Host "    [OK] ${Usuario} ya tiene permiso de logon local." -ForegroundColor DarkGray
             return
         }
 
-        # Agregar SID a SeInteractiveLogonRight (login local)
-        # y a SeRemoteInteractiveLogonRight (login por RDP)
+        # Agregar SID a SeInteractiveLogonRight y SeRemoteInteractiveLogonRight
         $contenido = $contenido -replace `
             "(SeInteractiveLogonRight\s*=\s*)(.*)", `
             "`$1`$2,*$sid"
@@ -71,9 +68,9 @@ function Habilitar-LogonLocal {
 
         $contenido | Set-Content $cfgPath -Encoding Unicode
         secedit /configure /cfg $cfgPath /db "C:\MFA_Setup\secedit.sdb" /quiet 2>&1 | Out-Null
-        Write-Host "    [OK] $Usuario: logon local y RDP habilitados." -ForegroundColor Green
+        Write-Host "    [OK] ${Usuario}: logon local y RDP habilitados." -ForegroundColor Green
     } catch {
-        Write-Host "    [WARN] No se pudo habilitar logon para $Usuario`: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Host "    [WARN] No se pudo habilitar logon para ${Usuario}: $($_.Exception.Message)" -ForegroundColor Yellow
     }
 }
 
@@ -126,7 +123,6 @@ function Preparar-EntornoMFA {
 
 # ------------------------------------------------------------
 # FUNCION 2: Crear los 4 usuarios de administracion delegada
-#            + habilitar logon local para cada uno
 # ------------------------------------------------------------
 function Crear-UsuariosAdmin {
     Write-Host "`n  +==========================================+" -ForegroundColor Cyan
@@ -167,7 +163,7 @@ function Crear-UsuariosAdmin {
         }
     }
 
-    # Agregar todos a Remote Desktop Users para permitir RDP
+    # Agregar todos a Remote Desktop Users
     Write-Host "`n  Configurando permisos de inicio de sesion..." -ForegroundColor Yellow
     foreach ($u in $usuarios) {
         try {
@@ -219,8 +215,6 @@ function Aplicar-PermisosRBAC {
     Write-Host "  OU NoCuates : $ouNoCuates`n" -ForegroundColor DarkGray
 
     # --- ROL 1: admin_identidad ---
-    # Crear/eliminar/modificar usuarios + Reset Password + atributos basicos
-    # Restriccion: NO puede modificar grupos Domain Admins ni GPOs
     Write-Host "  [ROL 1] admin_identidad (IAM Operator)..." -ForegroundColor Yellow
     foreach ($ou in @($ouCuates, $ouNoCuates)) {
         dsacls "$ou" /I:T /G "${netbios}\admin_identidad:CCDC;;user"                           2>&1 | Out-Null
@@ -235,21 +229,17 @@ function Aplicar-PermisosRBAC {
     Write-Host "  [OK] admin_identidad: Control total sobre usuarios en Cuates y NoCuates." -ForegroundColor Green
 
     # --- ROL 2: admin_storage ---
-    # DENEGAR Reset Password en TODO el dominio (restriccion critica)
     Write-Host "`n  [ROL 2] admin_storage (Storage Operator) -- DENY Reset Password..." -ForegroundColor Yellow
     dsacls "$dcBase" /I:S /D "${netbios}\admin_storage:CA;Reset Password;user" 2>&1 | Out-Null
     Write-Host "  [OK] admin_storage: DENEGADO Reset Password en todo el dominio." -ForegroundColor Green
 
     # --- ROL 3: admin_politicas ---
-    # Lectura en todo el dominio + escritura solo sobre GPOs
     Write-Host "`n  [ROL 3] admin_politicas (GPO Compliance)..." -ForegroundColor Yellow
     try {
         Add-ADGroupMember -Identity "Group Policy Creator Owners" -Members "admin_politicas" -ErrorAction Stop
         Write-Host "  [OK] Agregado a 'Group Policy Creator Owners'." -ForegroundColor Green
     } catch { Write-Host "  [AVISO] Ya pertenece a 'Group Policy Creator Owners'." -ForegroundColor DarkGray }
-    # Lectura en todo el dominio
     dsacls "$dcBase" /I:T /G "${netbios}\admin_politicas:GR" 2>&1 | Out-Null
-    # Escritura sobre gPLink y gPOptions (vincular/desvincular GPOs en OUs)
     foreach ($ou in @($ouCuates, $ouNoCuates)) {
         dsacls "$ou" /I:T /G "${netbios}\admin_politicas:RPWP;gPLink"    2>&1 | Out-Null
         dsacls "$ou" /I:T /G "${netbios}\admin_politicas:RPWP;gPOptions" 2>&1 | Out-Null
@@ -257,7 +247,6 @@ function Aplicar-PermisosRBAC {
     Write-Host "  [OK] admin_politicas: Lectura dominio + escritura GPOs en OUs." -ForegroundColor Green
 
     # --- ROL 4: admin_auditoria ---
-    # Solo lectura en todo el dominio + acceso a Event Logs
     Write-Host "`n  [ROL 4] admin_auditoria (Security Auditor)..." -ForegroundColor Yellow
     try {
         Add-ADGroupMember -Identity "Event Log Readers" -Members "admin_auditoria" -ErrorAction Stop
@@ -291,7 +280,7 @@ function Configurar-FGPP {
             Set-ADFineGrainedPasswordPolicy -Identity $fgppAdmin `
                 -MinPasswordLength 12 -LockoutThreshold 3 `
                 -LockoutDuration "00:30:00" -LockoutObservationWindow "00:30:00"
-            Write-Host "  [OK] '$fgppAdmin' actualizada." -ForegroundColor Yellow
+            Write-Host "  [OK] '${fgppAdmin}' actualizada." -ForegroundColor Yellow
         } else {
             New-ADFineGrainedPasswordPolicy -Name $fgppAdmin `
                 -DisplayName "FGPP Alta Seguridad - Administradores" `
@@ -299,11 +288,13 @@ function Configurar-FGPP {
                 -PasswordHistoryCount 5 -MinPasswordLength 12 `
                 -MinPasswordAge "1.00:00:00" -MaxPasswordAge "90.00:00:00" `
                 -LockoutThreshold 3 -LockoutObservationWindow "00:30:00" -LockoutDuration "00:30:00"
-            Write-Host "  [CREADO] '$fgppAdmin': 12 chars, lockout 3/30min." -ForegroundColor Green
+            Write-Host "  [CREADO] '${fgppAdmin}': 12 chars, lockout 3/30min." -ForegroundColor Green
         }
         foreach ($s in @("Domain Admins","admin_identidad","admin_storage","admin_politicas","admin_auditoria")) {
-            try { Add-ADFineGrainedPasswordPolicySubject -Identity $fgppAdmin -Subjects $s -ErrorAction Stop
-                  Write-Host "    [+] Aplicada a: $s" -ForegroundColor DarkGreen } catch {}
+            try {
+                Add-ADFineGrainedPasswordPolicySubject -Identity $fgppAdmin -Subjects $s -ErrorAction Stop
+                Write-Host "    [+] Aplicada a: $s" -ForegroundColor DarkGreen
+            } catch {}
         }
     } catch { Write-Host "  [ERROR] FGPP Admins: $($_.Exception.Message)" -ForegroundColor Red }
 
@@ -314,7 +305,7 @@ function Configurar-FGPP {
         $existe = Get-ADFineGrainedPasswordPolicy -Filter "Name -eq '$fgppStd'" -ErrorAction SilentlyContinue
         if ($existe) {
             Set-ADFineGrainedPasswordPolicy -Identity $fgppStd -MinPasswordLength 8
-            Write-Host "  [OK] '$fgppStd' actualizada." -ForegroundColor Yellow
+            Write-Host "  [OK] '${fgppStd}' actualizada." -ForegroundColor Yellow
         } else {
             New-ADFineGrainedPasswordPolicy -Name $fgppStd `
                 -DisplayName "FGPP Estandar - Cuates y NoCuates" `
@@ -322,12 +313,15 @@ function Configurar-FGPP {
                 -PasswordHistoryCount 3 -MinPasswordLength 8 `
                 -MinPasswordAge "1.00:00:00" -MaxPasswordAge "90.00:00:00" `
                 -LockoutThreshold 5 -LockoutObservationWindow "00:15:00" -LockoutDuration "00:30:00"
-            Write-Host "  [CREADO] '$fgppStd': 8 chars." -ForegroundColor Green
+            Write-Host "  [CREADO] '${fgppStd}': 8 chars." -ForegroundColor Green
         }
         foreach ($s in @("Cuates","NoCuates")) {
-            try { Add-ADFineGrainedPasswordPolicySubject -Identity $fgppStd -Subjects $s -ErrorAction Stop
-                  Write-Host "    [+] Aplicada al grupo: $s" -ForegroundColor DarkGreen }
-            catch { Write-Host "    [AVISO] No se pudo aplicar a '$s'." -ForegroundColor DarkGray }
+            try {
+                Add-ADFineGrainedPasswordPolicySubject -Identity $fgppStd -Subjects $s -ErrorAction Stop
+                Write-Host "    [+] Aplicada al grupo: $s" -ForegroundColor DarkGreen
+            } catch {
+                Write-Host "    [AVISO] No se pudo aplicar a '${s}'." -ForegroundColor DarkGray
+            }
         }
     } catch { Write-Host "  [ERROR] FGPP Standard: $($_.Exception.Message)" -ForegroundColor Red }
 
@@ -450,8 +444,11 @@ function Instalar-MFA {
     Read-Host | Out-Null
 
     try {
-        if ($instalador.Extension -eq ".msi") { $p = Start-Process "msiexec.exe" -ArgumentList "/i `"$($instalador.FullName)`"" -Wait -PassThru }
-        else { $p = Start-Process $instalador.FullName -Wait -PassThru }
+        if ($instalador.Extension -eq ".msi") {
+            $p = Start-Process "msiexec.exe" -ArgumentList "/i `"$($instalador.FullName)`"" -Wait -PassThru
+        } else {
+            $p = Start-Process $instalador.FullName -Wait -PassThru
+        }
         if ($p.ExitCode -eq 0) { Write-Host "  [OK] multiOTP instalado." -ForegroundColor Green }
         else { Write-Host "  [AVISO] Codigo $($p.ExitCode)." -ForegroundColor Yellow }
     } catch { Write-Host "  [ERROR] $($_.Exception.Message)" -ForegroundColor Red }
@@ -461,8 +458,7 @@ function Instalar-MFA {
 }
 
 # ------------------------------------------------------------
-# FUNCION 7: Registrar TODOS los admins en multiOTP
-#            con el mismo secreto TOTP
+# FUNCION 7: Registrar TODOS los admins en multiOTP con TOTP
 # ------------------------------------------------------------
 function Activar-MFA {
     Write-Host "`n  +==========================================+" -ForegroundColor Cyan
@@ -491,19 +487,19 @@ function Activar-MFA {
 
     foreach ($u in $usuarios) {
         Write-Host "  Registrando: $u ..." -ForegroundColor Yellow
-        # 3 variantes porque Windows puede enviar cualquiera de estas al Credential Provider
         foreach ($id in @($u, "$netbios\$u", "$u@$dns")) {
             & ".\multiotp.exe" -delete $id 2>&1 | Out-Null
             $s = & ".\multiotp.exe" -create $id TOTP $miSecreto 6 2>&1
             if ($s -match "(?i)(ok|success|created|0)") {
-                Write-Host "    [OK] $id" -ForegroundColor Green; $totalOK++
+                Write-Host "    [OK] $id" -ForegroundColor Green
+                $totalOK++
             } else {
                 Write-Host "    [WARN] $id -> $s" -ForegroundColor Yellow
             }
         }
     }
 
-    # Bloqueo: 3 fallos MFA = lockout 30 minutos (Test 4)
+    # Bloqueo: 3 fallos MFA = lockout 30 minutos
     Write-Host "`n  Configurando bloqueo (3 fallos = 30 min)..." -ForegroundColor Yellow
     & ".\multiotp.exe" -config MaxDelayedFailures=3       2>&1 | Out-Null
     & ".\multiotp.exe" -config MaxBlockFailures=3         2>&1 | Out-Null
@@ -514,18 +510,23 @@ function Activar-MFA {
 
     # Guardar secreto
     $archivo = "C:\MFA_Setup\MFA_Secret_TodosAdmins.txt"
-    @("MFA TOTP Secret - Practica 09","==============================",
-      "Usuarios : Administrator, admin_identidad, admin_storage, admin_politicas, admin_auditoria",
-      "Servidor : $env:COMPUTERNAME","Dominio  : $netbios ($dns)",
-      "Secreto  : $miSecreto","Tipo     : TOTP RFC 6238 (Google Authenticator)",
-      "Generado : $(Get-Date -Format 'dd/MM/yyyy HH:mm:ss')",
-      "","NOTA: Todos los usuarios comparten el mismo secreto TOTP."
+    @(
+        "MFA TOTP Secret - Practica 09",
+        "==============================",
+        "Usuarios : Administrator, admin_identidad, admin_storage, admin_politicas, admin_auditoria",
+        "Servidor : $env:COMPUTERNAME",
+        "Dominio  : $netbios ($dns)",
+        "Secreto  : $miSecreto",
+        "Tipo     : TOTP RFC 6238 (Google Authenticator)",
+        "Generado : $(Get-Date -Format 'dd/MM/yyyy HH:mm:ss')",
+        "",
+        "NOTA: Todos los usuarios comparten el mismo secreto TOTP."
     ) | Out-File $archivo -Encoding UTF8
 
     Write-Host "`n  +----------------------------------------------------------+" -ForegroundColor Magenta
     Write-Host "  |   ACTUALIZA GOOGLE AUTHENTICATOR                         |" -ForegroundColor Magenta
     Write-Host "  +----------------------------------------------------------+" -ForegroundColor Magenta
-    Write-Host "  IMPORTANTE: Borra la entrada vieja y agrega una nueva:" -ForegroundColor Red
+    Write-Host "  IMPORTANTE: Borra la entrada vieja y agrega una nueva:"      -ForegroundColor Red
     Write-Host ""
     Write-Host "     Nombre : Practica09 - $env:COMPUTERNAME" -ForegroundColor Cyan
     Write-Host "     Secreto: $miSecreto"                     -ForegroundColor Green
@@ -575,7 +576,6 @@ function Test-DelegacionRBAC {
     Write-Host "`n  TEST 1 -- Delegacion RBAC" -ForegroundColor Cyan
     Write-Host "  -------------------------" -ForegroundColor Cyan
 
-    # Verificar ACE Deny de admin_storage en AD
     try {
         $dcBase = (Get-ADDomain).DistinguishedName
         $acl    = Get-Acl -Path "AD:\$dcBase"
@@ -586,7 +586,6 @@ function Test-DelegacionRBAC {
         else        { Write-Host "  [WARN] No se detecto ACE DENY. Ejecuta Opcion 3." -ForegroundColor Yellow }
     } catch { Write-Host "  [WARN] No se pudo leer ACL: $($_.Exception.Message)" -ForegroundColor Yellow }
 
-    # Prueba funcional real con credenciales
     Write-Host "`n  Buscando usuario de prueba en OU Cuates..." -ForegroundColor Yellow
     $ouCuates = Get-OUSegura -NombreBase "Cuates"
     $usuarioPrueba = $null
@@ -601,12 +600,12 @@ function Test-DelegacionRBAC {
     }
 
     Write-Host "  Usuario de prueba: $($usuarioPrueba.SamAccountName)" -ForegroundColor DarkGray
-    $pwd    = ConvertTo-SecureString "Hardening2026!" -AsPlainText -Force
+    $pwd      = ConvertTo-SecureString "Hardening2026!" -AsPlainText -Force
     $nuevaPwd = ConvertTo-SecureString "TestClave2026!" -AsPlainText -Force
 
     # Accion A: admin_identidad (debe funcionar)
     Write-Host "`n  ACCION A: admin_identidad resetea contrasena..." -ForegroundColor Yellow
-    $credId = New-Object System.Management.Automation.PSCredential("PRACTICA8\admin_identidad", $pwd)
+    $credId = New-Object System.Management.Automation.PSCredential("$((Get-ADDomain).NetBIOSName)\admin_identidad", $pwd)
     try {
         Set-ADAccountPassword -Identity $usuarioPrueba.SamAccountName -NewPassword $nuevaPwd -Reset -Credential $credId -ErrorAction Stop
         Write-Host "  [PASS] ACCION A: admin_identidad reseteo contrasena EXITOSAMENTE." -ForegroundColor Green
@@ -616,7 +615,7 @@ function Test-DelegacionRBAC {
 
     # Accion B: admin_storage (debe fallar)
     Write-Host "`n  ACCION B: admin_storage intenta resetear contrasena..." -ForegroundColor Yellow
-    $credSt = New-Object System.Management.Automation.PSCredential("PRACTICA8\admin_storage", $pwd)
+    $credSt = New-Object System.Management.Automation.PSCredential("$((Get-ADDomain).NetBIOSName)\admin_storage", $pwd)
     try {
         Set-ADAccountPassword -Identity $usuarioPrueba.SamAccountName -NewPassword $nuevaPwd -Reset -Credential $credSt -ErrorAction Stop
         Write-Host "  [FAIL] ACCION B: admin_storage NO deberia poder resetear." -ForegroundColor Red
@@ -631,7 +630,6 @@ function Test-FGPP {
     Write-Host "`n  TEST 2 -- FGPP" -ForegroundColor Cyan
     Write-Host "  --------------" -ForegroundColor Cyan
 
-    # Mostrar politica efectiva
     try {
         $pso = Get-ADUserResultantPasswordPolicy -Identity "admin_identidad" -ErrorAction Stop
         if ($pso) {
@@ -643,7 +641,6 @@ function Test-FGPP {
         }
     } catch { Write-Host "  [WARN] No se pudo leer PSO: $($_.Exception.Message)" -ForegroundColor Yellow }
 
-    # Prueba funcional: intentar poner contrasena de 8 chars (debe fallar)
     Write-Host "`n  Intentando poner contrasena de 8 chars a admin_identidad..." -ForegroundColor Yellow
     try {
         Set-ADAccountPassword -Identity "admin_identidad" `
@@ -669,7 +666,6 @@ function Test-EstadoMFA {
     $dir = Split-Path $multiotpExe
     Push-Location $dir
 
-    # Listar usuarios via carpeta users
     Write-Host "`n  Usuarios registrados:" -ForegroundColor Yellow
     $carpeta = Join-Path $dir "users"
     if (Test-Path $carpeta) {
@@ -682,7 +678,6 @@ function Test-EstadoMFA {
         }
     }
 
-    # Config de bloqueo
     Write-Host "`n  Bloqueo MFA:" -ForegroundColor Yellow
     $cfgFile = Join-Path $dir "config\multiotp.json"
     if (-not (Test-Path $cfgFile)) { $cfgFile = Join-Path $dir "multiotp.json" }
@@ -713,26 +708,25 @@ function Test-BloqueoMFA {
     Write-Host "  Este test verifica si la cuenta quedo bloqueada" -ForegroundColor Yellow
     Write-Host "  despues de 3 fallos del token MFA." -ForegroundColor Yellow
 
-    # Verificar estado de bloqueo en AD
     $usuarios = @("Administrator","admin_identidad","admin_storage","admin_politicas","admin_auditoria")
     Write-Host "`n  Estado de bloqueo en Active Directory:" -ForegroundColor Yellow
 
     $hayBloqueado = $false
     foreach ($u in $usuarios) {
         try {
-            $info = Get-ADUser -Identity $u -Properties LockedOut, BadLogonCount, BadPasswordTime -ErrorAction Stop
+            $info   = Get-ADUser -Identity $u -Properties LockedOut, BadLogonCount, BadPasswordTime -ErrorAction Stop
             $estado = if ($info.LockedOut) { "[BLOQUEADO]" } else { "[OK - libre]" }
             $color  = if ($info.LockedOut) { "Red" } else { "Green" }
             Write-Host "  $estado $u (intentos fallidos: $($info.BadLogonCount))" -ForegroundColor $color
             if ($info.LockedOut) { $hayBloqueado = $true }
         } catch {
-            Write-Host "  [WARN] No se pudo verificar $u`: $($_.Exception.Message)" -ForegroundColor Yellow
+            Write-Host "  [WARN] No se pudo verificar ${u}: $($_.Exception.Message)" -ForegroundColor Yellow
         }
     }
 
     if ($hayBloqueado) {
         Write-Host "`n  [PASS] Cuenta bloqueada detectada. Evidencia para el reporte generada." -ForegroundColor Green
-        Write-Host "  Para desbloquear cuando termines de tomar la captura ejecuta:" -ForegroundColor Yellow
+        Write-Host "  Para desbloquear cuando termines ejecuta:" -ForegroundColor Yellow
         Write-Host "  Unlock-ADAccount -Identity <usuario>" -ForegroundColor Cyan
     } else {
         Write-Host "`n  [INFO] Ninguna cuenta esta bloqueada actualmente." -ForegroundColor Yellow
