@@ -409,9 +409,8 @@ function Instalar-MFA {
 }
 
 # ------------------------------------------------------------
-# FUNCION 7: Activar MFA -- registrar usuario TOTP en multiOTP
-# CORRECCION: sintaxis correcta + bloqueo + registro de todas
-#             las variantes de nombre de usuario de Windows
+# FUNCION 7: Activar MFA -- registrar TODOS los admins con
+#            el MISMO secreto TOTP (una sola entrada en el cel)
 # ------------------------------------------------------------
 function Activar-MFA {
     Write-Host "`n  +==========================================+" -ForegroundColor Cyan
@@ -427,79 +426,101 @@ function Activar-MFA {
     $dir = Split-Path $multiotpExe
     Push-Location $dir
 
-    # 2. Pedir usuario (default: Administrator)
-    Write-Host "  Usuario a proteger con MFA [Enter = Administrator]: " -ForegroundColor Yellow -NoNewline
-    $usuarioBase = Read-Host
-    if ([string]::IsNullOrWhiteSpace($usuarioBase)) { $usuarioBase = "Administrator" }
-
-    # 3. Generar secreto TOTP Base32 de 16 caracteres (80 bits, RFC 6238)
-    $base32    = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
-    $miSecreto = -join ((1..16) | ForEach-Object { $base32[(Get-Random -Maximum 32)] })
-
-    # 4. Registrar las TRES variantes de nombre que Windows puede enviar al Credential Provider
-    #    Windows puede pasar: "Administrator", "DOMINIO\Administrator" o "administrator@dominio.local"
+    # 2. Obtener info del dominio
     $netbios = $env:USERDOMAIN
     $dns     = $env:USERDNSDOMAIN
     if ([string]::IsNullOrWhiteSpace($dns)) { $dns = (Get-ADDomain).DNSRoot }
 
-    $variantes = @(
-        $usuarioBase,
-        "$netbios\$usuarioBase",
-        "$usuarioBase@$dns"
+    # 3. Generar UN SOLO secreto compartido para todos los admins
+    $base32    = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+    $miSecreto = -join ((1..16) | ForEach-Object { $base32[(Get-Random -Maximum 32)] })
+    Write-Host "  [INFO] Secreto TOTP maestro: $miSecreto" -ForegroundColor DarkGray
+    Write-Host "  [INFO] Se asignara a TODOS los usuarios admin con el mismo secreto.`n" -ForegroundColor DarkGray
+
+    # 4. Lista de todos los usuarios a registrar + sus variantes de nombre
+    #    Windows puede enviar el usuario como: "usuario", "DOMINIO\usuario" o "usuario@dns"
+    $usuariosAdmin = @(
+        "Administrator",
+        "admin_identidad",
+        "admin_storage",
+        "admin_politicas",
+        "admin_auditoria"
     )
 
-    Write-Host "`n  [INFO] Registrando variantes de usuario en multiOTP..." -ForegroundColor Yellow
-    foreach ($id in $variantes) {
-        # Borrar entrada previa si existe
-        & ".\multiotp.exe" -delete $id 2>&1 | Out-Null
+    $totalOK   = 0
+    $totalWarn = 0
 
-        # SINTAXIS CORRECTA de multiotp CLI:
-        #   multiotp -create <usuario> TOTP <secreto_base32> <digitos>
-        $salida = & ".\multiotp.exe" -create $id TOTP $miSecreto 6 2>&1
-        if ($salida -match "(?i)(ok|success|created|0)") {
-            Write-Host "  [OK] Registrado: $id" -ForegroundColor Green
-        } else {
-            Write-Host "  [WARN] $id -> $salida" -ForegroundColor Yellow
+    foreach ($usuario in $usuariosAdmin) {
+        Write-Host "  Registrando: $usuario ..." -ForegroundColor Yellow
+
+        # Las 3 variantes de nombre que Windows puede enviar al Credential Provider
+        $variantes = @(
+            $usuario,
+            "$netbios\$usuario",
+            "$usuario@$dns"
+        )
+
+        foreach ($id in $variantes) {
+            & ".\multiotp.exe" -delete $id 2>&1 | Out-Null
+            $salida = & ".\multiotp.exe" -create $id TOTP $miSecreto 6 2>&1
+            if ($salida -match "(?i)(ok|success|created|0)") {
+                Write-Host "    [OK] $id" -ForegroundColor Green
+                $totalOK++
+            } else {
+                Write-Host "    [WARN] $id -> $salida" -ForegroundColor Yellow
+                $totalWarn++
+            }
         }
     }
 
-    # 5. Configurar bloqueo por intentos fallidos de MFA (Test 4)
-    #    3 fallos consecutivos = cuenta bloqueada 30 minutos (1800 segundos)
-    Write-Host "`n  [INFO] Configurando bloqueo MFA (3 fallos = 30 min lockout)..." -ForegroundColor Yellow
+    # 5. Configurar bloqueo: 3 fallos MFA = lockout 30 minutos (Test 4)
+    Write-Host "`n  [INFO] Configurando bloqueo MFA (3 fallos = 30 min)..." -ForegroundColor Yellow
     & ".\multiotp.exe" -config MaxDelayedFailures=3       2>&1 | Out-Null
     & ".\multiotp.exe" -config MaxBlockFailures=3         2>&1 | Out-Null
     & ".\multiotp.exe" -config FailureDelayInSeconds=1800 2>&1 | Out-Null
-    Write-Host "  [OK] Bloqueo configurado: 3 fallos -> lockout 1800 seg (30 min)." -ForegroundColor Green
+    Write-Host "  [OK] Bloqueo: 3 fallos -> lockout 1800 seg (30 min)." -ForegroundColor Green
 
     Pop-Location
 
-    # 6. Mostrar instrucciones para Google Authenticator
+    # 6. Resumen
+    Write-Host "`n  Resumen: $totalOK variantes OK, $totalWarn advertencias." -ForegroundColor Cyan
+
+    # 7. Instrucciones Google Authenticator
     Write-Host "`n  +----------------------------------------------------------+" -ForegroundColor Magenta
-    Write-Host "  |   CONFIGURA GOOGLE AUTHENTICATOR EN TU CELULAR           |" -ForegroundColor Magenta
+    Write-Host "  |   ACTUALIZA GOOGLE AUTHENTICATOR EN TU CELULAR           |" -ForegroundColor Magenta
     Write-Host "  +----------------------------------------------------------+" -ForegroundColor Magenta
     Write-Host ""
-    Write-Host "  1. Abre Google Authenticator." -ForegroundColor White
+    Write-Host "  IMPORTANTE: Borra la entrada anterior de Google Authenticator" -ForegroundColor Red
+    Write-Host "  y agrega una nueva con estos datos:" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "  1. Abre Google Authenticator -> toca el icono de editar" -ForegroundColor White
+    Write-Host "     la entrada vieja -> Eliminar." -ForegroundColor White
     Write-Host "  2. Toca '+' -> 'Ingresar clave de configuracion'." -ForegroundColor White
     Write-Host "  3. Completa los campos:" -ForegroundColor White
     Write-Host ""
-    Write-Host "     Nombre de cuenta : Practica09 - $env:COMPUTERNAME" -ForegroundColor Cyan
-    Write-Host "     Tu clave (secreto): $miSecreto"                    -ForegroundColor Green
-    Write-Host "     Tipo de clave     : Basada en tiempo (TOTP)"       -ForegroundColor Cyan
+    Write-Host "     Nombre de cuenta : Practica09 Admins - $env:COMPUTERNAME" -ForegroundColor Cyan
+    Write-Host "     Tu clave (secreto): $miSecreto"                           -ForegroundColor Green
+    Write-Host "     Tipo de clave     : Basada en tiempo (TOTP)"              -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "  4. Toca 'Agregar'. Veras un codigo de 6 digitos que"  -ForegroundColor White
-    Write-Host "     cambia cada 30 segundos. Ese codigo se pide al"    -ForegroundColor White
-    Write-Host "     iniciar sesion en el servidor."                     -ForegroundColor White
+    Write-Host "  4. Este MISMO codigo sirve para TODOS los usuarios admin:" -ForegroundColor White
+    Write-Host "     Administrator, admin_identidad, admin_storage,"          -ForegroundColor White
+    Write-Host "     admin_politicas y admin_auditoria."                       -ForegroundColor White
 
-    # 7. Guardar secreto en archivo para el reporte tecnico
-    $archivoSecreto = "C:\MFA_Setup\MFA_Secret_$usuarioBase.txt"
+    # 8. Guardar secreto en archivo para el reporte
+    $archivoSecreto = "C:\MFA_Setup\MFA_Secret_TodosAdmins.txt"
     @(
         "MFA TOTP Secret - Practica 09",
         "==============================",
-        "Usuario  : $usuarioBase",
+        "Usuarios : Administrator, admin_identidad, admin_storage,",
+        "           admin_politicas, admin_auditoria",
         "Servidor : $env:COMPUTERNAME",
+        "Dominio  : $netbios ($dns)",
         "Secreto  : $miSecreto",
         "Tipo     : TOTP RFC 6238 (Google Authenticator)",
-        "Generado : $(Get-Date -Format 'dd/MM/yyyy HH:mm:ss')"
+        "Generado : $(Get-Date -Format 'dd/MM/yyyy HH:mm:ss')",
+        "",
+        "NOTA: Todos los usuarios comparten el mismo secreto.",
+        "      El codigo de 6 digitos cambia cada 30 segundos."
     ) | Out-File $archivoSecreto -Encoding UTF8
     Write-Host "`n  [OK] Secreto guardado en: $archivoSecreto" -ForegroundColor Green
 
