@@ -13,8 +13,8 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 }
 
 do {
-    Clear-Host
-    Write-Host "`n  +============================================+" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "  +============================================+" -ForegroundColor Cyan
     Write-Host "  |     PRACTICA 09 — HARDENING AD             |" -ForegroundColor Cyan
     Write-Host "  |     RBAC · FGPP · Auditoria · MFA          |" -ForegroundColor Cyan
     Write-Host "  +============================================+" -ForegroundColor Cyan
