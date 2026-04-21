@@ -441,11 +441,27 @@ function Activar-MFA {
     Write-Host "`n  [INFO] Secreto TOTP generado (guardalo): $miSecreto" -ForegroundColor DarkGray
 
     # 4. Registrar en multiOTP
-    #    Sintaxis correcta: -create -prefix-pin-needed-enabled -time-based-totp USER TOTP SECRET DIGITS PERIOD
+    #    Sintaxis real del CLI de multiOTP:
+    #      multiotp -create USER TOTP SECRET DIGITS
+    #    El periodo (30s) es el default de TOTP, no se pasa como argumento.
+    #    -prefix-pin-needed-enabled lo dejamos fuera para no pedir PIN adicional.
     Write-Host "  [INFO] Registrando '$usuarioMFA' en multiOTP..." -ForegroundColor Yellow
     & ".\multiotp.exe" -delete $usuarioMFA 2>&1 | Out-Null
-    $salida = & ".\multiotp.exe" -create -prefix-pin-needed-enabled -time-based-totp $usuarioMFA TOTP $miSecreto 6 30 2>&1
+    $salida = & ".\multiotp.exe" -create $usuarioMFA TOTP $miSecreto 6 2>&1
     Write-Host "  [DEBUG] create: $salida" -ForegroundColor DarkGray
+
+    # Verificar que el usuario quedo registrado correctamente
+    $check = & ".\multiotp.exe" -list 2>&1
+    if ($check -match $usuarioMFA) {
+        Write-Host "  [OK] Usuario '$usuarioMFA' registrado correctamente en multiOTP." -ForegroundColor Green
+    } else {
+        Write-Host "  [WARN] No se confirmo el registro. Intenta con el nombre de dominio:" -ForegroundColor Yellow
+        # Algunos instaladores requieren el formato DOMINIO\usuario
+        $usuarioDominio = "$env:USERDOMAIN\$usuarioMFA"
+        & ".\multiotp.exe" -delete $usuarioDominio 2>&1 | Out-Null
+        $salida2 = & ".\multiotp.exe" -create $usuarioDominio TOTP $miSecreto 6 2>&1
+        Write-Host "  [DEBUG] create (dominio): $salida2" -ForegroundColor DarkGray
+    }
 
     # 5. Configurar bloqueo: 3 intentos MFA fallidos -> lockout 30 minutos (Test 4)
     Write-Host "  [INFO] Configurando bloqueo (3 intentos = 30 min lockout)..." -ForegroundColor Yellow
