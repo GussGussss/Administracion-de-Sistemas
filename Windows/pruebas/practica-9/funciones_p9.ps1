@@ -143,7 +143,7 @@ function Aplicar-PermisosRBAC {
 
     Write-Host "  Detectando OUs del dominio..." -ForegroundColor Yellow
     $ouCuates   = Get-OUSegura -NombreBase "Cuates"
-    $ouNoCuates = Get-OUSegura -NombreBase "No Cuates"
+    $ouNoCuates = Get-OUSegura -NombreBase "NoCuates"
 
     if (-not $ouCuates -or -not $ouNoCuates) {
         Write-Host "  [ERROR] No se pudieron resolver las OUs." -ForegroundColor Red
@@ -252,14 +252,14 @@ function Configurar-FGPP {
             Set-ADFineGrainedPasswordPolicy -Identity $fgppStd -MinPasswordLength 8
         } else {
             New-ADFineGrainedPasswordPolicy -Name $fgppStd `
-                -DisplayName "FGPP Estandar - Cuates y No Cuates" `
+                -DisplayName "FGPP Estandar - Cuates y NoCuates" `
                 -Precedence 20 -ComplexityEnabled $true -ReversibleEncryptionEnabled $false `
                 -PasswordHistoryCount 3 -MinPasswordLength 8 `
                 -MinPasswordAge "1.00:00:00" -MaxPasswordAge "90.00:00:00" `
                 -LockoutThreshold 5 -LockoutObservationWindow "00:15:00" -LockoutDuration "00:30:00"
             Write-Host "  [CREADO] '$fgppStd': 8 chars min." -ForegroundColor Green
         }
-        foreach ($s in @("Cuates","No Cuates")) {
+        foreach ($s in @("Cuates","NoCuates")) {
             try { Add-ADFineGrainedPasswordPolicySubject -Identity $fgppStd -Subjects $s -ErrorAction Stop; Write-Host "    [+] Aplicada al grupo: $s" -ForegroundColor DarkGreen }
             catch { Write-Host "    [AVISO] No se pudo aplicar a '$s' (verifica que el grupo existe)." -ForegroundColor DarkGray }
         }
