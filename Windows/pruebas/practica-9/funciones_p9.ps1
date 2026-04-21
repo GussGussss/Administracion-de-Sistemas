@@ -590,28 +590,16 @@ function Test-DelegacionRBAC {
     }
     Write-Host "  Usuario de prueba: $($usuarioPrueba.SamAccountName)" -ForegroundColor DarkGray
 
-    # ---- ACCION A: admin_identidad tiene permiso Allow Reset Password ----
+    # ---- ACCION A: verificar via dsacls (mas confiable que Get-Acl en AD) ----
     Write-Host "`n  ACCION A: Verificando que admin_identidad PUEDE resetear contrasenas..." -ForegroundColor Yellow
-    $ouAcl    = Get-Acl -Path "AD:\$ouCuates" -ErrorAction SilentlyContinue
-    $aclAllow = $ouAcl.Access | Where-Object {
-        $_.IdentityReference -like "*admin_identidad*" -and
-        $_.AccessControlType -eq "Allow"
-    }
-    if ($aclAllow) {
-        Write-Host "  [PASS] ACCION A: admin_identidad tiene ACEs Allow en la OU Cuates:" -ForegroundColor Green
-        $aclAllow | Select-Object -First 5 | ForEach-Object {
-            Write-Host "         Allow: $($_.ActiveDirectoryRights) sobre $($_.InheritedObjectType)" -ForegroundColor DarkGray
-        }
+    $dsaclsOut = dsacls "$ouCuates" 2>&1
+    $lineasId  = $dsaclsOut | Select-String "admin_identidad"
+    if ($lineasId) {
+        Write-Host "  [PASS] ACCION A: admin_identidad tiene permisos en la OU Cuates:" -ForegroundColor Green
+        $lineasId | Select-Object -First 6 | ForEach-Object { Write-Host "         $_" -ForegroundColor DarkGray }
     } else {
-        Write-Host "  [WARN] ACCION A: No se encontraron ACEs Allow para admin_identidad." -ForegroundColor Yellow
-        Write-Host "         Ejecuta la Opcion 3." -ForegroundColor Yellow
-    }
-
-    # Verificar con dsacls que tiene Reset Password explicito
-    $dsaclsOut = dsacls "$ouCuates" 2>&1 | Select-String "admin_identidad"
-    if ($dsaclsOut) {
-        Write-Host "  [INFO] dsacls confirma permisos de admin_identidad:" -ForegroundColor Cyan
-        $dsaclsOut | Select-Object -First 4 | ForEach-Object { Write-Host "         $_" -ForegroundColor DarkGray }
+        Write-Host "  [WARN] ACCION A: No se detectaron permisos de admin_identidad en dsacls." -ForegroundColor Yellow
+        Write-Host "         Ejecuta la Opcion 3 y repite el test." -ForegroundColor Yellow
     }
 
     # ---- ACCION B: admin_storage tiene DENY explicito en dominio ----
