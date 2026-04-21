@@ -2,15 +2,12 @@
 #  main_p9.ps1 -- Menu principal Practica 09
 #  Hardening AD, RBAC, FGPP, Auditoria y MFA
 # ============================================================
-
 . "$PSScriptRoot\funciones_p9.ps1"
-
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()
     ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     Write-Host "`n  [ERROR] Ejecuta este script como Administrador.`n" -ForegroundColor Red
     exit 1
 }
-
 do {
     Write-Host "`n  +============================================+" -ForegroundColor Cyan
     Write-Host "  |     PRACTICA 09 - HARDENING AD             |" -ForegroundColor Cyan
@@ -29,9 +26,7 @@ do {
     Write-Host "  |  0. Salir                                  |" -ForegroundColor Red
     Write-Host "  |                                            |" -ForegroundColor Cyan
     Write-Host "  +============================================+`n" -ForegroundColor Cyan
-
     $opcion = Read-Host "  Selecciona una opcion"
-
     switch ($opcion) {
         '1' { Preparar-EntornoMFA }
         '2' { Crear-UsuariosAdmin }
