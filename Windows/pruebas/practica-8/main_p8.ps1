@@ -35,6 +35,7 @@ do {
     Write-Host "  |  7. Configurar AppLocker                 |" -ForegroundColor White
     Write-Host "  |  8. Crear usuario dinamicamente          |" -ForegroundColor White
     Write-Host "  |  9. Perfiles moviles (Roaming Profiles)  |" -ForegroundColor White
+    Write-Host "  |  10. Redireccion de carpetas (FSRM)      |" -ForegroundColor White
     Write-Host "  |                                          |" -ForegroundColor Cyan
     Write-Host "  |  0. Salir                                |" -ForegroundColor Yellow
     Write-Host "  |                                          |" -ForegroundColor Cyan
@@ -65,6 +66,7 @@ do {
                 Start-Sleep -Seconds 3
             }
         }
+        "10" { Configurar-RedireccionCarpetas }
         "0" { Write-Host "`n  Saliendo...`n" -ForegroundColor Yellow }
         default { Write-Host "`n  Opcion invalida, intenta de nuevo." -ForegroundColor Red; pause }
     }
