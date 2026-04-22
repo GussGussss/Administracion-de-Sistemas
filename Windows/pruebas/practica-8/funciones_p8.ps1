@@ -384,12 +384,12 @@ function Configurar-Horarios {
     Write-Host "  Horarios locales que se configuraran:" -ForegroundColor White
     Write-Host ""
     Write-Host "    Cuates   : 08:00 AM - 03:00 PM (hora local)" -ForegroundColor Cyan
-    Write-Host "    NoCuates : 03:00 PM - 02:00 AM (hora local)" -ForegroundColor Cyan
+    Write-Host "    NoCuates : 03:00 PM - 08:00 AM (hora local)" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "  Equivalencia en UTC (lo que AD almacena):" -ForegroundColor White
     Write-Host ""
     Write-Host "    Cuates   : 15:00 - 22:00 UTC" -ForegroundColor DarkCyan
-    Write-Host "    NoCuates : 22:00 - 09:00 UTC" -ForegroundColor DarkCyan
+    Write-Host "    NoCuates : 22:00 - 15:00 UTC" -ForegroundColor DarkCyan
     Write-Host ""
     Write-Host "  Ademas se configurara la GPO para forzar cierre" -ForegroundColor White
     Write-Host "  de sesion cuando el horario expire." -ForegroundColor White
@@ -423,7 +423,7 @@ function Configurar-Horarios {
     }
 
     $horasUTC_Cuates   = @(15,16,17,18,19,20,21)
-    $horasUTC_NoCuates = @(22,23,0,1,2,3,4,5,6,7,8)
+    $horasUTC_NoCuates = @(22,23,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14)
 
     $bytesCuates   = Build-LogonHours -HorasUTC $horasUTC_Cuates
     $bytesNoCuates = Build-LogonHours -HorasUTC $horasUTC_NoCuates
@@ -1053,7 +1053,7 @@ function Crear-UsuarioDinamico {
     Write-Host ""
     Write-Host "  Departamento:" -ForegroundColor White
     Write-Host "    1. Cuates   (horario 08:00-15:00, cuota 10 MB)" -ForegroundColor Cyan
-    Write-Host "    2. NoCuates (horario 15:00-02:00, cuota  5 MB)" -ForegroundColor Cyan
+    Write-Host "    2. NoCuates (horario 15:00-08:00, cuota  5 MB)" -ForegroundColor Cyan
     Write-Host ""
     $deptoOpcion = Read-Host "  Selecciona el departamento (1 o 2)"
 
@@ -1079,7 +1079,7 @@ function Crear-UsuarioDinamico {
         Write-Host "  | Horario     : 08:00 AM - 03:00 PM" -ForegroundColor White
         Write-Host "  | Cuota       : 10 MB" -ForegroundColor White
     } else {
-        Write-Host "  | Horario     : 03:00 PM - 02:00 AM" -ForegroundColor White
+        Write-Host "  | Horario     : 03:00 PM - 08:00 AM" -ForegroundColor White
         Write-Host "  | Cuota       :  5 MB" -ForegroundColor White
     }
     Write-Host "  | Apantallam. : .mp3 .mp4 .exe .msi bloq. |" -ForegroundColor White
@@ -1161,7 +1161,7 @@ function Crear-UsuarioDinamico {
         if ($departamento -eq "Cuates") {
             $horasUTC = @(15,16,17,18,19,20,21)
         } else {
-            $horasUTC = @(22,23,0,1,2,3,4,5,6,7,8)
+            $horasUTC = @(22,23,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14)
         }
 
         $bytesHorario = Build-LogonHours -HorasUTC $horasUTC
