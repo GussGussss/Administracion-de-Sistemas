@@ -846,7 +846,7 @@ function Configurar-AppLocker {
     Write-Host "    NoCuates : notepad.exe BLOQUEADO por Hash" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "  Hash usado (notepad.exe Windows 10 Pro):" -ForegroundColor White
-    Write-Host "  0x70152C176B629E51FD283BD2F30ACFBDB1A129EA14D94889C1D32A742C104BBF..." -ForegroundColor DarkGray
+    Write-Host "  0xDA5807BB0997CC6B5132950EC87EDA2B33B1AC4533CF1F7A22A6F3B576ED7C5B..." -ForegroundColor DarkGray
     Write-Host ""
     Write-Host "  La regla de Hash identifica el archivo por su" -ForegroundColor Yellow
     Write-Host "  contenido, no por su nombre. Renombrar el .exe" -ForegroundColor Yellow
