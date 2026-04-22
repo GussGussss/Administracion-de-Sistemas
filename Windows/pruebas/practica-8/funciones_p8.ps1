@@ -1268,4 +1268,158 @@ function Crear-UsuarioDinamico {
     Write-Host "  |   [OK] Apantallamiento de archivos       |" -ForegroundColor Green
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host ""
+    
+}
+
+# ------------------------------------------------------------
+# FUNCION 9: Configurar Redireccion de Carpetas
+# Hace que Documentos y Escritorio del cliente apunten
+# a C:\Usuarios\<usuario> en el servidor, donde estan
+# las cuotas FSRM y el apantallamiento.
+# ------------------------------------------------------------
+function Configurar-RedireccionCarpetas {
+
+    Write-Host ""
+    Write-Host "  +==========================================+" -ForegroundColor Cyan
+    Write-Host "  |   REDIRECCION DE CARPETAS (FOLDER REDIR) |" -ForegroundColor Cyan
+    Write-Host "  +==========================================+" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "  Esto hace que el Escritorio y Documentos del" -ForegroundColor White
+    Write-Host "  cliente apunten a \\192.168.1.202\Usuarios\<usuario>" -ForegroundColor White
+    Write-Host "  donde estan activas las cuotas FSRM." -ForegroundColor White
+    Write-Host ""
+
+    try { $dominio = Get-ADDomain -ErrorAction Stop }
+    catch {
+        Write-Host "  [ERROR] AD no disponible." -ForegroundColor Red; return
+    }
+
+    $dcBase    = $dominio.DistinguishedName
+    $gpoNombre = "Practica8-RedireccionCarpetas"
+    $servidorUNC = "\\192.168.1.202\Usuarios"
+
+    # Crear GPO
+    try {
+        $gpo = Get-GPO -Name $gpoNombre -ErrorAction SilentlyContinue
+        if (-not $gpo) {
+            $gpo = New-GPO -Name $gpoNombre
+            Write-Host "  [CREADO] GPO '$gpoNombre' creada." -ForegroundColor Green
+        } else {
+            Write-Host "  [OK] GPO ya existe, actualizando." -ForegroundColor Yellow
+        }
+        $gpoId = $gpo.Id.ToString()
+    } catch {
+        Write-Host "  [ERROR] No se pudo crear la GPO: $($_.Exception.Message)" -ForegroundColor Red
+        return
+    }
+
+    # Construir XML de redireccion de carpetas
+    # Redirige Documents y Desktop a \\servidor\Usuarios\%USERNAME%
+    $xmlRedir = @"
+<?xml version="1.0" encoding="utf-8"?>
+<GroupPolicy xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns="http://www.microsoft.com/GroupPolicy/Settings/FolderRedirection">
+  <Folders>
+    <Folder id="Documents" exclusive="0" grantExclusive="0"
+            redirectToLocal="0" moveContents="1" leaveContents="0"
+            security="0">
+      <Location type="1" path="$servidorUNC\%USERNAME%\Documents"/>
+      <Security/>
+    </Folder>
+    <Folder id="Desktop" exclusive="0" grantExclusive="0"
+            redirectToLocal="0" moveContents="1" leaveContents="0"
+            security="0">
+      <Location type="1" path="$servidorUNC\%USERNAME%\Desktop"/>
+      <Security/>
+    </Folder>
+  </Folders>
+</GroupPolicy>
+"@
+
+    # Aplicar via registro (metodo compatible sin ADMX especifico)
+    # Documents -> \\servidor\Usuarios\%USERNAME%\Documents
+    # Desktop   -> \\servidor\Usuarios\%USERNAME%\Desktop
+    Write-Host "  Configurando redireccion via GPO..." -ForegroundColor Yellow
+
+    try {
+        # Documents
+        Set-GPRegistryValue -Name $gpoNombre `
+            -Key "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders" `
+            -ValueName "Personal" `
+            -Type ExpandString `
+            -Value "$servidorUNC\%USERNAME%\Documents" | Out-Null
+
+        Set-GPRegistryValue -Name $gpoNombre `
+            -Key "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders" `
+            -ValueName "{F42EE2D3-909F-4907-8871-4C22FC0BF756}" `
+            -Type ExpandString `
+            -Value "$servidorUNC\%USERNAME%\Documents" | Out-Null
+
+        # Desktop
+        Set-GPRegistryValue -Name $gpoNombre `
+            -Key "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders" `
+            -ValueName "Desktop" `
+            -Type ExpandString `
+            -Value "$servidorUNC\%USERNAME%\Desktop" | Out-Null
+
+        Write-Host "  [OK] Redireccion de Documents configurada." -ForegroundColor Green
+        Write-Host "  [OK] Redireccion de Desktop configurada." -ForegroundColor Green
+
+    } catch {
+        Write-Host "  [ERROR] $($_.Exception.Message)" -ForegroundColor Red
+        return
+    }
+
+    # Crear subcarpetas Documents y Desktop dentro de cada carpeta de usuario
+    Write-Host ""
+    Write-Host "  Creando subcarpetas en carpetas de usuarios..." -ForegroundColor Yellow
+    $carpetaRaiz = "C:\Usuarios"
+    $csvPath = "$PSScriptRoot\usuarios.csv"
+
+    if (Test-Path $csvPath) {
+        $usuarios = Import-Csv $csvPath
+        foreach ($u in $usuarios) {
+            $carpetaUsuario = "$carpetaRaiz\$($u.Usuario)"
+            if (Test-Path $carpetaUsuario) {
+                foreach ($sub in @("Documents","Desktop")) {
+                    $subPath = "$carpetaUsuario\$sub"
+                    if (-not (Test-Path $subPath)) {
+                        New-Item -Path $subPath -ItemType Directory | Out-Null
+                        Write-Host "  [OK] $($u.Usuario)\$sub creada." -ForegroundColor Green
+                    } else {
+                        Write-Host "  [OK] $($u.Usuario)\$sub ya existe." -ForegroundColor DarkGray
+                    }
+                }
+            } else {
+                Write-Host "  [WARN] No existe $carpetaUsuario. Ejecuta opcion 5 primero." -ForegroundColor Yellow
+            }
+        }
+    }
+
+    # Vincular GPO al dominio
+    try {
+        New-GPLink -Name $gpoNombre -Target $dcBase -ErrorAction Stop | Out-Null
+        Write-Host "  [OK] GPO vinculada al dominio." -ForegroundColor Green
+    } catch {
+        Write-Host "  [OK] GPO ya estaba vinculada." -ForegroundColor Yellow
+    }
+
+    gpupdate /force 2>&1 | Out-Null
+    Write-Host "  [OK] GPO aplicada." -ForegroundColor Green
+
+    Write-Host ""
+    Write-Host "  +==========================================+" -ForegroundColor Cyan
+    Write-Host "  | Redireccion configurada correctamente.   |" -ForegroundColor Cyan
+    Write-Host "  +------------------------------------------+" -ForegroundColor Cyan
+    Write-Host "  | Escritorio -> $servidorUNC\<usuario>\Desktop   |" -ForegroundColor White
+    Write-Host "  | Documentos -> $servidorUNC\<usuario>\Documents |" -ForegroundColor White
+    Write-Host "  +------------------------------------------+" -ForegroundColor Cyan
+    Write-Host "  | En el cliente Windows 10:                |" -ForegroundColor Yellow
+    Write-Host "  | 1. gpupdate /force                       |" -ForegroundColor White
+    Write-Host "  | 2. Cerrar sesion y volver a entrar       |" -ForegroundColor White
+    Write-Host "  | 3. Guardar un archivo en Documentos      |" -ForegroundColor White
+    Write-Host "  | 4. Verificar en servidor C:\Usuarios\    |" -ForegroundColor White
+    Write-Host "  +==========================================+" -ForegroundColor Cyan
+    Write-Host ""
 }
