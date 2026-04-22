@@ -34,8 +34,6 @@ do {
     Write-Host "  |  6. Configurar apantallamiento FSRM      |" -ForegroundColor White
     Write-Host "  |  7. Configurar AppLocker                 |" -ForegroundColor White
     Write-Host "  |  8. Crear usuario dinamicamente          |" -ForegroundColor White
-    Write-Host "  |  9. Perfiles moviles (Roaming Profiles)  |" -ForegroundColor White
-    Write-Host "  |  10. Redireccion de carpetas (FSRM)      |" -ForegroundColor White
     Write-Host "  |                                          |" -ForegroundColor Cyan
     Write-Host "  |  0. Salir                                |" -ForegroundColor Yellow
     Write-Host "  |                                          |" -ForegroundColor Cyan
@@ -53,20 +51,6 @@ do {
         "6" { Configurar-Apantallamiento }
         "7" { Configurar-AppLocker }
         "8" { Crear-UsuarioDinamico }
-        "9" {
-            $scriptPerfiles = "$PSScriptRoot\perfiles_moviles_p8.ps1"
-            if (Test-Path $scriptPerfiles) {
-                & $scriptPerfiles
-            } else {
-                Write-Host ""
-                Write-Host "  [ERROR] No se encontro perfiles_moviles_p8.ps1 en:" -ForegroundColor Red
-                Write-Host "  $PSScriptRoot" -ForegroundColor Red
-                Write-Host "  Asegurate de que el archivo este en la misma carpeta." -ForegroundColor Yellow
-                Write-Host ""
-                Start-Sleep -Seconds 3
-            }
-        }
-        "10" { Configurar-RedireccionCarpetas }
         "0" { Write-Host "`n  Saliendo...`n" -ForegroundColor Yellow }
         default { Write-Host "`n  Opcion invalida, intenta de nuevo." -ForegroundColor Red; pause }
     }
