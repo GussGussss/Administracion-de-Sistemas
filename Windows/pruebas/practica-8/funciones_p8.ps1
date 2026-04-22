@@ -1272,154 +1272,137 @@ function Crear-UsuarioDinamico {
 }
 
 # ------------------------------------------------------------
-# FUNCION 9: Configurar Redireccion de Carpetas
-# Hace que Documentos y Escritorio del cliente apunten
-# a C:\Usuarios\<usuario> en el servidor, donde estan
-# las cuotas FSRM y el apantallamiento.
+# FUNCION 9: Configurar carpeta home en AD (HomeDirectory)
+#
+# CORRECCION: La version anterior usaba GPO de User Shell
+# Folders para redirigir Documentos y Escritorio, lo que
+# rompia AppLocker al interferir con la evaluacion de
+# %WINDIR%\*. Esta version asigna HomeDirectory en AD
+# directamente, que es el metodo correcto y NO interfiere
+# con AppLocker ni con ninguna otra GPO.
+#
+# El usuario accede a su carpeta de almacenamiento personal
+# (con cuota FSRM activa) mapeando la unidad H: automatica-
+# mente al iniciar sesion. Cuotas y apantallamiento aplican
+# sobre esa unidad.
 # ------------------------------------------------------------
 function Configurar-RedireccionCarpetas {
-
+ 
     Write-Host ""
     Write-Host "  +==========================================+" -ForegroundColor Cyan
-    Write-Host "  |   REDIRECCION DE CARPETAS (FOLDER REDIR) |" -ForegroundColor Cyan
+    Write-Host "  |   CARPETA HOME EN AD (HomeDirectory)     |" -ForegroundColor Cyan
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "  Esto hace que el Escritorio y Documentos del" -ForegroundColor White
-    Write-Host "  cliente apunten a \\192.168.1.202\Usuarios\<usuario>" -ForegroundColor White
-    Write-Host "  donde estan activas las cuotas FSRM." -ForegroundColor White
+    Write-Host "  Asigna a cada usuario su carpeta personal en" -ForegroundColor White
+    Write-Host "  \\192.168.1.202\Usuarios\<usuario> como unidad H:" -ForegroundColor White
+    Write-Host "  Las cuotas FSRM aplican sobre esa unidad." -ForegroundColor White
     Write-Host ""
-
+    Write-Host "  NOTA: Esta version NO usa GPO de Shell Folders" -ForegroundColor Yellow
+    Write-Host "  para evitar conflictos con AppLocker." -ForegroundColor Yellow
+    Write-Host ""
+ 
     try { $dominio = Get-ADDomain -ErrorAction Stop }
-    catch {
-        Write-Host "  [ERROR] AD no disponible." -ForegroundColor Red; return
-    }
-
-    $dcBase    = $dominio.DistinguishedName
-    $gpoNombre = "Practica8-RedireccionCarpetas"
-    $servidorUNC = "\\192.168.1.202\Usuarios"
-
-    # Crear GPO
-    try {
-        $gpo = Get-GPO -Name $gpoNombre -ErrorAction SilentlyContinue
-        if (-not $gpo) {
-            $gpo = New-GPO -Name $gpoNombre
-            Write-Host "  [CREADO] GPO '$gpoNombre' creada." -ForegroundColor Green
-        } else {
-            Write-Host "  [OK] GPO ya existe, actualizando." -ForegroundColor Yellow
+    catch { Write-Host "  [ERROR] AD no disponible." -ForegroundColor Red; return }
+ 
+    # --- Limpiar GPO conflictiva si existe ---
+    $gpoConflictiva = Get-GPO -Name "Practica8-RedireccionCarpetas" -ErrorAction SilentlyContinue
+    if ($gpoConflictiva) {
+        Write-Host "  [INFO] Eliminando GPO conflictiva anterior..." -ForegroundColor Yellow
+        try {
+            Remove-GPO -Name "Practica8-RedireccionCarpetas" -ErrorAction Stop
+            Write-Host "  [OK] GPO conflictiva eliminada." -ForegroundColor Green
+        } catch {
+            Write-Host "  [WARN] No se pudo eliminar GPO: $($_.Exception.Message)" -ForegroundColor Yellow
         }
-        $gpoId = $gpo.Id.ToString()
-    } catch {
-        Write-Host "  [ERROR] No se pudo crear la GPO: $($_.Exception.Message)" -ForegroundColor Red
-        return
+        gpupdate /force 2>&1 | Out-Null
     }
-
-    # Construir XML de redireccion de carpetas
-    # Redirige Documents y Desktop a \\servidor\Usuarios\%USERNAME%
-    $xmlRedir = @"
-<?xml version="1.0" encoding="utf-8"?>
-<GroupPolicy xmlns:xsd="http://www.w3.org/2001/XMLSchema"
-             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-             xmlns="http://www.microsoft.com/GroupPolicy/Settings/FolderRedirection">
-  <Folders>
-    <Folder id="Documents" exclusive="0" grantExclusive="0"
-            redirectToLocal="0" moveContents="1" leaveContents="0"
-            security="0">
-      <Location type="1" path="$servidorUNC\%USERNAME%\Documents"/>
-      <Security/>
-    </Folder>
-    <Folder id="Desktop" exclusive="0" grantExclusive="0"
-            redirectToLocal="0" moveContents="1" leaveContents="0"
-            security="0">
-      <Location type="1" path="$servidorUNC\%USERNAME%\Desktop"/>
-      <Security/>
-    </Folder>
-  </Folders>
-</GroupPolicy>
-"@
-
-    # Aplicar via registro (metodo compatible sin ADMX especifico)
-    # Documents -> \\servidor\Usuarios\%USERNAME%\Documents
-    # Desktop   -> \\servidor\Usuarios\%USERNAME%\Desktop
-    Write-Host "  Configurando redireccion via GPO..." -ForegroundColor Yellow
-
-    try {
-        # Documents
-        Set-GPRegistryValue -Name $gpoNombre `
-            -Key "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders" `
-            -ValueName "Personal" `
-            -Type ExpandString `
-            -Value "$servidorUNC\%USERNAME%\Documents" | Out-Null
-
-        Set-GPRegistryValue -Name $gpoNombre `
-            -Key "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders" `
-            -ValueName "{F42EE2D3-909F-4907-8871-4C22FC0BF756}" `
-            -Type ExpandString `
-            -Value "$servidorUNC\%USERNAME%\Documents" | Out-Null
-
-        # Desktop
-        Set-GPRegistryValue -Name $gpoNombre `
-            -Key "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders" `
-            -ValueName "Desktop" `
-            -Type ExpandString `
-            -Value "$servidorUNC\%USERNAME%\Desktop" | Out-Null
-
-        Write-Host "  [OK] Redireccion de Documents configurada." -ForegroundColor Green
-        Write-Host "  [OK] Redireccion de Desktop configurada." -ForegroundColor Green
-
-    } catch {
-        Write-Host "  [ERROR] $($_.Exception.Message)" -ForegroundColor Red
-        return
-    }
-
-    # Crear subcarpetas Documents y Desktop dentro de cada carpeta de usuario
-    Write-Host ""
-    Write-Host "  Creando subcarpetas en carpetas de usuarios..." -ForegroundColor Yellow
+ 
     $carpetaRaiz = "C:\Usuarios"
-    $csvPath = "$PSScriptRoot\usuarios.csv"
-
-    if (Test-Path $csvPath) {
-        $usuarios = Import-Csv $csvPath
-        foreach ($u in $usuarios) {
-            $carpetaUsuario = "$carpetaRaiz\$($u.Usuario)"
-            if (Test-Path $carpetaUsuario) {
-                foreach ($sub in @("Documents","Desktop")) {
-                    $subPath = "$carpetaUsuario\$sub"
-                    if (-not (Test-Path $subPath)) {
-                        New-Item -Path $subPath -ItemType Directory | Out-Null
-                        Write-Host "  [OK] $($u.Usuario)\$sub creada." -ForegroundColor Green
-                    } else {
-                        Write-Host "  [OK] $($u.Usuario)\$sub ya existe." -ForegroundColor DarkGray
-                    }
-                }
-            } else {
-                Write-Host "  [WARN] No existe $carpetaUsuario. Ejecuta opcion 5 primero." -ForegroundColor Yellow
+    $servidorUNC = "\\192.168.1.202\Usuarios"
+    $csvPath     = "$PSScriptRoot\usuarios.csv"
+ 
+    if (-not (Test-Path $csvPath)) {
+        Write-Host "  [ERROR] No se encontro usuarios.csv." -ForegroundColor Red; return
+    }
+ 
+    # Verificar que la carpeta compartida existe
+    $shareExiste = Get-SmbShare -Name "Usuarios" -ErrorAction SilentlyContinue
+    if (-not $shareExiste) {
+        Write-Host "  [ERROR] El share 'Usuarios' no existe. Ejecuta Opcion 5 primero." -ForegroundColor Red
+        return
+    }
+ 
+    $usuarios = Import-Csv $csvPath
+    $ok       = 0
+    $errores  = 0
+ 
+    Write-Host "  Asignando HomeDirectory en AD a cada usuario..." -ForegroundColor Yellow
+    Write-Host ""
+ 
+    foreach ($u in $usuarios) {
+        $carpetaUsuario = "$carpetaRaiz\$($u.Usuario)"
+        $rutaUNC        = "$servidorUNC\$($u.Usuario)"
+ 
+        # Crear carpeta si no existe
+        if (-not (Test-Path $carpetaUsuario)) {
+            try {
+                New-Item -Path $carpetaUsuario -ItemType Directory | Out-Null
+            } catch {}
+        }
+ 
+        # Crear subcarpetas Documents y Desktop dentro de la carpeta del usuario
+        foreach ($sub in @("Documents","Desktop")) {
+            $subPath = "$carpetaUsuario\$sub"
+            if (-not (Test-Path $subPath)) {
+                New-Item -Path $subPath -ItemType Directory -ErrorAction SilentlyContinue | Out-Null
             }
         }
+ 
+        # Asignar HomeDirectory y HomeDrive en AD
+        # HomeDrive H: se mapea automaticamente al iniciar sesion
+        try {
+            Set-ADUser -Identity $u.Usuario `
+                -HomeDirectory $rutaUNC `
+                -HomeDrive "H:" `
+                -ErrorAction Stop
+            Write-Host "  [OK] $($u.Usuario) -> H: = $rutaUNC" -ForegroundColor Green
+            $ok++
+        } catch {
+            Write-Host "  [ERROR] $($u.Usuario): $($_.Exception.Message)" -ForegroundColor Red
+            $errores++
+        }
     }
-
-    # Vincular GPO al dominio
-    try {
-        New-GPLink -Name $gpoNombre -Target $dcBase -ErrorAction Stop | Out-Null
-        Write-Host "  [OK] GPO vinculada al dominio." -ForegroundColor Green
-    } catch {
-        Write-Host "  [OK] GPO ya estaba vinculada." -ForegroundColor Yellow
+ 
+    # Verificar y re-aplicar AppLocker para asegurar que esta limpio
+    Write-Host ""
+    Write-Host "  Verificando que AppLocker este activo..." -ForegroundColor Yellow
+    $gpoAppLocker = Get-GPO -Name "Practica8-AppLocker" -ErrorAction SilentlyContinue
+    if ($gpoAppLocker) {
+        Write-Host "  [OK] GPO AppLocker existe y sigue activa." -ForegroundColor Green
+    } else {
+        Write-Host "  [WARN] GPO AppLocker no encontrada. Ejecuta Opcion 7." -ForegroundColor Yellow
     }
-
+ 
     gpupdate /force 2>&1 | Out-Null
-    Write-Host "  [OK] GPO aplicada." -ForegroundColor Green
-
+    Write-Host "  [OK] GPO actualizada en el servidor." -ForegroundColor Green
+ 
     Write-Host ""
     Write-Host "  +==========================================+" -ForegroundColor Cyan
-    Write-Host "  | Redireccion configurada correctamente.   |" -ForegroundColor Cyan
+    Write-Host "  | HomeDirectory configurado correctamente. |" -ForegroundColor Cyan
     Write-Host "  +------------------------------------------+" -ForegroundColor Cyan
-    Write-Host "  | Escritorio -> $servidorUNC\<usuario>\Desktop   |" -ForegroundColor White
-    Write-Host "  | Documentos -> $servidorUNC\<usuario>\Documents |" -ForegroundColor White
+    Write-Host "  | Asignados : $ok usuarios"                 -ForegroundColor Green
+    Write-Host "  | Errores   : $errores"                     -ForegroundColor Red
+    Write-Host "  +------------------------------------------+" -ForegroundColor Cyan
+    Write-Host "  | Unidad H: -> \\192.168.1.202\Usuarios\    |" -ForegroundColor White
+    Write-Host "  | Cuotas FSRM activas sobre esa unidad     |" -ForegroundColor White
     Write-Host "  +------------------------------------------+" -ForegroundColor Cyan
     Write-Host "  | En el cliente Windows 10:                |" -ForegroundColor Yellow
     Write-Host "  | 1. gpupdate /force                       |" -ForegroundColor White
     Write-Host "  | 2. Cerrar sesion y volver a entrar       |" -ForegroundColor White
-    Write-Host "  | 3. Guardar un archivo en Documentos      |" -ForegroundColor White
-    Write-Host "  | 4. Verificar en servidor C:\Usuarios\    |" -ForegroundColor White
+    Write-Host "  | 3. Veras la unidad H: en el Explorador   |" -ForegroundColor White
+    Write-Host "  | 4. Guarda un archivo grande en H:        |" -ForegroundColor White
+    Write-Host "  |    -> El servidor bloqueara si supera    |" -ForegroundColor White
+    Write-Host "  |       5MB (NoCuates) o 10MB (Cuates)     |" -ForegroundColor White
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host ""
 }
