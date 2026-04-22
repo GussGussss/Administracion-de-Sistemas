@@ -874,7 +874,7 @@ function Configurar-AppLocker {
     }
 
     # --- Hash hardcodeado del cliente Windows 10 Pro ---
-    $hashValor   = "0x70152C176B629E51FD283BD2F30ACFBDB1A129EA14D94889C1D32A742C104BBF"
+    $hashValor   = "0xDA5807BB0997CC6B5132950EC87EDA2B33B1AC4533CF1F7A22A6F3B576ED7C5B"
     $archivoSize = 200704
 
     # --- Construir XML ---
