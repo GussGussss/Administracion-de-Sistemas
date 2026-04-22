@@ -384,12 +384,12 @@ function Configurar-Horarios {
     Write-Host "  Horarios locales que se configuraran:" -ForegroundColor White
     Write-Host ""
     Write-Host "    Cuates   : 08:00 AM - 03:00 PM (hora local)" -ForegroundColor Cyan
-    Write-Host "    NoCuates : 03:00 PM - 08:00 AM (hora local)" -ForegroundColor Cyan
+    Write-Host "    NoCuates : 03:00 PM - 02:00 AM (hora local)" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "  Equivalencia en UTC (lo que AD almacena):" -ForegroundColor White
     Write-Host ""
     Write-Host "    Cuates   : 15:00 - 22:00 UTC" -ForegroundColor DarkCyan
-    Write-Host "    NoCuates : 22:00 - 15:00 UTC" -ForegroundColor DarkCyan
+    Write-Host "    NoCuates : 22:00 - 09:00 UTC" -ForegroundColor DarkCyan
     Write-Host ""
     Write-Host "  Ademas se configurara la GPO para forzar cierre" -ForegroundColor White
     Write-Host "  de sesion cuando el horario expire." -ForegroundColor White
@@ -423,7 +423,7 @@ function Configurar-Horarios {
     }
 
     $horasUTC_Cuates   = @(15,16,17,18,19,20,21)
-    $horasUTC_NoCuates = @(22,23,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14)
+    $horasUTC_NoCuates = @(22,23,0,1,2,3,4,5,6,7,8)
 
     $bytesCuates   = Build-LogonHours -HorasUTC $horasUTC_Cuates
     $bytesNoCuates = Build-LogonHours -HorasUTC $horasUTC_NoCuates
@@ -846,7 +846,7 @@ function Configurar-AppLocker {
     Write-Host "    NoCuates : notepad.exe BLOQUEADO por Hash" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "  Hash usado (notepad.exe Windows 10 Pro):" -ForegroundColor White
-    Write-Host "  0xDA5807BB0997CC6B5132950EC87EDA2B33B1AC4533CF1F7A22A6F3B576ED7C5B..." -ForegroundColor DarkGray
+    Write-Host "  0x70152C176B629E51FD283BD2F30ACFBDB1A129EA14D94889C1D32A742C104BBF..." -ForegroundColor DarkGray
     Write-Host ""
     Write-Host "  La regla de Hash identifica el archivo por su" -ForegroundColor Yellow
     Write-Host "  contenido, no por su nombre. Renombrar el .exe" -ForegroundColor Yellow
@@ -1053,7 +1053,7 @@ function Crear-UsuarioDinamico {
     Write-Host ""
     Write-Host "  Departamento:" -ForegroundColor White
     Write-Host "    1. Cuates   (horario 08:00-15:00, cuota 10 MB)" -ForegroundColor Cyan
-    Write-Host "    2. NoCuates (horario 15:00-08:00, cuota  5 MB)" -ForegroundColor Cyan
+    Write-Host "    2. NoCuates (horario 15:00-02:00, cuota  5 MB)" -ForegroundColor Cyan
     Write-Host ""
     $deptoOpcion = Read-Host "  Selecciona el departamento (1 o 2)"
 
@@ -1079,7 +1079,7 @@ function Crear-UsuarioDinamico {
         Write-Host "  | Horario     : 08:00 AM - 03:00 PM" -ForegroundColor White
         Write-Host "  | Cuota       : 10 MB" -ForegroundColor White
     } else {
-        Write-Host "  | Horario     : 03:00 PM - 08:00 AM" -ForegroundColor White
+        Write-Host "  | Horario     : 03:00 PM - 02:00 AM" -ForegroundColor White
         Write-Host "  | Cuota       :  5 MB" -ForegroundColor White
     }
     Write-Host "  | Apantallam. : .mp3 .mp4 .exe .msi bloq. |" -ForegroundColor White
@@ -1161,7 +1161,7 @@ function Crear-UsuarioDinamico {
         if ($departamento -eq "Cuates") {
             $horasUTC = @(15,16,17,18,19,20,21)
         } else {
-            $horasUTC = @(22,23,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14)
+            $horasUTC = @(22,23,0,1,2,3,4,5,6,7,8)
         }
 
         $bytesHorario = Build-LogonHours -HorasUTC $horasUTC
@@ -1266,143 +1266,6 @@ function Crear-UsuarioDinamico {
     Write-Host "  |   [OK] Horario de acceso                 |" -ForegroundColor Green
     Write-Host "  |   [OK] Cuota FSRM                        |" -ForegroundColor Green
     Write-Host "  |   [OK] Apantallamiento de archivos       |" -ForegroundColor Green
-    Write-Host "  +==========================================+" -ForegroundColor Cyan
-    Write-Host ""
-    
-}
-
-# ------------------------------------------------------------
-# FUNCION 9: Configurar carpeta home en AD (HomeDirectory)
-#
-# CORRECCION: La version anterior usaba GPO de User Shell
-# Folders para redirigir Documentos y Escritorio, lo que
-# rompia AppLocker al interferir con la evaluacion de
-# %WINDIR%\*. Esta version asigna HomeDirectory en AD
-# directamente, que es el metodo correcto y NO interfiere
-# con AppLocker ni con ninguna otra GPO.
-#
-# El usuario accede a su carpeta de almacenamiento personal
-# (con cuota FSRM activa) mapeando la unidad H: automatica-
-# mente al iniciar sesion. Cuotas y apantallamiento aplican
-# sobre esa unidad.
-# ------------------------------------------------------------
-function Configurar-RedireccionCarpetas {
- 
-    Write-Host ""
-    Write-Host "  +==========================================+" -ForegroundColor Cyan
-    Write-Host "  |   CARPETA HOME EN AD (HomeDirectory)     |" -ForegroundColor Cyan
-    Write-Host "  +==========================================+" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "  Asigna a cada usuario su carpeta personal en" -ForegroundColor White
-    Write-Host "  \\192.168.1.202\Usuarios\<usuario> como unidad H:" -ForegroundColor White
-    Write-Host "  Las cuotas FSRM aplican sobre esa unidad." -ForegroundColor White
-    Write-Host ""
-    Write-Host "  NOTA: Esta version NO usa GPO de Shell Folders" -ForegroundColor Yellow
-    Write-Host "  para evitar conflictos con AppLocker." -ForegroundColor Yellow
-    Write-Host ""
- 
-    try { $dominio = Get-ADDomain -ErrorAction Stop }
-    catch { Write-Host "  [ERROR] AD no disponible." -ForegroundColor Red; return }
- 
-    # --- Limpiar GPO conflictiva si existe ---
-    $gpoConflictiva = Get-GPO -Name "Practica8-RedireccionCarpetas" -ErrorAction SilentlyContinue
-    if ($gpoConflictiva) {
-        Write-Host "  [INFO] Eliminando GPO conflictiva anterior..." -ForegroundColor Yellow
-        try {
-            Remove-GPO -Name "Practica8-RedireccionCarpetas" -ErrorAction Stop
-            Write-Host "  [OK] GPO conflictiva eliminada." -ForegroundColor Green
-        } catch {
-            Write-Host "  [WARN] No se pudo eliminar GPO: $($_.Exception.Message)" -ForegroundColor Yellow
-        }
-        gpupdate /force 2>&1 | Out-Null
-    }
- 
-    $carpetaRaiz = "C:\Usuarios"
-    $servidorUNC = "\\192.168.1.202\Usuarios"
-    $csvPath     = "$PSScriptRoot\usuarios.csv"
- 
-    if (-not (Test-Path $csvPath)) {
-        Write-Host "  [ERROR] No se encontro usuarios.csv." -ForegroundColor Red; return
-    }
- 
-    # Verificar que la carpeta compartida existe
-    $shareExiste = Get-SmbShare -Name "Usuarios" -ErrorAction SilentlyContinue
-    if (-not $shareExiste) {
-        Write-Host "  [ERROR] El share 'Usuarios' no existe. Ejecuta Opcion 5 primero." -ForegroundColor Red
-        return
-    }
- 
-    $usuarios = Import-Csv $csvPath
-    $ok       = 0
-    $errores  = 0
- 
-    Write-Host "  Asignando HomeDirectory en AD a cada usuario..." -ForegroundColor Yellow
-    Write-Host ""
- 
-    foreach ($u in $usuarios) {
-        $carpetaUsuario = "$carpetaRaiz\$($u.Usuario)"
-        $rutaUNC        = "$servidorUNC\$($u.Usuario)"
- 
-        # Crear carpeta si no existe
-        if (-not (Test-Path $carpetaUsuario)) {
-            try {
-                New-Item -Path $carpetaUsuario -ItemType Directory | Out-Null
-            } catch {}
-        }
- 
-        # Crear subcarpetas Documents y Desktop dentro de la carpeta del usuario
-        foreach ($sub in @("Documents","Desktop")) {
-            $subPath = "$carpetaUsuario\$sub"
-            if (-not (Test-Path $subPath)) {
-                New-Item -Path $subPath -ItemType Directory -ErrorAction SilentlyContinue | Out-Null
-            }
-        }
- 
-        # Asignar HomeDirectory y HomeDrive en AD
-        # HomeDrive H: se mapea automaticamente al iniciar sesion
-        try {
-            Set-ADUser -Identity $u.Usuario `
-                -HomeDirectory $rutaUNC `
-                -HomeDrive "H:" `
-                -ErrorAction Stop
-            Write-Host "  [OK] $($u.Usuario) -> H: = $rutaUNC" -ForegroundColor Green
-            $ok++
-        } catch {
-            Write-Host "  [ERROR] $($u.Usuario): $($_.Exception.Message)" -ForegroundColor Red
-            $errores++
-        }
-    }
- 
-    # Verificar y re-aplicar AppLocker para asegurar que esta limpio
-    Write-Host ""
-    Write-Host "  Verificando que AppLocker este activo..." -ForegroundColor Yellow
-    $gpoAppLocker = Get-GPO -Name "Practica8-AppLocker" -ErrorAction SilentlyContinue
-    if ($gpoAppLocker) {
-        Write-Host "  [OK] GPO AppLocker existe y sigue activa." -ForegroundColor Green
-    } else {
-        Write-Host "  [WARN] GPO AppLocker no encontrada. Ejecuta Opcion 7." -ForegroundColor Yellow
-    }
- 
-    gpupdate /force 2>&1 | Out-Null
-    Write-Host "  [OK] GPO actualizada en el servidor." -ForegroundColor Green
- 
-    Write-Host ""
-    Write-Host "  +==========================================+" -ForegroundColor Cyan
-    Write-Host "  | HomeDirectory configurado correctamente. |" -ForegroundColor Cyan
-    Write-Host "  +------------------------------------------+" -ForegroundColor Cyan
-    Write-Host "  | Asignados : $ok usuarios"                 -ForegroundColor Green
-    Write-Host "  | Errores   : $errores"                     -ForegroundColor Red
-    Write-Host "  +------------------------------------------+" -ForegroundColor Cyan
-    Write-Host "  | Unidad H: -> \\192.168.1.202\Usuarios\    |" -ForegroundColor White
-    Write-Host "  | Cuotas FSRM activas sobre esa unidad     |" -ForegroundColor White
-    Write-Host "  +------------------------------------------+" -ForegroundColor Cyan
-    Write-Host "  | En el cliente Windows 10:                |" -ForegroundColor Yellow
-    Write-Host "  | 1. gpupdate /force                       |" -ForegroundColor White
-    Write-Host "  | 2. Cerrar sesion y volver a entrar       |" -ForegroundColor White
-    Write-Host "  | 3. Veras la unidad H: en el Explorador   |" -ForegroundColor White
-    Write-Host "  | 4. Guarda un archivo grande en H:        |" -ForegroundColor White
-    Write-Host "  |    -> El servidor bloqueara si supera    |" -ForegroundColor White
-    Write-Host "  |       5MB (NoCuates) o 10MB (Cuates)     |" -ForegroundColor White
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host ""
 }
