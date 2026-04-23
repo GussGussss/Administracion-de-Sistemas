@@ -5,7 +5,7 @@
 #  Version  : Final (hash hardcodeado - cliente Windows 10)
 #
 #  Hash de notepad.exe del cliente Windows 10 Pro:
-#  0xF9D9B9DED9A67AA3CFDBD5002F3B524B265C4086C188E1BE7C936AB25627BF01
+#  0x0C386FA6ABFDEFFBBEFF5BCE97D461340A23D1981458607BD9E5EEFF4066789A
 #  Tamano: 201216 bytes
 # ============================================================
 
@@ -361,7 +361,7 @@ function Crear-OUsYUsuarios {
 
 # ------------------------------------------------------------
 # FUNCION 4: Configurar horarios de acceso (Logon Hours)
-# UTC-8 (Pacific Time - servidor)
+# UTC-7 (Los Mochis, Sinaloa)
 # ------------------------------------------------------------
 function Configurar-Horarios {
 
@@ -379,7 +379,7 @@ function Configurar-Horarios {
         return
     }
 
-    Write-Host "  Zona horaria aplicada: UTC-8 (Pacific Time - servidor)" -ForegroundColor White
+    Write-Host "  Zona horaria aplicada: UTC-7 (Los Mochis, Sinaloa)" -ForegroundColor White
     Write-Host ""
     Write-Host "  Horarios locales que se configuraran:" -ForegroundColor White
     Write-Host ""
@@ -422,8 +422,8 @@ function Configurar-Horarios {
         return $bytes
     }
 
-    $horasUTC_Cuates   = @(16,17,18,19,20,21,22)
-    $horasUTC_NoCuates = @(23,0,1,2,3,4,5,6,7,8,9)
+    $horasUTC_Cuates   = @(15,16,17,18,19,20,21)
+    $horasUTC_NoCuates = @(22,23,0,1,2,3,4,5,6,7,8)
 
     $bytesCuates   = Build-LogonHours -HorasUTC $horasUTC_Cuates
     $bytesNoCuates = Build-LogonHours -HorasUTC $horasUTC_NoCuates
@@ -496,7 +496,7 @@ function Configurar-Horarios {
     Write-Host ""
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host "  | Horarios configurados correctamente.     |" -ForegroundColor Cyan
-    Write-Host "  | Zona horaria: UTC-8 (Pacific Time)   |" -ForegroundColor Cyan
+    Write-Host "  | Zona horaria: UTC-7 (Los Mochis, Sin.)   |" -ForegroundColor Cyan
     Write-Host "  | Los usuarios seran desconectados al      |" -ForegroundColor Cyan
     Write-Host "  | finalizar su turno permitido.            |" -ForegroundColor Cyan
     Write-Host "  +==========================================+" -ForegroundColor Cyan
@@ -846,7 +846,7 @@ function Configurar-AppLocker {
     Write-Host "    NoCuates : notepad.exe BLOQUEADO por Hash" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "  Hash usado (notepad.exe Windows 10 Pro):" -ForegroundColor White
-    Write-Host "  0x0C386FA6ABFDEFFBBEFF5BCE97D461340A23D1981458607BD9E5EEFF4066789A..." -ForegroundColor DarkGray
+    Write-Host "  0x70152C176B629E51FD283BD2F30ACFBDB1A129EA14D94889C1D32A742C104BBF..." -ForegroundColor DarkGray
     Write-Host ""
     Write-Host "  La regla de Hash identifica el archivo por su" -ForegroundColor Yellow
     Write-Host "  contenido, no por su nombre. Renombrar el .exe" -ForegroundColor Yellow
@@ -874,8 +874,8 @@ function Configurar-AppLocker {
     }
 
     # --- Hash hardcodeado del cliente Windows 10 Pro ---
-    $hashValor   = "0x0C386FA6ABFDEFFBBEFF5BCE97D461340A23D1981458607BD9E5EEFF4066789A"
-    $archivoSize = 201216
+    $hashValor   = "0x70152C176B629E51FD283BD2F30ACFBDB1A129EA14D94889C1D32A742C104BBF"
+    $archivoSize = 200704
 
     # --- Construir XML ---
     Write-Host ""
@@ -1138,7 +1138,7 @@ function Crear-UsuarioDinamico {
     # PASO 3: Aplicar horario de acceso
     # ==========================================================
     Write-Host ""
-    Write-Host "  [3/5] Aplicando horario de acceso (UTC-8)..." -ForegroundColor Yellow
+    Write-Host "  [3/5] Aplicando horario de acceso (UTC-7)..." -ForegroundColor Yellow
 
     function Build-LogonHours {
         param([int[]]$HorasUTC)
@@ -1159,9 +1159,9 @@ function Crear-UsuarioDinamico {
 
     try {
         if ($departamento -eq "Cuates") {
-            $horasUTC = @(16,17,18,19,20,21,22)
+            $horasUTC = @(15,16,17,18,19,20,21)
         } else {
-            $horasUTC = @(23,0,1,2,3,4,5,6,7,8,9)
+            $horasUTC = @(22,23,0,1,2,3,4,5,6,7,8)
         }
 
         $bytesHorario = Build-LogonHours -HorasUTC $horasUTC
