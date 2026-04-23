@@ -2,12 +2,23 @@
 #  funciones_p8.ps1 - Libreria de funciones para la Practica 8
 #  Dominio  : practica8.local
 #  Servidor : 192.168.1.202
-#  Version  : Final (hash hardcodeado - cliente Windows 10)
+#
+#  CAMBIOS vs version anterior:
+#  - Horario NoCuates: 3PM-12PM mediodia (UTC 22:00-19:00)
+#  - FSRM ahora aplica sobre C:\PerfilesMoviles\usuario
+#  - Perfiles moviles INTEGRADOS en opcion 5
+#  - Apantallamiento sigue siendo opcion 6 (sobre misma carpeta)
 #
 #  Hash de notepad.exe del cliente Windows 10 Pro:
-#  0xF9D9B9DED9A67AA3CFDBD5002F3B524B265C4086C188E1BE7C936AB25627BF01
+#  0x70152C176B629E51FD283BD2F30ACFBDB1A129EA14D94889C1D32A742C104BBF
 #  Tamano: 201216 bytes
 # ============================================================
+
+# Constantes globales usadas en varias funciones
+$script:CARPETA_PERFILES = "C:\PerfilesMoviles"
+$script:SHARE_NAME       = "Perfiles`$"
+$script:SERVIDOR         = "192.168.1.202"
+$script:SHARE_UNC        = "\\$($script:SERVIDOR)\Perfiles`$"
 
 # ------------------------------------------------------------
 # FUNCION 1: Instalar Dependencias
@@ -53,7 +64,7 @@ function Instalar-Dependencias {
         $respuesta = Read-Host "  Deseas reinstalar de todas formas? (s/n)"
         if ($respuesta -ne "s") {
             Write-Host ""
-            Write-Host "  Instalacion cancelada. No se hizo ningun cambio." -ForegroundColor Yellow
+            Write-Host "  Instalacion cancelada." -ForegroundColor Yellow
             Write-Host ""
             return
         }
@@ -74,7 +85,7 @@ function Instalar-Dependencias {
     }
 
     Write-Host ""
-    Write-Host "  Iniciando instalacion, esto puede tardar unos minutos..." -ForegroundColor Cyan
+    Write-Host "  Iniciando instalacion..." -ForegroundColor Cyan
     Write-Host ""
 
     foreach ($dep in $porInstalar) {
@@ -90,8 +101,7 @@ function Instalar-Dependencias {
     Write-Host ""
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host "  | Instalacion finalizada.                  |" -ForegroundColor Cyan
-    Write-Host "  | Siguiente paso: opcion 2 del menu para   |" -ForegroundColor Yellow
-    Write-Host "  | promover el servidor a Domain Controller. |" -ForegroundColor Yellow
+    Write-Host "  | Siguiente paso: opcion 2 del menu.       |" -ForegroundColor Yellow
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host ""
 }
@@ -110,8 +120,8 @@ function Promover-DomainController {
 
     $adds = Get-WindowsFeature -Name "AD-Domain-Services"
     if ($adds.InstallState -ne "Installed") {
-        Write-Host "  [ERROR] Active Directory Domain Services no esta instalado." -ForegroundColor Red
-        Write-Host "  Ejecuta primero la opcion 1 para instalar las dependencias." -ForegroundColor Yellow
+        Write-Host "  [ERROR] AD-Domain-Services no esta instalado." -ForegroundColor Red
+        Write-Host "  Ejecuta primero la opcion 1." -ForegroundColor Yellow
         Write-Host ""
         return
     }
@@ -125,43 +135,26 @@ function Promover-DomainController {
     }
 
     if ($esDC) {
-        Write-Host "  [INFO] Este servidor ya es Domain Controller del dominio:" -ForegroundColor Yellow
+        Write-Host "  [INFO] Este servidor ya es Domain Controller:" -ForegroundColor Yellow
         Write-Host "         $($domainInfo.DNSRoot)" -ForegroundColor White
-        Write-Host ""
-        Write-Host "  No es necesario volver a promoverlo." -ForegroundColor Yellow
         Write-Host ""
         return
     }
 
-    Write-Host "  Se creara un nuevo bosque de Active Directory con los" -ForegroundColor White
-    Write-Host "  siguientes parametros:" -ForegroundColor White
+    Write-Host "  Parametros del nuevo bosque:" -ForegroundColor White
+    Write-Host "    Dominio : practica8.local" -ForegroundColor Cyan
+    Write-Host "    IP      : 192.168.1.202"   -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "    Dominio        : practica8.local" -ForegroundColor Cyan
-    Write-Host "    Nivel de bosque: Windows Server 2016" -ForegroundColor Cyan
-    Write-Host "    DNS            : Se instalara en este servidor" -ForegroundColor Cyan
-    Write-Host "    IP del servidor: 192.168.1.202" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "  ADVERTENCIA: El servidor se reiniciara automaticamente" -ForegroundColor Red
-    Write-Host "  al finalizar. Guarda cualquier trabajo pendiente." -ForegroundColor Red
+    Write-Host "  ADVERTENCIA: El servidor se reiniciara." -ForegroundColor Red
     Write-Host ""
 
     $confirmar = Read-Host "  Deseas continuar? (s/n)"
-    if ($confirmar -ne "s") {
-        Write-Host ""
-        Write-Host "  Operacion cancelada por el usuario." -ForegroundColor Yellow
-        Write-Host ""
-        return
-    }
-
-    Write-Host ""
-    Write-Host "  Se requiere una contrasena para el Modo de Restauracion de AD (DSRM)." -ForegroundColor Yellow
-    Write-Host "  Esta contrasena se usa en caso de emergencia para recuperar AD." -ForegroundColor White
-    Write-Host ""
+    if ($confirmar -ne "s") { return }
 
     $dsrmPassword = Read-Host "  Ingresa la contrasena DSRM" -AsSecureString
 
     Write-Host ""
-    Write-Host "  Configurando DNS estatico en el adaptador de red interna..." -ForegroundColor Yellow
+    Write-Host "  Configurando DNS estatico..." -ForegroundColor Yellow
 
     $adaptador = Get-NetAdapter | Where-Object { $_.Status -eq "Up" } | ForEach-Object {
         $ip = Get-NetIPAddress -InterfaceIndex $_.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue
@@ -170,16 +163,11 @@ function Promover-DomainController {
 
     if ($adaptador) {
         Set-DnsClientServerAddress -InterfaceIndex $adaptador.ifIndex -ServerAddresses "192.168.1.202"
-        Write-Host "  [OK] DNS configurado en el adaptador: $($adaptador.Name)" -ForegroundColor Green
-    } else {
-        Write-Host "  [AVISO] No se encontro el adaptador con IP 192.168.1.202." -ForegroundColor Yellow
-        Write-Host "  Continuando de todas formas..." -ForegroundColor Yellow
+        Write-Host "  [OK] DNS configurado: $($adaptador.Name)" -ForegroundColor Green
     }
 
     Write-Host ""
-    Write-Host "  Iniciando promocion a Domain Controller..." -ForegroundColor Cyan
-    Write-Host "  Esto puede tardar varios minutos..." -ForegroundColor Cyan
-    Write-Host ""
+    Write-Host "  Iniciando promocion..." -ForegroundColor Cyan
 
     try {
         Install-ADDSForest `
@@ -191,14 +179,9 @@ function Promover-DomainController {
             -SafeModeAdministratorPassword $dsrmPassword `
             -NoRebootOnCompletion:$false `
             -Force:$true
-
-        Write-Host "  [OK] Promocion completada. El servidor se reiniciara ahora." -ForegroundColor Green
-
     } catch {
         Write-Host ""
-        Write-Host "  [ERROR] Fallo la promocion a Domain Controller." -ForegroundColor Red
-        Write-Host "  Detalle: $($_.Exception.Message)" -ForegroundColor Red
-        Write-Host ""
+        Write-Host "  [ERROR] $($_.Exception.Message)" -ForegroundColor Red
     }
 }
 
@@ -217,47 +200,38 @@ function Crear-OUsYUsuarios {
     try {
         $dominio = Get-ADDomain -ErrorAction Stop
     } catch {
-        Write-Host "  [ERROR] Este servidor no es Domain Controller o AD no esta disponible." -ForegroundColor Red
-        Write-Host "  Ejecuta primero las opciones 1 y 2." -ForegroundColor Yellow
-        Write-Host ""
+        Write-Host "  [ERROR] AD no disponible. Ejecuta opciones 1 y 2 primero." -ForegroundColor Red
         return
     }
 
     $csvPath = "$PSScriptRoot\usuarios.csv"
     if (-not (Test-Path $csvPath)) {
-        Write-Host "  [ERROR] No se encontro el archivo usuarios.csv en:" -ForegroundColor Red
-        Write-Host "  $csvPath" -ForegroundColor Red
-        Write-Host ""
+        Write-Host "  [ERROR] No se encontro usuarios.csv en: $csvPath" -ForegroundColor Red
         return
     }
 
     $usuarios = Import-Csv -Path $csvPath
-    Write-Host "  Se encontraron $($usuarios.Count) usuarios en el CSV." -ForegroundColor White
+    Write-Host "  $($usuarios.Count) usuarios encontrados en el CSV." -ForegroundColor White
     Write-Host ""
 
-    $confirmar = Read-Host "  Se crearan las OUs y usuarios. Deseas continuar? (s/n)"
-    if ($confirmar -ne "s") {
-        Write-Host ""
-        Write-Host "  Operacion cancelada por el usuario." -ForegroundColor Yellow
-        Write-Host ""
-        return
-    }
+    $confirmar = Read-Host "  Crear OUs y usuarios? (s/n)"
+    if ($confirmar -ne "s") { return }
 
     Write-Host ""
-    $dcBase = ($dominio.DistinguishedName)
+    $dcBase = $dominio.DistinguishedName
 
-    $ous = @("Cuates", "NoCuates")
-    foreach ($ou in $ous) {
+    # Crear OUs
+    foreach ($ou in @("Cuates", "NoCuates")) {
         $ouPath = "OU=$ou,$dcBase"
         try {
             Get-ADOrganizationalUnit -Identity $ouPath -ErrorAction Stop | Out-Null
-            Write-Host "  [OK] OU '$ou' ya existe, se omite." -ForegroundColor Yellow
+            Write-Host "  [OK] OU '$ou' ya existe." -ForegroundColor Yellow
         } catch {
             try {
                 New-ADOrganizationalUnit -Name $ou -Path $dcBase -ProtectedFromAccidentalDeletion $false
-                Write-Host "  [CREADO] OU '$ou' creada correctamente." -ForegroundColor Green
+                Write-Host "  [CREADO] OU '$ou'." -ForegroundColor Green
             } catch {
-                Write-Host "  [ERROR] No se pudo crear la OU '$ou': $($_.Exception.Message)" -ForegroundColor Red
+                Write-Host "  [ERROR] OU '$ou': $($_.Exception.Message)" -ForegroundColor Red
             }
         }
     }
@@ -272,18 +246,12 @@ function Crear-OUsYUsuarios {
 
     foreach ($u in $usuarios) {
         $ouDestino = "OU=$($u.Departamento),$dcBase"
-        $existe = $null
         try {
-            $existe = Get-ADUser -Identity $u.Usuario -ErrorAction Stop
-        } catch {
-            $existe = $null
-        }
-
-        if ($existe) {
-            Write-Host "  [OMITIDO] El usuario '$($u.Usuario)' ya existe." -ForegroundColor Yellow
+            Get-ADUser -Identity $u.Usuario -ErrorAction Stop | Out-Null
+            Write-Host "  [OMITIDO] '$($u.Usuario)' ya existe." -ForegroundColor Yellow
             $omitidos++
             continue
-        }
+        } catch {}
 
         try {
             $passwordSegura = ConvertTo-SecureString $u.Password -AsPlainText -Force
@@ -298,62 +266,50 @@ function Crear-OUsYUsuarios {
                 -Enabled $true `
                 -PasswordNeverExpires $true `
                 -ChangePasswordAtLogon $false
-
-            Write-Host "  [CREADO] $($u.Nombre) $($u.Apellido) -> OU: $($u.Departamento)" -ForegroundColor Green
+            Write-Host "  [CREADO] $($u.Nombre) $($u.Apellido) -> $($u.Departamento)" -ForegroundColor Green
             $creados++
         } catch {
-            Write-Host "  [ERROR] No se pudo crear '$($u.Usuario)': $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host "  [ERROR] '$($u.Usuario)': $($_.Exception.Message)" -ForegroundColor Red
             $errores++
         }
     }
 
+    # Crear grupos de seguridad
     Write-Host ""
     Write-Host "  Creando grupos de seguridad..." -ForegroundColor Yellow
-    Write-Host ""
 
-    $grupos = @(
+    foreach ($g in @(
         @{ Nombre = "Cuates";   OU = "OU=Cuates,$dcBase"   },
         @{ Nombre = "NoCuates"; OU = "OU=NoCuates,$dcBase" }
-    )
-
-    foreach ($g in $grupos) {
+    )) {
         try {
             Get-ADGroup -Identity $g.Nombre -ErrorAction Stop | Out-Null
-            Write-Host "  [OK] Grupo '$($g.Nombre)' ya existe, se omite." -ForegroundColor Yellow
+            Write-Host "  [OK] Grupo '$($g.Nombre)' ya existe." -ForegroundColor Yellow
         } catch {
             try {
-                New-ADGroup `
-                    -Name $g.Nombre `
-                    -GroupScope Global `
-                    -GroupCategory Security `
-                    -Path $g.OU
-                Write-Host "  [CREADO] Grupo '$($g.Nombre)' creado." -ForegroundColor Green
+                New-ADGroup -Name $g.Nombre -GroupScope Global -GroupCategory Security -Path $g.OU
+                Write-Host "  [CREADO] Grupo '$($g.Nombre)'." -ForegroundColor Green
             } catch {
-                Write-Host "  [ERROR] No se pudo crear el grupo '$($g.Nombre)': $($_.Exception.Message)" -ForegroundColor Red
+                Write-Host "  [ERROR] Grupo '$($g.Nombre)': $($_.Exception.Message)" -ForegroundColor Red
             }
         }
     }
 
+    # Agregar usuarios a grupos
     Write-Host ""
-    Write-Host "  Agregando usuarios a sus grupos..." -ForegroundColor Yellow
-    Write-Host ""
-
+    Write-Host "  Agregando usuarios a grupos..." -ForegroundColor Yellow
     foreach ($u in $usuarios) {
         try {
             Add-ADGroupMember -Identity $u.Departamento -Members $u.Usuario -ErrorAction Stop
-            Write-Host "  [OK] $($u.Usuario) agregado al grupo $($u.Departamento)." -ForegroundColor Green
+            Write-Host "  [OK] $($u.Usuario) -> $($u.Departamento)" -ForegroundColor Green
         } catch {
-            Write-Host "  [AVISO] $($u.Usuario) -> $($u.Departamento): $($_.Exception.Message)" -ForegroundColor Yellow
+            Write-Host "  [AVISO] $($u.Usuario): $($_.Exception.Message)" -ForegroundColor Yellow
         }
     }
 
     Write-Host ""
     Write-Host "  +==========================================+" -ForegroundColor Cyan
-    Write-Host "  | RESUMEN                                  |" -ForegroundColor Cyan
-    Write-Host "  +------------------------------------------+" -ForegroundColor Cyan
-    Write-Host "  | Usuarios creados : $creados" -ForegroundColor Green
-    Write-Host "  | Usuarios omitidos: $omitidos (ya existian)" -ForegroundColor Yellow
-    Write-Host "  | Errores          : $errores" -ForegroundColor Red
+    Write-Host "  | Creados : $creados | Omitidos: $omitidos | Errores: $errores |" -ForegroundColor Cyan
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host ""
 }
@@ -361,7 +317,12 @@ function Crear-OUsYUsuarios {
 
 # ------------------------------------------------------------
 # FUNCION 4: Configurar horarios de acceso (Logon Hours)
-# UTC-8 (Pacific Time - servidor)
+#
+# UTC-7 (Los Mochis, Sinaloa)
+#
+# Cuates   : 08:00 AM - 03:00 PM local  (UTC: 15:00-22:00)
+# NoCuates : 03:00 PM - 12:00 PM local  (UTC: 22:00-19:00)
+#            CAMBIO: antes terminaba 2AM, ahora termina 12PM
 # ------------------------------------------------------------
 function Configurar-Horarios {
 
@@ -374,37 +335,25 @@ function Configurar-Horarios {
     try {
         $dominio = Get-ADDomain -ErrorAction Stop
     } catch {
-        Write-Host "  [ERROR] Este servidor no es Domain Controller o AD no esta disponible." -ForegroundColor Red
-        Write-Host ""
+        Write-Host "  [ERROR] AD no disponible." -ForegroundColor Red
         return
     }
 
-    Write-Host "  Zona horaria aplicada: UTC-8 (Pacific Time - servidor)" -ForegroundColor White
+    Write-Host "  Zona horaria: UTC-7 (Los Mochis, Sinaloa)" -ForegroundColor White
     Write-Host ""
-    Write-Host "  Horarios locales que se configuraran:" -ForegroundColor White
+    Write-Host "  Horarios locales:" -ForegroundColor White
+    Write-Host "    Cuates   : 08:00 AM - 03:00 PM" -ForegroundColor Cyan
+    Write-Host "    NoCuates : 03:00 PM - 12:00 PM (mediodia siguiente)" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "    Cuates   : 08:00 AM - 03:00 PM (hora local)" -ForegroundColor Cyan
-    Write-Host "    NoCuates : 03:00 PM - 02:00 AM (hora local)" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "  Equivalencia en UTC (lo que AD almacena):" -ForegroundColor White
-    Write-Host ""
-    Write-Host "    Cuates   : 15:00 - 22:00 UTC" -ForegroundColor DarkCyan
-    Write-Host "    NoCuates : 22:00 - 09:00 UTC" -ForegroundColor DarkCyan
-    Write-Host ""
-    Write-Host "  Ademas se configurara la GPO para forzar cierre" -ForegroundColor White
-    Write-Host "  de sesion cuando el horario expire." -ForegroundColor White
+    Write-Host "  Equivalencia UTC:" -ForegroundColor White
+    Write-Host "    Cuates   : 15:00 - 22:00 UTC  (7 horas)" -ForegroundColor DarkCyan
+    Write-Host "    NoCuates : 22:00 - 19:00 UTC  (21 horas)" -ForegroundColor DarkCyan
     Write-Host ""
 
     $confirmar = Read-Host "  Deseas continuar? (s/n)"
-    if ($confirmar -ne "s") {
-        Write-Host ""
-        Write-Host "  Operacion cancelada por el usuario." -ForegroundColor Yellow
-        Write-Host ""
-        return
-    }
+    if ($confirmar -ne "s") { return }
 
-    Write-Host ""
-
+    # Funcion interna para construir el array de bytes de logon hours
     function Build-LogonHours {
         param([int[]]$HorasUTC)
         $bits = New-Object bool[] 168
@@ -422,22 +371,26 @@ function Configurar-Horarios {
         return $bytes
     }
 
-    $horasUTC_Cuates   = @(16,17,18,19,20,21,22)
-    $horasUTC_NoCuates = @(23,0,1,2,3,4,5,6,7,8,9)
+    # Cuates: 08:00-15:00 local = 15:00-22:00 UTC
+    $horasUTC_Cuates = @(15,16,17,18,19,20,21)
+
+    # NoCuates: 15:00-12:00 local = 22:00-19:00 UTC
+    # Horas UTC: 22,23,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18
+    $horasUTC_NoCuates = @(22,23,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18)
 
     $bytesCuates   = Build-LogonHours -HorasUTC $horasUTC_Cuates
     $bytesNoCuates = Build-LogonHours -HorasUTC $horasUTC_NoCuates
 
     $csvPath = "$PSScriptRoot\usuarios.csv"
     if (-not (Test-Path $csvPath)) {
-        Write-Host "  [ERROR] No se encontro usuarios.csv en $PSScriptRoot" -ForegroundColor Red
-        Write-Host ""
+        Write-Host "  [ERROR] No se encontro usuarios.csv" -ForegroundColor Red
         return
     }
 
     $usuarios = Import-Csv -Path $csvPath
 
-    Write-Host "  Aplicando horarios a usuarios..." -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  Aplicando horarios..." -ForegroundColor Yellow
     Write-Host ""
 
     foreach ($u in $usuarios) {
@@ -449,28 +402,27 @@ function Configurar-Horarios {
             } elseif ($u.Departamento -eq "NoCuates") {
                 Set-ADUser -Identity $u.Usuario -Clear logonHours
                 Set-ADUser -Identity $u.Usuario -Replace @{logonHours = ([byte[]]$bytesNoCuates)}
-                Write-Host "  [OK] $($u.Usuario) -> NoCuates (15:00-02:00 local)" -ForegroundColor Green
+                Write-Host "  [OK] $($u.Usuario) -> NoCuates (15:00-12:00 local)" -ForegroundColor Green
             } else {
-                Write-Host "  [AVISO] $($u.Usuario): departamento desconocido '$($u.Departamento)'" -ForegroundColor Yellow
+                Write-Host "  [AVISO] $($u.Usuario): departamento desconocido." -ForegroundColor Yellow
             }
         } catch {
-            Write-Host "  [ERROR] No se pudo aplicar horario a '$($u.Usuario)': $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host "  [ERROR] $($u.Usuario): $($_.Exception.Message)" -ForegroundColor Red
         }
     }
 
+    # GPO de cierre forzado
     Write-Host ""
     Write-Host "  Configurando GPO de cierre de sesion forzado..." -ForegroundColor Yellow
-    Write-Host ""
 
     $gpoNombre = "Practica8-LogonHours"
-
     try {
         $gpo = Get-GPO -Name $gpoNombre -ErrorAction SilentlyContinue
         if (-not $gpo) {
             $gpo = New-GPO -Name $gpoNombre
-            Write-Host "  [CREADO] GPO '$gpoNombre' creada." -ForegroundColor Green
+            Write-Host "  [CREADO] GPO '$gpoNombre'." -ForegroundColor Green
         } else {
-            Write-Host "  [OK] GPO '$gpoNombre' ya existe, se actualiza." -ForegroundColor Yellow
+            Write-Host "  [OK] GPO ya existe, se actualiza." -ForegroundColor Yellow
         }
 
         Set-GPRegistryValue `
@@ -480,109 +432,180 @@ function Configurar-Horarios {
             -Type DWord `
             -Value 1 | Out-Null
 
-        Write-Host "  [OK] Politica de cierre forzado configurada." -ForegroundColor Green
+        Write-Host "  [OK] Cierre forzado configurado." -ForegroundColor Green
 
         $dcBase = $dominio.DistinguishedName
         try {
             New-GPLink -Name $gpoNombre -Target $dcBase -ErrorAction Stop | Out-Null
             Write-Host "  [OK] GPO vinculada al dominio." -ForegroundColor Green
         } catch {
-            Write-Host "  [OK] GPO ya estaba vinculada al dominio." -ForegroundColor Yellow
+            Write-Host "  [OK] GPO ya estaba vinculada." -ForegroundColor Yellow
         }
     } catch {
-        Write-Host "  [ERROR] No se pudo configurar la GPO: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "  [ERROR] GPO: $($_.Exception.Message)" -ForegroundColor Red
     }
 
     Write-Host ""
     Write-Host "  +==========================================+" -ForegroundColor Cyan
-    Write-Host "  | Horarios configurados correctamente.     |" -ForegroundColor Cyan
-    Write-Host "  | Zona horaria: UTC-8 (Pacific Time)   |" -ForegroundColor Cyan
-    Write-Host "  | Los usuarios seran desconectados al      |" -ForegroundColor Cyan
-    Write-Host "  | finalizar su turno permitido.            |" -ForegroundColor Cyan
+    Write-Host "  | Horarios configurados.                   |" -ForegroundColor Cyan
+    Write-Host "  | Cuates   : 08:00-15:00 local             |" -ForegroundColor Cyan
+    Write-Host "  | NoCuates : 15:00-12:00 local (21 horas)  |" -ForegroundColor Cyan
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host ""
 }
 
 
 # ------------------------------------------------------------
-# FUNCION 5: Configurar cuotas FSRM
+# FUNCION 5: Configurar perfiles moviles + FSRM integrado
+#
+# Esta funcion hace TODO en orden:
+#   A) Crea y comparte C:\PerfilesMoviles como \\server\Perfiles$
+#   B) Configura permisos NTFS correctos para perfiles moviles
+#   C) Asigna ProfilePath en AD a cada usuario del CSV
+#   D) Aplica cuotas FSRM sobre C:\PerfilesMoviles\usuario
+#      (Cuates=10MB, NoCuates=5MB)
+#   E) Configura GPO de perfiles moviles
+#
+# POR QUE FSRM AQUI Y NO EN CARPETA SEPARADA:
+#   El perfil movil IS la carpeta del usuario. Todo lo que guarda
+#   en Escritorio, Documentos, etc. vive en esta carpeta cuando
+#   se sincroniza con el servidor. La cuota aqui SI aplica a
+#   todo lo que el usuario guarda.
 # ------------------------------------------------------------
-function Configurar-CuotasFSRM {
+function Configurar-PerfilesYFSRM {
 
     Write-Host ""
     Write-Host "  +==========================================+" -ForegroundColor Cyan
-    Write-Host "  |       CONFIGURAR CUOTAS FSRM             |" -ForegroundColor Cyan
+    Write-Host "  |   PERFILES MOVILES + CUOTAS FSRM         |" -ForegroundColor Cyan
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host ""
+
+    # Verificar prereqs
+    try {
+        $dominio = Get-ADDomain -ErrorAction Stop
+    } catch {
+        Write-Host "  [ERROR] AD no disponible." -ForegroundColor Red
+        return
+    }
 
     $fsrm = Get-WindowsFeature -Name "FS-Resource-Manager"
     if ($fsrm.InstallState -ne "Installed") {
-        Write-Host "  [ERROR] FSRM no esta instalado." -ForegroundColor Red
-        Write-Host "  Ejecuta primero la opcion 1 para instalar las dependencias." -ForegroundColor Yellow
-        Write-Host ""
+        Write-Host "  [ERROR] FSRM no instalado. Ejecuta opcion 1." -ForegroundColor Red
         return
     }
 
     $csvPath = "$PSScriptRoot\usuarios.csv"
     if (-not (Test-Path $csvPath)) {
-        Write-Host "  [ERROR] No se encontro usuarios.csv en $PSScriptRoot" -ForegroundColor Red
-        Write-Host ""
+        Write-Host "  [ERROR] No se encontro usuarios.csv" -ForegroundColor Red
         return
     }
 
-    $usuarios    = Import-Csv -Path $csvPath
-    $carpetaRaiz = "C:\Usuarios"
+    $usuarios = Import-Csv -Path $csvPath
 
     Write-Host "  Configuracion que se aplicara:" -ForegroundColor White
     Write-Host ""
-    Write-Host "    Carpeta raiz : $carpetaRaiz\<usuario>" -ForegroundColor Cyan
-    Write-Host "    Cuates       : 10 MB por usuario (cuota estricta)" -ForegroundColor Cyan
-    Write-Host "    NoCuates     :  5 MB por usuario (cuota estricta)" -ForegroundColor Cyan
+    Write-Host "    Carpeta perfiles : $($script:CARPETA_PERFILES)" -ForegroundColor Cyan
+    Write-Host "    Ruta de red      : $($script:SHARE_UNC)"        -ForegroundColor Cyan
+    Write-Host "    Cuates           : 10 MB por usuario"           -ForegroundColor Cyan
+    Write-Host "    NoCuates         :  5 MB por usuario"           -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "  NOTA: La cuota es estricta (Hard Quota)." -ForegroundColor Yellow
-    Write-Host "  El servidor BLOQUEARA cualquier archivo que supere" -ForegroundColor Yellow
-    Write-Host "  el limite asignado al usuario." -ForegroundColor Yellow
+    Write-Host "  NOTA: Las cuotas aplican sobre la carpeta del" -ForegroundColor Yellow
+    Write-Host "  perfil en el servidor. Cualquier archivo que el" -ForegroundColor Yellow
+    Write-Host "  usuario guarde (Escritorio, Documentos, etc.)" -ForegroundColor Yellow
+    Write-Host "  cuenta contra su cuota al sincronizarse." -ForegroundColor Yellow
     Write-Host ""
 
     $confirmar = Read-Host "  Deseas continuar? (s/n)"
-    if ($confirmar -ne "s") {
-        Write-Host ""
-        Write-Host "  Operacion cancelada por el usuario." -ForegroundColor Yellow
-        Write-Host ""
+    if ($confirmar -ne "s") { return }
+
+    Write-Host ""
+
+    # ==============================================================
+    # PASO A: Crear carpeta raiz de perfiles moviles
+    # ==============================================================
+    Write-Host "  [A] Creando carpeta de perfiles moviles..." -ForegroundColor Yellow
+
+    if (-not (Test-Path $script:CARPETA_PERFILES)) {
+        New-Item -Path $script:CARPETA_PERFILES -ItemType Directory | Out-Null
+        Write-Host "  [OK] Carpeta creada: $($script:CARPETA_PERFILES)" -ForegroundColor Green
+    } else {
+        Write-Host "  [OK] Carpeta ya existe: $($script:CARPETA_PERFILES)" -ForegroundColor Yellow
+    }
+
+    # ==============================================================
+    # PASO B: Permisos NTFS para perfiles moviles
+    # Los perfiles moviles de Windows requieren permisos especificos:
+    # - Admins y SYSTEM: Control Total
+    # - Creator Owner: Control Total SOLO en subcarpetas (InheritOnly)
+    #   Para que cada usuario tenga control total sobre SU carpeta
+    # - Domain Users: Solo CreateDirectories + ReadAndExecute en raiz
+    #   Para que Windows pueda crear la carpeta del perfil
+    # ==============================================================
+    Write-Host "  [B] Configurando permisos NTFS..." -ForegroundColor Yellow
+
+    try {
+        $acl = Get-Acl $script:CARPETA_PERFILES
+        $acl.SetAccessRuleProtection($true, $false)
+
+        $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
+            "NT AUTHORITY\SYSTEM", "FullControl",
+            "ContainerInherit,ObjectInherit", "None", "Allow"
+        )))
+        $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
+            "BUILTIN\Administrators", "FullControl",
+            "ContainerInherit,ObjectInherit", "None", "Allow"
+        )))
+        $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
+            "PRACTICA8\Domain Admins", "FullControl",
+            "ContainerInherit,ObjectInherit", "None", "Allow"
+        )))
+        # Creator Owner hereda a subcarpetas SOLAMENTE (clave para perfiles moviles)
+        $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
+            "CREATOR OWNER", "FullControl",
+            "ContainerInherit,ObjectInherit", "InheritOnly", "Allow"
+        )))
+        # Domain Users puede crear carpetas en la raiz (Windows crea la subcarpeta del perfil)
+        $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
+            "PRACTICA8\Domain Users", "ReadAndExecute, CreateDirectories",
+            "None", "None", "Allow"
+        )))
+
+        Set-Acl $script:CARPETA_PERFILES $acl
+        Write-Host "  [OK] Permisos NTFS configurados." -ForegroundColor Green
+    } catch {
+        Write-Host "  [ERROR] Permisos NTFS: $($_.Exception.Message)" -ForegroundColor Red
+    }
+
+    # ==============================================================
+    # PASO C: Compartir carpeta en la red
+    # ==============================================================
+    Write-Host "  [C] Configurando recurso compartido..." -ForegroundColor Yellow
+
+    $shareExiste = Get-SmbShare -Name $script:SHARE_NAME -ErrorAction SilentlyContinue
+    if ($shareExiste) {
+        Remove-SmbShare -Name $script:SHARE_NAME -Force -ErrorAction SilentlyContinue
+        Write-Host "  [INFO] Share anterior eliminado para recrear." -ForegroundColor DarkGray
+    }
+
+    try {
+        New-SmbShare `
+            -Name        $script:SHARE_NAME `
+            -Path        $script:CARPETA_PERFILES `
+            -FullAccess  "Everyone" `
+            -Description "Perfiles Moviles Practica 08" | Out-Null
+        Write-Host "  [OK] Compartido como: $($script:SHARE_UNC)" -ForegroundColor Green
+    } catch {
+        Write-Host "  [ERROR] Share: $($_.Exception.Message)" -ForegroundColor Red
         return
     }
 
+    # ==============================================================
+    # PASO D: Asignar ProfilePath en AD y crear carpetas con cuotas
+    # ==============================================================
+    Write-Host "  [D] Asignando perfiles y cuotas FSRM..." -ForegroundColor Yellow
     Write-Host ""
 
-    if (-not (Test-Path $carpetaRaiz)) {
-        New-Item -Path $carpetaRaiz -ItemType Directory | Out-Null
-        Write-Host "  [CREADO] Carpeta raiz: $carpetaRaiz" -ForegroundColor Green
-    } else {
-        Write-Host "  [OK] Carpeta raiz ya existe: $carpetaRaiz" -ForegroundColor Yellow
-    }
-
-    # Compartir carpeta en la red
-    Write-Host ""
-    Write-Host "  Configurando recurso compartido de red..." -ForegroundColor Yellow
-    $shareExiste = Get-SmbShare -Name "Usuarios" -ErrorAction SilentlyContinue
-    if (-not $shareExiste) {
-        New-SmbShare -Name "Usuarios" -Path $carpetaRaiz -FullAccess "PRACTICA8\Domain Admins" -ChangeAccess "PRACTICA8\Domain Users" | Out-Null
-        Write-Host "  [CREADO] Carpeta compartida como \\192.168.1.202\Usuarios" -ForegroundColor Green
-    } else {
-        Write-Host "  [OK] Recurso compartido 'Usuarios' ya existe." -ForegroundColor Yellow
-    }
-
-    # Permisos NTFS
-    $acl = Get-Acl $carpetaRaiz
-    $regla = New-Object System.Security.AccessControl.FileSystemAccessRule("PRACTICA8\Domain Users","Modify","ContainerInherit,ObjectInherit","None","Allow")
-    $acl.AddAccessRule($regla)
-    Set-Acl $carpetaRaiz $acl
-    Write-Host "  [OK] Permisos NTFS configurados para Domain Users." -ForegroundColor Green
-
-    Write-Host ""
-    Write-Host "  Creando plantillas de cuota FSRM..." -ForegroundColor Yellow
-    Write-Host ""
-
+    # Crear plantillas de cuota FSRM
     $plantillas = @(
         @{ Nombre = "Practica8-Cuates-10MB";  Tamano = 10MB },
         @{ Nombre = "Practica8-NoCuates-5MB"; Tamano = 5MB  }
@@ -590,29 +613,26 @@ function Configurar-CuotasFSRM {
 
     foreach ($p in $plantillas) {
         try {
-            $existePlantilla = Get-FsrmQuotaTemplate -Name $p.Nombre -ErrorAction SilentlyContinue
-            if ($existePlantilla) {
-                Write-Host "  [OK] Plantilla '$($p.Nombre)' ya existe, se omite." -ForegroundColor Yellow
+            $existe = Get-FsrmQuotaTemplate -Name $p.Nombre -ErrorAction SilentlyContinue
+            if ($existe) {
+                Write-Host "  [OK] Plantilla '$($p.Nombre)' ya existe." -ForegroundColor Yellow
             } else {
                 New-FsrmQuotaTemplate -Name $p.Nombre -Size $p.Tamano -SoftLimit:$false | Out-Null
                 Write-Host "  [CREADO] Plantilla '$($p.Nombre)' ($($p.Tamano / 1MB) MB)." -ForegroundColor Green
             }
         } catch {
-            Write-Host "  [ERROR] No se pudo crear la plantilla '$($p.Nombre)': $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host "  [ERROR] Plantilla '$($p.Nombre)': $($_.Exception.Message)" -ForegroundColor Red
         }
     }
 
     Write-Host ""
-    Write-Host "  Creando carpetas y aplicando cuotas a usuarios..." -ForegroundColor Yellow
-    Write-Host ""
 
-    $creadas  = 0
-    $omitidas = 0
-    $errores  = 0
+    $ok      = 0
+    $errores = 0
 
     foreach ($u in $usuarios) {
-        $carpetaUsuario = "$carpetaRaiz\$($u.Usuario)"
 
+        # Determinar cuota segun departamento
         if ($u.Departamento -eq "Cuates") {
             $plantillaNombre = "Practica8-Cuates-10MB"
             $tamanoBytes     = 10MB
@@ -620,60 +640,133 @@ function Configurar-CuotasFSRM {
         } elseif ($u.Departamento -eq "NoCuates") {
             $plantillaNombre = "Practica8-NoCuates-5MB"
             $tamanoBytes     = 5MB
-            $tamanoTexto     = "5 MB"
+            $tamanoTexto     = " 5 MB"
         } else {
-            Write-Host "  [AVISO] $($u.Usuario): departamento desconocido, se omite." -ForegroundColor Yellow
+            Write-Host "  [AVISO] $($u.Usuario): departamento desconocido." -ForegroundColor Yellow
             continue
         }
 
-        if (-not (Test-Path $carpetaUsuario)) {
+        # Ruta UNC para AD (sin extension .V6, Windows la agrega solo)
+        $rutaUNC       = "$($script:SHARE_UNC)\$($u.Usuario)"
+        # Ruta local para FSRM (el servidor ve la ruta local)
+        $carpetaLocal  = "$($script:CARPETA_PERFILES)\$($u.Usuario)"
+
+        # 1. Asignar ProfilePath en AD
+        try {
+            Set-ADUser -Identity $u.Usuario -ProfilePath $rutaUNC -ErrorAction Stop
+            Write-Host "  [AD] $($u.Usuario) ProfilePath -> $rutaUNC" -ForegroundColor Green
+        } catch {
+            Write-Host "  [ERROR] ProfilePath $($u.Usuario): $($_.Exception.Message)" -ForegroundColor Red
+            $errores++
+            continue
+        }
+
+        # 2. Crear carpeta local (necesaria para que FSRM pueda aplicar cuota)
+        # Windows creara la subcarpeta .V6 automaticamente en el primer login,
+        # pero necesitamos la carpeta base para FSRM.
+        if (-not (Test-Path $carpetaLocal)) {
             try {
-                New-Item -Path $carpetaUsuario -ItemType Directory | Out-Null
-                Write-Host "  [CARPETA] Creada: $carpetaUsuario" -ForegroundColor DarkGreen
+                New-Item -Path $carpetaLocal -ItemType Directory | Out-Null
+                Write-Host "  [DIR] Creada: $carpetaLocal" -ForegroundColor DarkGreen
             } catch {
-                Write-Host "  [ERROR] No se pudo crear '$carpetaUsuario': $($_.Exception.Message)" -ForegroundColor Red
+                Write-Host "  [ERROR] Carpeta $($u.Usuario): $($_.Exception.Message)" -ForegroundColor Red
                 $errores++
                 continue
             }
         }
 
+        # 3. Aplicar cuota FSRM sobre la carpeta del perfil
         try {
-            $cuotaExistente  = Get-FsrmQuota -Path $carpetaUsuario -ErrorAction SilentlyContinue
+            $cuotaExistente  = Get-FsrmQuota -Path $carpetaLocal -ErrorAction SilentlyContinue
             $existePlantilla = Get-FsrmQuotaTemplate -Name $plantillaNombre -ErrorAction SilentlyContinue
 
             if ($cuotaExistente) {
                 if ($existePlantilla) {
-                    Set-FsrmQuota -Path $carpetaUsuario -Template $plantillaNombre | Out-Null
+                    Set-FsrmQuota -Path $carpetaLocal -Template $plantillaNombre | Out-Null
                 } else {
-                    Set-FsrmQuota -Path $carpetaUsuario -Size $tamanoBytes -SoftLimit:$false | Out-Null
+                    Set-FsrmQuota -Path $carpetaLocal -Size $tamanoBytes -SoftLimit:$false | Out-Null
                 }
-                Write-Host "  [ACTUALIZADO] $($u.Usuario) ($($u.Departamento)) -> $tamanoTexto" -ForegroundColor Yellow
-                $omitidas++
+                Write-Host "  [CUOTA] $($u.Usuario) ($($u.Departamento)) -> $tamanoTexto (actualizada)" -ForegroundColor Yellow
             } else {
                 if ($existePlantilla) {
-                    New-FsrmQuota -Path $carpetaUsuario -Template $plantillaNombre | Out-Null
+                    New-FsrmQuota -Path $carpetaLocal -Template $plantillaNombre | Out-Null
                 } else {
-                    New-FsrmQuota -Path $carpetaUsuario -Size $tamanoBytes -SoftLimit:$false | Out-Null
+                    New-FsrmQuota -Path $carpetaLocal -Size $tamanoBytes -SoftLimit:$false | Out-Null
                 }
                 Write-Host "  [CUOTA] $($u.Usuario) ($($u.Departamento)) -> $tamanoTexto" -ForegroundColor Green
-                $creadas++
             }
+            $ok++
         } catch {
-            Write-Host "  [ERROR] Cuota para '$($u.Usuario)': $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host "  [ERROR] FSRM $($u.Usuario): $($_.Exception.Message)" -ForegroundColor Red
             $errores++
         }
     }
 
+    # ==============================================================
+    # PASO E: GPO de perfiles moviles
+    # ==============================================================
+    Write-Host ""
+    Write-Host "  [E] Configurando GPO de perfiles moviles..." -ForegroundColor Yellow
+
+    try {
+        $gpoNombre = "Practica8-PerfilesMoviles"
+        $dcBase    = $dominio.DistinguishedName
+
+        $gpo = Get-GPO -Name $gpoNombre -ErrorAction SilentlyContinue
+        if (-not $gpo) {
+            $gpo = New-GPO -Name $gpoNombre
+            Write-Host "  [CREADO] GPO '$gpoNombre'." -ForegroundColor Green
+        } else {
+            Write-Host "  [OK] GPO ya existe, actualizando." -ForegroundColor Yellow
+        }
+
+        # No verificar espacio suficiente en disco
+        Set-GPRegistryValue -Name $gpoNombre `
+            -Key "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" `
+            -ValueName "CompatibleRUPSecurity" `
+            -Type DWord -Value 1 | Out-Null
+
+        # Siempre cargar el perfil movil aunque la red sea lenta
+        Set-GPRegistryValue -Name $gpoNombre `
+            -Key "HKLM\SOFTWARE\Policies\Microsoft\Windows\System" `
+            -ValueName "SlowLinkDefaultProfile" `
+            -Type DWord -Value 1 | Out-Null
+
+        # Timeout de red lenta = 0 (siempre cargar)
+        Set-GPRegistryValue -Name $gpoNombre `
+            -Key "HKLM\SOFTWARE\Policies\Microsoft\Windows\System" `
+            -ValueName "SlowLinkTimeOut" `
+            -Type DWord -Value 0 | Out-Null
+
+        try {
+            New-GPLink -Name $gpoNombre -Target $dcBase -ErrorAction Stop | Out-Null
+            Write-Host "  [OK] GPO vinculada al dominio." -ForegroundColor Green
+        } catch {
+            Write-Host "  [OK] GPO ya vinculada." -ForegroundColor Yellow
+        }
+
+        gpupdate /force 2>&1 | Out-Null
+        Write-Host "  [OK] GPO aplicada." -ForegroundColor Green
+
+    } catch {
+        Write-Host "  [WARN] GPO perfiles: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+
     Write-Host ""
     Write-Host "  +==========================================+" -ForegroundColor Cyan
-    Write-Host "  | RESUMEN DE CUOTAS                        |" -ForegroundColor Cyan
+    Write-Host "  | PERFILES MOVILES + FSRM CONFIGURADOS     |" -ForegroundColor Cyan
     Write-Host "  +------------------------------------------+" -ForegroundColor Cyan
-    Write-Host "  | Cuotas creadas     : $creadas" -ForegroundColor Green
-    Write-Host "  | Cuotas actualizadas: $omitidas" -ForegroundColor Yellow
-    Write-Host "  | Errores            : $errores" -ForegroundColor Red
+    Write-Host "  | Ruta servidor: $($script:CARPETA_PERFILES)" -ForegroundColor White
+    Write-Host "  | Ruta de red  : $($script:SHARE_UNC)"        -ForegroundColor White
+    Write-Host "  | Cuotas OK    : $ok"                          -ForegroundColor Green
+    Write-Host "  | Errores      : $errores"                     -ForegroundColor Red
     Write-Host "  +------------------------------------------+" -ForegroundColor Cyan
-    Write-Host "  | Carpetas en: $carpetaRaiz" -ForegroundColor White
-    Write-Host "  | Compartido : \\192.168.1.202\Usuarios     |" -ForegroundColor White
+    Write-Host "  | SIGUIENTE PASO en el cliente Windows:    |" -ForegroundColor Yellow
+    Write-Host "  |  1. Unir al dominio (unir_windows.ps1)   |" -ForegroundColor Yellow
+    Write-Host "  |  2. gpupdate /force                      |" -ForegroundColor Yellow
+    Write-Host "  |  3. Cerrar sesion y volver a entrar      |" -ForegroundColor Yellow
+    Write-Host "  |  4. Al cerrar sesion el perfil se guarda |" -ForegroundColor Yellow
+    Write-Host "  |     en $($script:CARPETA_PERFILES)\usuario.V6" -ForegroundColor Yellow
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host ""
 }
@@ -681,6 +774,12 @@ function Configurar-CuotasFSRM {
 
 # ------------------------------------------------------------
 # FUNCION 6: Configurar apantallamiento de archivos (FSRM)
+#
+# APLICA sobre C:\PerfilesMoviles\usuario
+# (misma carpeta que las cuotas, es el perfil del usuario)
+#
+# Bloquea: .mp3 .mp4 .exe .msi
+# Tipo   : Active Screening (bloqueo en tiempo real)
 # ------------------------------------------------------------
 function Configurar-Apantallamiento {
 
@@ -692,81 +791,76 @@ function Configurar-Apantallamiento {
 
     $fsrm = Get-WindowsFeature -Name "FS-Resource-Manager"
     if ($fsrm.InstallState -ne "Installed") {
-        Write-Host "  [ERROR] FSRM no esta instalado." -ForegroundColor Red
-        Write-Host "  Ejecuta primero la opcion 1 para instalar las dependencias." -ForegroundColor Yellow
-        Write-Host ""
+        Write-Host "  [ERROR] FSRM no instalado. Ejecuta opcion 1." -ForegroundColor Red
         return
     }
 
     $csvPath = "$PSScriptRoot\usuarios.csv"
     if (-not (Test-Path $csvPath)) {
-        Write-Host "  [ERROR] No se encontro usuarios.csv en $PSScriptRoot" -ForegroundColor Red
-        Write-Host ""
+        Write-Host "  [ERROR] No se encontro usuarios.csv" -ForegroundColor Red
         return
     }
 
     $usuarios    = Import-Csv -Path $csvPath
-    $carpetaRaiz = "C:\Usuarios"
     $grupoNombre = "Practica8-ArchivosProhibidos"
 
-    Write-Host "  Se bloquearan los siguientes tipos de archivo" -ForegroundColor White
-    Write-Host "  en las carpetas personales de TODOS los usuarios:" -ForegroundColor White
-    Write-Host ""
+    Write-Host "  Archivos bloqueados en carpetas de perfil:" -ForegroundColor White
     Write-Host "    Multimedia  : *.mp3, *.mp4" -ForegroundColor Cyan
     Write-Host "    Ejecutables : *.exe, *.msi" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "  Tipo de apantallamiento: ACTIVO (Active Screening)" -ForegroundColor Yellow
-    Write-Host "  El servidor RECHAZARA el archivo en tiempo real." -ForegroundColor Yellow
+    Write-Host "  Carpeta objetivo: $($script:CARPETA_PERFILES)\<usuario>" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "  Tipo: ACTIVO - bloqueo en tiempo real." -ForegroundColor Yellow
     Write-Host ""
 
-    $confirmar = Read-Host "  Deseas continuar? (s/n)"
-    if ($confirmar -ne "s") {
-        Write-Host ""
-        Write-Host "  Operacion cancelada por el usuario." -ForegroundColor Yellow
-        Write-Host ""
+    # Verificar que la carpeta de perfiles existe
+    if (-not (Test-Path $script:CARPETA_PERFILES)) {
+        Write-Host "  [ERROR] No existe $($script:CARPETA_PERFILES)." -ForegroundColor Red
+        Write-Host "  Ejecuta primero la opcion 5." -ForegroundColor Yellow
         return
     }
 
-    Write-Host ""
-    Write-Host "  Creando grupo de archivos prohibidos..." -ForegroundColor Yellow
+    $confirmar = Read-Host "  Deseas continuar? (s/n)"
+    if ($confirmar -ne "s") { return }
+
     Write-Host ""
 
+    # Crear grupo de archivos prohibidos
+    Write-Host "  Creando grupo de archivos prohibidos..." -ForegroundColor Yellow
     try {
         $grupoExistente = Get-FsrmFileGroup -Name $grupoNombre -ErrorAction SilentlyContinue
         if ($grupoExistente) {
             Set-FsrmFileGroup -Name $grupoNombre -IncludePattern @("*.mp3","*.mp4","*.exe","*.msi") | Out-Null
-            Write-Host "  [OK] Grupo '$grupoNombre' ya existe, actualizado." -ForegroundColor Yellow
+            Write-Host "  [OK] Grupo '$grupoNombre' actualizado." -ForegroundColor Yellow
         } else {
             New-FsrmFileGroup -Name $grupoNombre -IncludePattern @("*.mp3","*.mp4","*.exe","*.msi") | Out-Null
-            Write-Host "  [CREADO] Grupo '$grupoNombre' creado." -ForegroundColor Green
+            Write-Host "  [CREADO] Grupo '$grupoNombre'." -ForegroundColor Green
         }
     } catch {
-        Write-Host "  [ERROR] No se pudo crear el grupo: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "  [ERROR] Grupo: $($_.Exception.Message)" -ForegroundColor Red
         return
     }
 
-    Write-Host ""
+    # Crear plantilla de apantallamiento
     Write-Host "  Creando plantilla de apantallamiento..." -ForegroundColor Yellow
-    Write-Host ""
-
     $plantillaNombre = "Practica8-Apantallamiento"
-
     try {
         $plantillaExistente = Get-FsrmFileScreenTemplate -Name $plantillaNombre -ErrorAction SilentlyContinue
         if ($plantillaExistente) {
             Set-FsrmFileScreenTemplate -Name $plantillaNombre -Active:$true -IncludeGroup @($grupoNombre) | Out-Null
-            Write-Host "  [OK] Plantilla '$plantillaNombre' ya existe, actualizada." -ForegroundColor Yellow
+            Write-Host "  [OK] Plantilla '$plantillaNombre' actualizada." -ForegroundColor Yellow
         } else {
             New-FsrmFileScreenTemplate -Name $plantillaNombre -Active:$true -IncludeGroup @($grupoNombre) | Out-Null
-            Write-Host "  [CREADO] Plantilla '$plantillaNombre' creada." -ForegroundColor Green
+            Write-Host "  [CREADO] Plantilla '$plantillaNombre'." -ForegroundColor Green
         }
     } catch {
-        Write-Host "  [ERROR] No se pudo crear la plantilla: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "  [ERROR] Plantilla: $($_.Exception.Message)" -ForegroundColor Red
         return
     }
 
+    # Aplicar apantallamiento a carpetas de perfiles
     Write-Host ""
-    Write-Host "  Aplicando apantallamiento a carpetas de usuarios..." -ForegroundColor Yellow
+    Write-Host "  Aplicando apantallamiento a perfiles de usuarios..." -ForegroundColor Yellow
     Write-Host ""
 
     $creados  = 0
@@ -774,55 +868,67 @@ function Configurar-Apantallamiento {
     $errores  = 0
 
     foreach ($u in $usuarios) {
-        $carpetaUsuario = "$carpetaRaiz\$($u.Usuario)"
+        # La carpeta del perfil puede existir como:
+        # C:\PerfilesMoviles\usuario     (antes del primer login)
+        # C:\PerfilesMoviles\usuario.V6  (despues del primer login en Windows 10)
+        # Aplicamos en ambas si existen
+        $carpetasAplicar = @()
 
-        if (-not (Test-Path $carpetaUsuario)) {
-            Write-Host "  [AVISO] No existe '$carpetaUsuario'. Ejecuta primero la opcion 5." -ForegroundColor Yellow
-            $errores++
-            continue
+        $carpetaBase = "$($script:CARPETA_PERFILES)\$($u.Usuario)"
+        $carpetaV6   = "$($script:CARPETA_PERFILES)\$($u.Usuario).V6"
+
+        if (Test-Path $carpetaBase) { $carpetasAplicar += $carpetaBase }
+        if (Test-Path $carpetaV6)   { $carpetasAplicar += $carpetaV6   }
+
+        if ($carpetasAplicar.Count -eq 0) {
+            Write-Host "  [AVISO] $($u.Usuario): carpeta no existe todavia." -ForegroundColor Yellow
+            Write-Host "          Se aplicara automaticamente cuando haga login." -ForegroundColor DarkGray
+            # Crear la carpeta base para poder aplicar el screen ahora
+            try {
+                New-Item -Path $carpetaBase -ItemType Directory -Force | Out-Null
+                $carpetasAplicar += $carpetaBase
+                Write-Host "          Carpeta creada: $carpetaBase" -ForegroundColor DarkGray
+            } catch {}
         }
 
-        try {
-            $screenExistente = Get-FsrmFileScreen -Path $carpetaUsuario -ErrorAction SilentlyContinue
-            if ($screenExistente) {
-                Set-FsrmFileScreen -Path $carpetaUsuario -Template $plantillaNombre | Out-Null
-                Write-Host "  [ACTUALIZADO] $($u.Usuario) -> apantallamiento actualizado" -ForegroundColor Yellow
-                $omitidos++
-            } else {
-                New-FsrmFileScreen -Path $carpetaUsuario -Template $plantillaNombre | Out-Null
-                Write-Host "  [OK] $($u.Usuario) -> .mp3 .mp4 .exe .msi bloqueados" -ForegroundColor Green
-                $creados++
+        foreach ($carpeta in $carpetasAplicar) {
+            try {
+                $screenExistente = Get-FsrmFileScreen -Path $carpeta -ErrorAction SilentlyContinue
+                if ($screenExistente) {
+                    Set-FsrmFileScreen -Path $carpeta -Template $plantillaNombre | Out-Null
+                    Write-Host "  [OK] $($u.Usuario) ($carpeta) -> actualizado" -ForegroundColor Yellow
+                    $omitidos++
+                } else {
+                    New-FsrmFileScreen -Path $carpeta -Template $plantillaNombre | Out-Null
+                    Write-Host "  [OK] $($u.Usuario) ($carpeta) -> bloqueados .mp3 .mp4 .exe .msi" -ForegroundColor Green
+                    $creados++
+                }
+            } catch {
+                Write-Host "  [ERROR] $($u.Usuario) ($carpeta): $($_.Exception.Message)" -ForegroundColor Red
+                $errores++
             }
-        } catch {
-            Write-Host "  [ERROR] $($u.Usuario): $($_.Exception.Message)" -ForegroundColor Red
-            $errores++
         }
     }
 
     Write-Host ""
     Write-Host "  +==========================================+" -ForegroundColor Cyan
-    Write-Host "  | RESUMEN DE APANTALLAMIENTO               |" -ForegroundColor Cyan
+    Write-Host "  | APANTALLAMIENTO                          |" -ForegroundColor Cyan
+    Write-Host "  | Creados     : $creados"                    -ForegroundColor Green
+    Write-Host "  | Actualizados: $omitidos"                   -ForegroundColor Yellow
+    Write-Host "  | Errores     : $errores"                    -ForegroundColor Red
     Write-Host "  +------------------------------------------+" -ForegroundColor Cyan
-    Write-Host "  | Screens creados     : $creados" -ForegroundColor Green
-    Write-Host "  | Screens actualizados: $omitidos" -ForegroundColor Yellow
-    Write-Host "  | Errores             : $errores" -ForegroundColor Red
-    Write-Host "  +------------------------------------------+" -ForegroundColor Cyan
-    Write-Host "  | Archivos bloqueados: .mp3 .mp4 .exe .msi |" -ForegroundColor White
+    Write-Host "  | NOTA: Cuando el usuario haga primer login |" -ForegroundColor White
+    Write-Host "  | Windows crea la carpeta .V6 automatico.  |" -ForegroundColor White
+    Write-Host "  | Vuelve a ejecutar esta opcion despues     |" -ForegroundColor White
+    Write-Host "  | del primer login para cubrir .V6 tambien.|" -ForegroundColor White
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host ""
 }
 
 
 # ------------------------------------------------------------
-# FUNCION 7: Configurar AppLocker (hash hardcodeado)
-#
-# Hash conocido de notepad.exe del cliente Windows 10 Pro:
-# 0x0C386FA6ABFDEFFBBEFF5BCE97D461340A23D1981458607BD9E5EEFF4066789A
-# Tamano: 201216 bytes
-#
-# Reglas:
-#   - Cuates   : notepad.exe PERMITIDO (reglas base)
-#   - NoCuates : notepad.exe BLOQUEADO por Hash
+# FUNCION 7: Configurar AppLocker
+# (sin cambios respecto a version original)
 # ------------------------------------------------------------
 function Configurar-AppLocker {
 
@@ -835,35 +941,24 @@ function Configurar-AppLocker {
     try {
         $dominio = Get-ADDomain -ErrorAction Stop
     } catch {
-        Write-Host "  [ERROR] Este servidor no es Domain Controller o AD no esta disponible." -ForegroundColor Red
-        Write-Host ""
+        Write-Host "  [ERROR] AD no disponible." -ForegroundColor Red
         return
     }
 
-    Write-Host "  Reglas que se configuraran via GPO:" -ForegroundColor White
-    Write-Host ""
-    Write-Host "    Cuates   : notepad.exe PERMITIDO (reglas base)" -ForegroundColor Cyan
+    Write-Host "  Reglas:" -ForegroundColor White
+    Write-Host "    Cuates   : notepad.exe PERMITIDO" -ForegroundColor Cyan
     Write-Host "    NoCuates : notepad.exe BLOQUEADO por Hash" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "  Hash usado (notepad.exe Windows 10 Pro):" -ForegroundColor White
-    Write-Host "  0x0C386FA6ABFDEFFBBEFF5BCE97D461340A23D1981458607BD9E5EEFF4066789A..." -ForegroundColor DarkGray
-    Write-Host ""
-    Write-Host "  La regla de Hash identifica el archivo por su" -ForegroundColor Yellow
-    Write-Host "  contenido, no por su nombre. Renombrar el .exe" -ForegroundColor Yellow
-    Write-Host "  no permite saltarse el bloqueo." -ForegroundColor Yellow
+    Write-Host "  Hash (notepad.exe Windows 10 Pro):" -ForegroundColor White
+    Write-Host "  0x70152C176B629E51FD283BD2F30ACFBDB1A129EA14D94889C1D32A742C104BBF" -ForegroundColor DarkGray
     Write-Host ""
 
     $confirmar = Read-Host "  Deseas continuar? (s/n)"
-    if ($confirmar -ne "s") {
-        Write-Host ""
-        Write-Host "  Operacion cancelada por el usuario." -ForegroundColor Yellow
-        Write-Host ""
-        return
-    }
+    if ($confirmar -ne "s") { return }
 
     Write-Host ""
 
-    # --- Obtener SID de NoCuates ---
+    # Obtener SID de NoCuates
     Write-Host "  Obteniendo SID del grupo NoCuates..." -ForegroundColor Yellow
     try {
         $sidNoCuates = (Get-ADGroup -Identity "NoCuates").SID.Value
@@ -873,15 +968,12 @@ function Configurar-AppLocker {
         return
     }
 
-    # --- Hash hardcodeado del cliente Windows 10 Pro ---
-    $hashValor   = "0x0C386FA6ABFDEFFBBEFF5BCE97D461340A23D1981458607BD9E5EEFF4066789A"
-    $archivoSize = 201216
+    $hashValor   = "0x70152C176B629E51FD283BD2F30ACFBDB1A129EA14D94889C1D32A742C104BBF"
+    $archivoSize = 200704
+    $guid1       = [System.Guid]::NewGuid().ToString()
 
-    # --- Construir XML ---
     Write-Host ""
     Write-Host "  Construyendo politica AppLocker..." -ForegroundColor Yellow
-
-    $guid1 = [System.Guid]::NewGuid().ToString()
 
     $xmlPolicy = @"
 <AppLockerPolicy Version="1">
@@ -895,7 +987,7 @@ function Configurar-AppLocker {
     <FilePathRule Id="b61c8b2c-a23e-47ff-8e4a-4e3d41bc98b1" Name="Permitir ProgramFiles x86" Description="" UserOrGroupSid="S-1-1-0" Action="Allow">
       <Conditions><FilePathCondition Path="%PROGRAMFILES(X86)%\*"/></Conditions>
     </FilePathRule>
-    <FileHashRule Id="$guid1" Name="Bloquear Notepad NoCuates" Description="Bloquea notepad.exe por hash - renombrar no evita el bloqueo" UserOrGroupSid="$sidNoCuates" Action="Deny">
+    <FileHashRule Id="$guid1" Name="Bloquear Notepad NoCuates" Description="Bloquea notepad.exe por hash" UserOrGroupSid="$sidNoCuates" Action="Deny">
       <Conditions>
         <FileHashCondition>
           <FileHash Type="SHA256" Data="$hashValor" SourceFileName="notepad.exe" SourceFileLength="$archivoSize"/>
@@ -926,7 +1018,6 @@ function Configurar-AppLocker {
     $xmlPolicy | Out-File $xmlPath -Encoding UTF8 -Force
     Write-Host "  [OK] XML generado." -ForegroundColor Green
 
-    # --- Crear o actualizar GPO ---
     Write-Host ""
     Write-Host "  Configurando GPO de AppLocker..." -ForegroundColor Yellow
 
@@ -935,62 +1026,60 @@ function Configurar-AppLocker {
         $gpo = Get-GPO -Name $gpoNombre -ErrorAction SilentlyContinue
         if (-not $gpo) {
             $gpo = New-GPO -Name $gpoNombre
-            Write-Host "  [CREADO] GPO '$gpoNombre' creada." -ForegroundColor Green
+            Write-Host "  [CREADO] GPO '$gpoNombre'." -ForegroundColor Green
         } else {
-            Write-Host "  [OK] GPO '$gpoNombre' ya existe, se actualiza." -ForegroundColor Yellow
+            Write-Host "  [OK] GPO ya existe, actualizando." -ForegroundColor Yellow
         }
 
         $gpoId  = $gpo.Id.ToString()
         $dcBase = $dominio.DistinguishedName
 
         Set-AppLockerPolicy -XmlPolicy $xmlPath -Ldap "LDAP://CN={$gpoId},CN=Policies,CN=System,DC=practica8,DC=local"
-        Write-Host "  [OK] Politica AppLocker aplicada a la GPO." -ForegroundColor Green
+        Write-Host "  [OK] Politica AppLocker aplicada." -ForegroundColor Green
 
         try {
             New-GPLink -Name $gpoNombre -Target $dcBase -ErrorAction Stop | Out-Null
-            Write-Host "  [OK] GPO vinculada al dominio." -ForegroundColor Green
+            Write-Host "  [OK] GPO vinculada." -ForegroundColor Green
         } catch {
-            Write-Host "  [OK] GPO ya estaba vinculada al dominio." -ForegroundColor Yellow
+            Write-Host "  [OK] GPO ya vinculada." -ForegroundColor Yellow
         }
 
-        # Habilitar AppIDSvc
         Write-Host ""
-        Write-Host "  Habilitando servicio AppIDSvc..." -ForegroundColor Yellow
+        Write-Host "  Habilitando AppIDSvc..." -ForegroundColor Yellow
         sc.exe config AppIDSvc start= auto | Out-Null
         sc.exe start AppIDSvc 2>$null | Out-Null
-        Write-Host "  [OK] Servicio AppIDSvc configurado como Automatico." -ForegroundColor Green
+        Write-Host "  [OK] AppIDSvc configurado." -ForegroundColor Green
 
     } catch {
-        Write-Host "  [ERROR] No se pudo configurar la GPO: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "  [ERROR] GPO AppLocker: $($_.Exception.Message)" -ForegroundColor Red
         return
     }
 
     Write-Host ""
     Write-Host "  +==========================================+" -ForegroundColor Cyan
-    Write-Host "  | AppLocker configurado correctamente.     |" -ForegroundColor Cyan
-    Write-Host "  +------------------------------------------+" -ForegroundColor Cyan
+    Write-Host "  | AppLocker configurado.                   |" -ForegroundColor Cyan
     Write-Host "  | Cuates   : notepad.exe PERMITIDO         |" -ForegroundColor Green
     Write-Host "  | NoCuates : notepad.exe BLOQUEADO (hash)  |" -ForegroundColor Red
     Write-Host "  +------------------------------------------+" -ForegroundColor Cyan
-    Write-Host "  | IMPORTANTE: En el cliente Windows:       |" -ForegroundColor Yellow
-    Write-Host "  | 1. Abrir PowerShell como Admin           |" -ForegroundColor Yellow
-    Write-Host "  | 2. sc.exe config AppIDSvc start= auto    |" -ForegroundColor Yellow
-    Write-Host "  | 3. sc.exe start AppIDSvc                 |" -ForegroundColor Yellow
-    Write-Host "  | 4. gpupdate /force                       |" -ForegroundColor Yellow
-    Write-Host "  | 5. Cerrar sesion y volver a entrar       |" -ForegroundColor Yellow
+    Write-Host "  | En el cliente Windows:                   |" -ForegroundColor Yellow
+    Write-Host "  | sc.exe config AppIDSvc start= auto       |" -ForegroundColor Yellow
+    Write-Host "  | sc.exe start AppIDSvc                    |" -ForegroundColor Yellow
+    Write-Host "  | gpupdate /force                          |" -ForegroundColor Yellow
+    Write-Host "  | Cerrar sesion y volver a entrar          |" -ForegroundColor Yellow
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host ""
-
 }
+
 
 # ------------------------------------------------------------
 # FUNCION 8: Crear usuario dinamicamente
-# Permite crear un usuario nuevo ingresando los datos
-# manualmente. Aplica automaticamente:
-#   - OU correcta (Cuates o NoCuates)
-#   - Horario de acceso correspondiente
-#   - Carpeta personal con cuota (5MB o 10MB)
-#   - Apantallamiento de archivos (.mp3 .mp4 .exe .msi)
+#
+# Crea un usuario nuevo con todos los ajustes aplicados:
+#   - OU correcta (Cuates/NoCuates)
+#   - Horario de acceso
+#   - ProfilePath apuntando a C:\PerfilesMoviles\usuario
+#   - Cuota FSRM en la carpeta del perfil
+#   - Apantallamiento de archivos
 # ------------------------------------------------------------
 function Crear-UsuarioDinamico {
 
@@ -1000,153 +1089,72 @@ function Crear-UsuarioDinamico {
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host ""
 
-    # --- Verificar que el servidor es DC ---
     try {
         $dominio = Get-ADDomain -ErrorAction Stop
     } catch {
-        Write-Host "  [ERROR] Este servidor no es Domain Controller o AD no esta disponible." -ForegroundColor Red
-        Write-Host "  Ejecuta primero las opciones 1 y 2." -ForegroundColor Yellow
-        Write-Host ""
+        Write-Host "  [ERROR] AD no disponible." -ForegroundColor Red
         return
     }
 
-    $dcBase      = $dominio.DistinguishedName
-    $carpetaRaiz = "C:\Usuarios"
+    $dcBase = $dominio.DistinguishedName
 
-    # --- Pedir datos del usuario ---
     Write-Host "  Ingresa los datos del nuevo usuario:" -ForegroundColor White
     Write-Host ""
 
-    $nombre = Read-Host "  Nombre (ej: Juan)"
-    if ([string]::IsNullOrWhiteSpace($nombre)) {
-        Write-Host "  [ERROR] El nombre no puede estar vacio." -ForegroundColor Red
-        return
-    }
+    $nombre = Read-Host "  Nombre"
+    if ([string]::IsNullOrWhiteSpace($nombre)) { Write-Host "  [ERROR] Nombre vacio." -ForegroundColor Red; return }
 
-    $apellido = Read-Host "  Apellido (ej: Garcia)"
-    if ([string]::IsNullOrWhiteSpace($apellido)) {
-        Write-Host "  [ERROR] El apellido no puede estar vacio." -ForegroundColor Red
-        return
-    }
+    $apellido = Read-Host "  Apellido"
+    if ([string]::IsNullOrWhiteSpace($apellido)) { Write-Host "  [ERROR] Apellido vacio." -ForegroundColor Red; return }
 
-    $usuario = Read-Host "  Usuario (ej: jgarcia, sin espacios ni caracteres especiales)"
-    if ([string]::IsNullOrWhiteSpace($usuario)) {
-        Write-Host "  [ERROR] El usuario no puede estar vacio." -ForegroundColor Red
-        return
-    }
-    # Verificar que el usuario no existe
+    $usuario = Read-Host "  Usuario (sin espacios)"
+    if ([string]::IsNullOrWhiteSpace($usuario)) { Write-Host "  [ERROR] Usuario vacio." -ForegroundColor Red; return }
+
     try {
         Get-ADUser -Identity $usuario -ErrorAction Stop | Out-Null
-        Write-Host "  [ERROR] El usuario '$usuario' ya existe en el dominio." -ForegroundColor Red
+        Write-Host "  [ERROR] El usuario '$usuario' ya existe." -ForegroundColor Red
         return
-    } catch {
-        # No existe, podemos continuar
-    }
+    } catch {}
 
-    $password = Read-Host "  Password (ej: Password123!, minimo 8 caracteres con mayuscula, numero y simbolo)"
-    if ([string]::IsNullOrWhiteSpace($password)) {
-        Write-Host "  [ERROR] El password no puede estar vacio." -ForegroundColor Red
-        return
-    }
+    $password = Read-Host "  Password"
+    if ([string]::IsNullOrWhiteSpace($password)) { Write-Host "  [ERROR] Password vacio." -ForegroundColor Red; return }
 
-    # --- Seleccionar departamento ---
     Write-Host ""
     Write-Host "  Departamento:" -ForegroundColor White
-    Write-Host "    1. Cuates   (horario 08:00-15:00, cuota 10 MB)" -ForegroundColor Cyan
-    Write-Host "    2. NoCuates (horario 15:00-02:00, cuota  5 MB)" -ForegroundColor Cyan
+    Write-Host "    1. Cuates   (08:00-15:00, cuota 10 MB)" -ForegroundColor Cyan
+    Write-Host "    2. NoCuates (15:00-12:00, cuota  5 MB)" -ForegroundColor Cyan
     Write-Host ""
-    $deptoOpcion = Read-Host "  Selecciona el departamento (1 o 2)"
+    $deptoOpcion = Read-Host "  Selecciona (1 o 2)"
 
-    if ($deptoOpcion -eq "1") {
-        $departamento = "Cuates"
-    } elseif ($deptoOpcion -eq "2") {
-        $departamento = "NoCuates"
-    } else {
-        Write-Host "  [ERROR] Opcion invalida. Debes elegir 1 o 2." -ForegroundColor Red
-        return
-    }
+    if ($deptoOpcion -eq "1")      { $departamento = "Cuates" }
+    elseif ($deptoOpcion -eq "2")  { $departamento = "NoCuates" }
+    else { Write-Host "  [ERROR] Opcion invalida." -ForegroundColor Red; return }
 
-    # --- Confirmar datos ---
     Write-Host ""
     Write-Host "  +------------------------------------------+" -ForegroundColor Yellow
-    Write-Host "  | RESUMEN DEL USUARIO A CREAR              |" -ForegroundColor Yellow
-    Write-Host "  +------------------------------------------+" -ForegroundColor Yellow
-    Write-Host "  | Nombre      : $nombre $apellido" -ForegroundColor White
-    Write-Host "  | Usuario     : $usuario" -ForegroundColor White
-    Write-Host "  | UPN         : $usuario@practica8.local" -ForegroundColor White
-    Write-Host "  | Departamento: $departamento" -ForegroundColor White
+    Write-Host "  | RESUMEN                                  |" -ForegroundColor Yellow
+    Write-Host "  | Nombre  : $nombre $apellido"             -ForegroundColor White
+    Write-Host "  | Usuario : $usuario@practica8.local"      -ForegroundColor White
+    Write-Host "  | Grupo   : $departamento"                 -ForegroundColor White
     if ($departamento -eq "Cuates") {
-        Write-Host "  | Horario     : 08:00 AM - 03:00 PM" -ForegroundColor White
-        Write-Host "  | Cuota       : 10 MB" -ForegroundColor White
+        Write-Host "  | Horario : 08:00-15:00 | Cuota: 10 MB  |" -ForegroundColor White
     } else {
-        Write-Host "  | Horario     : 03:00 PM - 02:00 AM" -ForegroundColor White
-        Write-Host "  | Cuota       :  5 MB" -ForegroundColor White
+        Write-Host "  | Horario : 15:00-12:00 | Cuota:  5 MB  |" -ForegroundColor White
     }
-    Write-Host "  | Apantallam. : .mp3 .mp4 .exe .msi bloq. |" -ForegroundColor White
     Write-Host "  +------------------------------------------+" -ForegroundColor Yellow
     Write-Host ""
 
-    $confirmar = Read-Host "  Confirmas la creacion del usuario? (s/n)"
-    if ($confirmar -ne "s") {
-        Write-Host ""
-        Write-Host "  Operacion cancelada por el usuario." -ForegroundColor Yellow
-        Write-Host ""
-        return
-    }
+    $confirmar = Read-Host "  Confirmar? (s/n)"
+    if ($confirmar -ne "s") { return }
 
     Write-Host ""
 
-    # ==========================================================
-    # PASO 1: Crear usuario en AD
-    # ==========================================================
-    Write-Host "  [1/5] Creando usuario en Active Directory..." -ForegroundColor Yellow
-    try {
-        $passwordSegura = ConvertTo-SecureString $password -AsPlainText -Force
-        $ouDestino      = "OU=$departamento,$dcBase"
-
-        New-ADUser `
-            -Name "$nombre $apellido" `
-            -GivenName $nombre `
-            -Surname $apellido `
-            -SamAccountName $usuario `
-            -UserPrincipalName "$usuario@practica8.local" `
-            -Path $ouDestino `
-            -AccountPassword $passwordSegura `
-            -Enabled $true `
-            -PasswordNeverExpires $true `
-            -ChangePasswordAtLogon $false
-
-        Write-Host "  [OK] Usuario '$usuario' creado en OU $departamento." -ForegroundColor Green
-    } catch {
-        Write-Host "  [ERROR] No se pudo crear el usuario: $($_.Exception.Message)" -ForegroundColor Red
-        return
-    }
-
-    # ==========================================================
-    # PASO 2: Agregar al grupo correspondiente
-    # ==========================================================
-    Write-Host ""
-    Write-Host "  [2/5] Agregando al grupo $departamento..." -ForegroundColor Yellow
-    try {
-        Add-ADGroupMember -Identity $departamento -Members $usuario -ErrorAction Stop
-        Write-Host "  [OK] Usuario agregado al grupo '$departamento'." -ForegroundColor Green
-    } catch {
-        Write-Host "  [AVISO] No se pudo agregar al grupo: $($_.Exception.Message)" -ForegroundColor Yellow
-    }
-
-    # ==========================================================
-    # PASO 3: Aplicar horario de acceso
-    # ==========================================================
-    Write-Host ""
-    Write-Host "  [3/5] Aplicando horario de acceso (UTC-8)..." -ForegroundColor Yellow
-
+    # Funcion interna Build-LogonHours (necesaria dentro de esta funcion)
     function Build-LogonHours {
         param([int[]]$HorasUTC)
         $bits = New-Object bool[] 168
         for ($dia = 0; $dia -lt 7; $dia++) {
-            foreach ($hora in $HorasUTC) {
-                $bits[$dia * 24 + $hora] = $true
-            }
+            foreach ($hora in $HorasUTC) { $bits[$dia * 24 + $hora] = $true }
         }
         $bytes = New-Object byte[] 21
         for ($i = 0; $i -lt 168; $i++) {
@@ -1157,39 +1165,77 @@ function Crear-UsuarioDinamico {
         return $bytes
     }
 
+    # PASO 1: Crear usuario en AD
+    Write-Host "  [1/5] Creando usuario en AD..." -ForegroundColor Yellow
+    try {
+        $passwordSegura = ConvertTo-SecureString $password -AsPlainText -Force
+        New-ADUser `
+            -Name "$nombre $apellido" `
+            -GivenName $nombre `
+            -Surname $apellido `
+            -SamAccountName $usuario `
+            -UserPrincipalName "$usuario@practica8.local" `
+            -Path "OU=$departamento,$dcBase" `
+            -AccountPassword $passwordSegura `
+            -Enabled $true `
+            -PasswordNeverExpires $true `
+            -ChangePasswordAtLogon $false
+        Write-Host "  [OK] Usuario '$usuario' creado en OU $departamento." -ForegroundColor Green
+    } catch {
+        Write-Host "  [ERROR] $($_.Exception.Message)" -ForegroundColor Red
+        return
+    }
+
+    # PASO 2: Agregar al grupo
+    Write-Host ""
+    Write-Host "  [2/5] Agregando al grupo $departamento..." -ForegroundColor Yellow
+    try {
+        Add-ADGroupMember -Identity $departamento -Members $usuario -ErrorAction Stop
+        Write-Host "  [OK] Agregado a '$departamento'." -ForegroundColor Green
+    } catch {
+        Write-Host "  [AVISO] $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+
+    # PASO 3: Horario de acceso
+    Write-Host ""
+    Write-Host "  [3/5] Aplicando horario..." -ForegroundColor Yellow
     try {
         if ($departamento -eq "Cuates") {
-            $horasUTC = @(16,17,18,19,20,21,22)
+            $horasUTC = @(15,16,17,18,19,20,21)
         } else {
-            $horasUTC = @(23,0,1,2,3,4,5,6,7,8,9)
+            $horasUTC = @(22,23,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18)
         }
-
         $bytesHorario = Build-LogonHours -HorasUTC $horasUTC
         Set-ADUser -Identity $usuario -Clear logonHours
         Set-ADUser -Identity $usuario -Replace @{logonHours = ([byte[]]$bytesHorario)}
-        Write-Host "  [OK] Horario aplicado correctamente." -ForegroundColor Green
+        Write-Host "  [OK] Horario aplicado." -ForegroundColor Green
     } catch {
-        Write-Host "  [AVISO] No se pudo aplicar el horario: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Host "  [AVISO] Horario: $($_.Exception.Message)" -ForegroundColor Yellow
     }
 
-    # ==========================================================
-    # PASO 4: Crear carpeta y aplicar cuota FSRM
-    # ==========================================================
+    # PASO 4: Perfil movil + cuota FSRM
     Write-Host ""
-    Write-Host "  [4/5] Creando carpeta y aplicando cuota FSRM..." -ForegroundColor Yellow
+    Write-Host "  [4/5] Perfil movil y cuota FSRM..." -ForegroundColor Yellow
 
-    $carpetaUsuario = "$carpetaRaiz\$usuario"
+    $rutaUNC      = "$($script:SHARE_UNC)\$usuario"
+    $carpetaLocal = "$($script:CARPETA_PERFILES)\$usuario"
 
-    # Crear carpeta si no existe
-    if (-not (Test-Path $carpetaUsuario)) {
+    # Asignar ProfilePath
+    try {
+        Set-ADUser -Identity $usuario -ProfilePath $rutaUNC -ErrorAction Stop
+        Write-Host "  [OK] ProfilePath -> $rutaUNC" -ForegroundColor Green
+    } catch {
+        Write-Host "  [AVISO] ProfilePath: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+
+    # Crear carpeta local
+    if (-not (Test-Path $carpetaLocal)) {
         try {
-            New-Item -Path $carpetaUsuario -ItemType Directory | Out-Null
-            Write-Host "  [OK] Carpeta creada: $carpetaUsuario" -ForegroundColor Green
+            New-Item -Path $carpetaLocal -ItemType Directory | Out-Null
+            Write-Host "  [OK] Carpeta creada: $carpetaLocal" -ForegroundColor Green
         } catch {
-            Write-Host "  [AVISO] No se pudo crear la carpeta: $($_.Exception.Message)" -ForegroundColor Yellow
+            Write-Host "  [AVISO] Carpeta: $($_.Exception.Message)" -ForegroundColor Yellow
         }
-    } else {
-        Write-Host "  [OK] La carpeta ya existe: $carpetaUsuario" -ForegroundColor Yellow
     }
 
     # Aplicar cuota
@@ -1201,71 +1247,111 @@ function Crear-UsuarioDinamico {
         } else {
             $plantillaNombre = "Practica8-NoCuates-5MB"
             $tamanoBytes     = 5MB
-            $tamanoTexto     = "5 MB"
+            $tamanoTexto     = " 5 MB"
         }
 
-        $cuotaExistente  = Get-FsrmQuota -Path $carpetaUsuario -ErrorAction SilentlyContinue
         $existePlantilla = Get-FsrmQuotaTemplate -Name $plantillaNombre -ErrorAction SilentlyContinue
+        $cuotaExistente  = Get-FsrmQuota -Path $carpetaLocal -ErrorAction SilentlyContinue
 
         if ($cuotaExistente) {
-            if ($existePlantilla) {
-                Set-FsrmQuota -Path $carpetaUsuario -Template $plantillaNombre | Out-Null
-            } else {
-                Set-FsrmQuota -Path $carpetaUsuario -Size $tamanoBytes -SoftLimit:$false | Out-Null
-            }
+            if ($existePlantilla) { Set-FsrmQuota -Path $carpetaLocal -Template $plantillaNombre | Out-Null }
+            else { Set-FsrmQuota -Path $carpetaLocal -Size $tamanoBytes -SoftLimit:$false | Out-Null }
         } else {
-            if ($existePlantilla) {
-                New-FsrmQuota -Path $carpetaUsuario -Template $plantillaNombre | Out-Null
-            } else {
-                New-FsrmQuota -Path $carpetaUsuario -Size $tamanoBytes -SoftLimit:$false | Out-Null
-            }
+            if ($existePlantilla) { New-FsrmQuota -Path $carpetaLocal -Template $plantillaNombre | Out-Null }
+            else { New-FsrmQuota -Path $carpetaLocal -Size $tamanoBytes -SoftLimit:$false | Out-Null }
         }
-        Write-Host "  [OK] Cuota aplicada: $tamanoTexto" -ForegroundColor Green
+        Write-Host "  [OK] Cuota $tamanoTexto aplicada." -ForegroundColor Green
     } catch {
-        Write-Host "  [AVISO] No se pudo aplicar la cuota: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Host "  [AVISO] Cuota: $($_.Exception.Message)" -ForegroundColor Yellow
     }
 
-    # ==========================================================
-    # PASO 5: Aplicar apantallamiento de archivos
-    # ==========================================================
+    # PASO 5: Apantallamiento
     Write-Host ""
-    Write-Host "  [5/5] Aplicando apantallamiento de archivos..." -ForegroundColor Yellow
-
+    Write-Host "  [5/5] Apantallamiento de archivos..." -ForegroundColor Yellow
     $plantillaScreen = "Practica8-Apantallamiento"
-
     try {
         $plantillaExiste = Get-FsrmFileScreenTemplate -Name $plantillaScreen -ErrorAction SilentlyContinue
         if (-not $plantillaExiste) {
-            Write-Host "  [AVISO] La plantilla de apantallamiento no existe." -ForegroundColor Yellow
-            Write-Host "          Ejecuta primero la opcion 6 para crearla." -ForegroundColor Yellow
+            Write-Host "  [AVISO] Plantilla apantallamiento no existe. Ejecuta opcion 6." -ForegroundColor Yellow
         } else {
-            $screenExistente = Get-FsrmFileScreen -Path $carpetaUsuario -ErrorAction SilentlyContinue
+            $screenExistente = Get-FsrmFileScreen -Path $carpetaLocal -ErrorAction SilentlyContinue
             if ($screenExistente) {
-                Set-FsrmFileScreen -Path $carpetaUsuario -Template $plantillaScreen | Out-Null
+                Set-FsrmFileScreen -Path $carpetaLocal -Template $plantillaScreen | Out-Null
             } else {
-                New-FsrmFileScreen -Path $carpetaUsuario -Template $plantillaScreen | Out-Null
+                New-FsrmFileScreen -Path $carpetaLocal -Template $plantillaScreen | Out-Null
             }
-            Write-Host "  [OK] Apantallamiento aplicado (.mp3 .mp4 .exe .msi bloqueados)." -ForegroundColor Green
+            Write-Host "  [OK] .mp3 .mp4 .exe .msi bloqueados." -ForegroundColor Green
         }
     } catch {
-        Write-Host "  [AVISO] No se pudo aplicar el apantallamiento: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Host "  [AVISO] Apantallamiento: $($_.Exception.Message)" -ForegroundColor Yellow
     }
 
-    # --- Resumen final ---
     Write-Host ""
     Write-Host "  +==========================================+" -ForegroundColor Cyan
-    Write-Host "  | USUARIO CREADO EXITOSAMENTE              |" -ForegroundColor Cyan
-    Write-Host "  +------------------------------------------+" -ForegroundColor Cyan
-    Write-Host "  | Usuario     : $usuario@practica8.local" -ForegroundColor Green
-    Write-Host "  | Departamento: $departamento" -ForegroundColor Green
-    Write-Host "  | Carpeta     : $carpetaUsuario" -ForegroundColor Green
-    Write-Host "  +------------------------------------------+" -ForegroundColor Cyan
-    Write-Host "  | Configuraciones aplicadas:               |" -ForegroundColor White
-    Write-Host "  |   [OK] Usuario en AD                     |" -ForegroundColor Green
-    Write-Host "  |   [OK] Grupo de seguridad                |" -ForegroundColor Green
-    Write-Host "  |   [OK] Horario de acceso                 |" -ForegroundColor Green
-    Write-Host "  |   [OK] Cuota FSRM                        |" -ForegroundColor Green
-    Write-Host "  |   [OK] Apantallamiento de archivos       |" -ForegroundColor Green
+    Write-Host "  | USUARIO CREADO: $usuario@practica8.local" -ForegroundColor Green
+    Write-Host "  | Grupo   : $departamento"                  -ForegroundColor Green
+    Write-Host "  | Perfil  : $rutaUNC"                       -ForegroundColor Green
+    Write-Host "  | [OK] AD | [OK] Grupo | [OK] Horario      |" -ForegroundColor Green
+    Write-Host "  | [OK] Perfil Movil | [OK] Cuota FSRM      |" -ForegroundColor Green
+    Write-Host "  | [OK] Apantallamiento                     |" -ForegroundColor Green
     Write-Host "  +==========================================+" -ForegroundColor Cyan
+    Write-Host ""
+}
+
+
+# ------------------------------------------------------------
+# FUNCION 9: Ver perfiles almacenados en el servidor
+# ------------------------------------------------------------
+function Ver-PerfilesAlmacenados {
+
+    Write-Host ""
+    Write-Host "  +==========================================+" -ForegroundColor Cyan
+    Write-Host "  |   PERFILES ALMACENADOS EN EL SERVIDOR    |" -ForegroundColor Cyan
+    Write-Host "  +==========================================+" -ForegroundColor Cyan
+    Write-Host ""
+
+    if (-not (Test-Path $script:CARPETA_PERFILES)) {
+        Write-Host "  [INFO] La carpeta $($script:CARPETA_PERFILES) no existe aun." -ForegroundColor Yellow
+        Write-Host "         Ejecuta la opcion 5 primero." -ForegroundColor DarkGray
+        return
+    }
+
+    $carpetas = Get-ChildItem $script:CARPETA_PERFILES -ErrorAction SilentlyContinue
+    if (-not $carpetas -or $carpetas.Count -eq 0) {
+        Write-Host "  [INFO] No hay perfiles todavia." -ForegroundColor Yellow
+        Write-Host "         Los perfiles aparecen cuando el usuario cierra" -ForegroundColor DarkGray
+        Write-Host "         sesion por primera vez en el cliente Windows." -ForegroundColor DarkGray
+        return
+    }
+
+    Write-Host "  Perfiles en: $($script:CARPETA_PERFILES)" -ForegroundColor White
+    Write-Host ""
+    Write-Host "  +--------------------------------------------------------------+" -ForegroundColor White
+    Write-Host "  | Nombre                    | Tamano     | Ultima modificacion |" -ForegroundColor White
+    Write-Host "  +--------------------------------------------------------------+" -ForegroundColor White
+
+    foreach ($c in $carpetas) {
+        $tamanoBytes = (Get-ChildItem $c.FullName -Recurse -ErrorAction SilentlyContinue |
+            Measure-Object -Property Length -Sum).Sum
+        $tamanoMB = if ($tamanoBytes) { [math]::Round($tamanoBytes / 1MB, 2) } else { 0 }
+        $fecha    = $c.LastWriteTime.ToString("dd/MM/yyyy HH:mm")
+        $linea    = "  | {0,-25} | {1,8} MB | {2,-19} |" -f $c.Name, $tamanoMB, $fecha
+        # Color segun si ya es perfil .V6 (login completado) o carpeta base
+        if ($c.Name -match "\.V6$") {
+            Write-Host $linea -ForegroundColor Green
+        } else {
+            Write-Host $linea -ForegroundColor Yellow
+        }
+    }
+    Write-Host "  +--------------------------------------------------------------+" -ForegroundColor White
+    Write-Host ""
+    Write-Host "  Verde  = perfil .V6 sincronizado (usuario ya inicio sesion)" -ForegroundColor Green
+    Write-Host "  Amarillo = carpeta base creada, usuario aun no ha hecho login" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  Total: $($carpetas.Count) carpeta(s)" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "  NOTA: Windows 10 guarda el perfil como '<usuario>.V6'" -ForegroundColor DarkGray
+    Write-Host "        Si solo ves '<usuario>' sin .V6, el usuario aun" -ForegroundColor DarkGray
+    Write-Host "        no ha cerrado sesion desde el cliente." -ForegroundColor DarkGray
     Write-Host ""
 }
