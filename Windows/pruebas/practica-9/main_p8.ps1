@@ -4,21 +4,16 @@
 #  Servidor : 192.168.1.202
 # ============================================================
 
-# Importar todas las funciones
 . "$PSScriptRoot\funciones_p8.ps1"
 
-# Verificar que el script se ejecuta como Administrador
 if (-not ([Security.Principal.WindowsPrincipal] `
     [Security.Principal.WindowsIdentity]::GetCurrent() `
     ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     Write-Host ""
     Write-Host "  ERROR: Debes ejecutar este script como Administrador." -ForegroundColor Red
-    Write-Host "  Ejecuta PowerShell como Administrador e intenta de nuevo." -ForegroundColor Red
-    Write-Host ""
     exit 1
 }
 
-# Bucle principal del menu
 do {
     Write-Host ""
     Write-Host "  +==========================================+" -ForegroundColor Cyan
@@ -30,10 +25,11 @@ do {
     Write-Host "  |  2. Promover servidor a Domain Controller|" -ForegroundColor White
     Write-Host "  |  3. Crear OUs y usuarios desde CSV       |" -ForegroundColor White
     Write-Host "  |  4. Configurar horarios de acceso        |" -ForegroundColor White
-    Write-Host "  |  5. Configurar cuotas FSRM               |" -ForegroundColor White
+    Write-Host "  |  5. Configurar perfiles moviles y FSRM   |" -ForegroundColor White
     Write-Host "  |  6. Configurar apantallamiento FSRM      |" -ForegroundColor White
     Write-Host "  |  7. Configurar AppLocker                 |" -ForegroundColor White
     Write-Host "  |  8. Crear usuario dinamicamente          |" -ForegroundColor White
+    Write-Host "  |  9. Verificar perfiles almacenados       |" -ForegroundColor White
     Write-Host "  |                                          |" -ForegroundColor Cyan
     Write-Host "  |  0. Salir                                |" -ForegroundColor Yellow
     Write-Host "  |                                          |" -ForegroundColor Cyan
@@ -47,12 +43,13 @@ do {
         "2" { Promover-DomainController }
         "3" { Crear-OUsYUsuarios }
         "4" { Configurar-Horarios }
-        "5" { Configurar-CuotasFSRM }
+        "5" { Configurar-PerfilesYFSRM }
         "6" { Configurar-Apantallamiento }
         "7" { Configurar-AppLocker }
         "8" { Crear-UsuarioDinamico }
+        "9" { Ver-PerfilesAlmacenados }
         "0" { Write-Host "`n  Saliendo...`n" -ForegroundColor Yellow }
-        default { Write-Host "`n  Opcion invalida, intenta de nuevo." -ForegroundColor Red; pause }
+        default { Write-Host "`n  Opcion invalida." -ForegroundColor Red; pause }
     }
 
 } while ($opcion -ne "0")
