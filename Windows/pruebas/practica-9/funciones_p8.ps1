@@ -2,23 +2,102 @@
 #  funciones_p8.ps1 - Libreria de funciones para la Practica 8
 #  Dominio  : practica8.local
 #  Servidor : 192.168.1.202
-#
-#  CAMBIOS vs version anterior:
-#  - Horario NoCuates: 3PM-12PM mediodia (UTC 22:00-19:00)
-#  - FSRM ahora aplica sobre C:\PerfilesMoviles\usuario
-#  - Perfiles moviles INTEGRADOS en opcion 5
-#  - Apantallamiento sigue siendo opcion 6 (sobre misma carpeta)
-#
-#  Hash de notepad.exe del cliente Windows 10 Pro:
-#  0x70152C176B629E51FD283BD2F30ACFBDB1A129EA14D94889C1D32A742C104BBF
-#  Tamano: 201216 bytes
 # ============================================================
 
-# Constantes globales usadas en varias funciones
-$script:CARPETA_PERFILES = "C:\PerfilesMoviles"
-$script:SHARE_NAME       = "Perfiles`$"
-$script:SERVIDOR         = "192.168.1.202"
-$script:SHARE_UNC        = "\\$($script:SERVIDOR)\Perfiles`$"
+# ------------------------------------------------------------
+# CONSTANTES GLOBALES
+# Definidas una sola vez aqui. perfiles_moviles_p8.ps1 las
+# hereda via dot-sourcing de este archivo.
+# ------------------------------------------------------------
+$script:CARPETA_PERFILES  = "C:\PerfilesMoviles"
+$script:SHARE_NAME        = "Perfiles`$"
+$script:SERVIDOR          = "192.168.1.202"
+$script:SHARE_UNC         = "\\$($script:SERVIDOR)\Perfiles`$"
+$script:CARPETA_USUARIOS  = "C:\Usuarios"
+$script:UNC_USUARIOS      = "\\$($script:SERVIDOR)\Usuarios"
+
+# ------------------------------------------------------------
+# UTILIDAD GLOBAL: Build-LogonHours
+# Construye el array de 21 bytes para el atributo logonHours
+# de AD. Definida UNA SOLA VEZ aqui para que la usen tanto
+# Configurar-Horarios como Crear-UsuarioDinamico.
+# ------------------------------------------------------------
+function Build-LogonHours {
+    param([int[]]$HorasUTC)
+    $bits = New-Object bool[] 168
+    for ($dia = 0; $dia -lt 7; $dia++) {
+        foreach ($hora in $HorasUTC) {
+            $bits[$dia * 24 + $hora] = $true
+        }
+    }
+    $bytes = New-Object byte[] 21
+    for ($i = 0; $i -lt 168; $i++) {
+        if ($bits[$i]) {
+            $bytes[[math]::Floor($i / 8)] = $bytes[[math]::Floor($i / 8)] -bor (1 -shl ($i % 8))
+        }
+    }
+    return $bytes
+}
+
+# ------------------------------------------------------------
+# UTILIDAD GLOBAL: Get-TamanoMB
+# Calcula el tamano recursivo de una carpeta en MB.
+# Devuelve 0 si la carpeta no existe o esta vacia.
+# ------------------------------------------------------------
+function Get-TamanoMB {
+    param([string]$Ruta)
+    if (-not (Test-Path $Ruta)) { return 0 }
+    $bytes = (Get-ChildItem $Ruta -Recurse -Force -ErrorAction SilentlyContinue |
+        Measure-Object -Property Length -Sum).Sum
+    if ($bytes) { return [math]::Round($bytes / 1MB, 2) } else { return 0 }
+}
+
+# ------------------------------------------------------------
+# UTILIDAD GLOBAL: Crear-PlantillasFSRM
+# Crea (si no existen) las plantillas de cuota y el grupo/
+# plantilla de apantallamiento. Llamada desde opcion 5 y
+# desde perfiles_moviles_p8.ps1. Sin duplicacion.
+# ------------------------------------------------------------
+function Crear-PlantillasFSRM {
+    $plantillas = @(
+        @{ Nombre = "Practica8-Cuates-10MB";  Tamano = 10MB },
+        @{ Nombre = "Practica8-NoCuates-5MB"; Tamano = 5MB  }
+    )
+    foreach ($p in $plantillas) {
+        try {
+            if (-not (Get-FsrmQuotaTemplate -Name $p.Nombre -ErrorAction SilentlyContinue)) {
+                New-FsrmQuotaTemplate -Name $p.Nombre -Size $p.Tamano -SoftLimit:$false | Out-Null
+                Write-Host "  [OK] Plantilla cuota '$($p.Nombre)' creada." -ForegroundColor Green
+            }
+        } catch {
+            Write-Host "  [WARN] Plantilla '$($p.Nombre)': $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+    }
+
+    $grupoNombre = "Practica8-ArchivosProhibidos"
+    try {
+        if (Get-FsrmFileGroup -Name $grupoNombre -ErrorAction SilentlyContinue) {
+            Set-FsrmFileGroup -Name $grupoNombre -IncludePattern @("*.mp3","*.mp4","*.exe","*.msi") | Out-Null
+        } else {
+            New-FsrmFileGroup -Name $grupoNombre -IncludePattern @("*.mp3","*.mp4","*.exe","*.msi") | Out-Null
+            Write-Host "  [OK] Grupo archivos prohibidos creado." -ForegroundColor Green
+        }
+    } catch {
+        Write-Host "  [WARN] Grupo FSRM: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+
+    $plantillaScreen = "Practica8-Apantallamiento"
+    try {
+        if (Get-FsrmFileScreenTemplate -Name $plantillaScreen -ErrorAction SilentlyContinue) {
+            Set-FsrmFileScreenTemplate -Name $plantillaScreen -Active:$true -IncludeGroup @($grupoNombre) | Out-Null
+        } else {
+            New-FsrmFileScreenTemplate -Name $plantillaScreen -Active:$true -IncludeGroup @($grupoNombre) | Out-Null
+            Write-Host "  [OK] Plantilla apantallamiento creada." -ForegroundColor Green
+        }
+    } catch {
+        Write-Host "  [WARN] Plantilla screen: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+}
 
 # ------------------------------------------------------------
 # FUNCION 1: Instalar Dependencias
@@ -220,7 +299,6 @@ function Crear-OUsYUsuarios {
     Write-Host ""
     $dcBase = $dominio.DistinguishedName
 
-    # Crear OUs
     foreach ($ou in @("Cuates", "NoCuates")) {
         $ouPath = "OU=$ou,$dcBase"
         try {
@@ -274,7 +352,6 @@ function Crear-OUsYUsuarios {
         }
     }
 
-    # Crear grupos de seguridad
     Write-Host ""
     Write-Host "  Creando grupos de seguridad..." -ForegroundColor Yellow
 
@@ -295,7 +372,6 @@ function Crear-OUsYUsuarios {
         }
     }
 
-    # Agregar usuarios a grupos
     Write-Host ""
     Write-Host "  Agregando usuarios a grupos..." -ForegroundColor Yellow
     foreach ($u in $usuarios) {
@@ -319,10 +395,8 @@ function Crear-OUsYUsuarios {
 # FUNCION 4: Configurar horarios de acceso (Logon Hours)
 #
 # UTC-7 (Los Mochis, Sinaloa)
-#
-# Cuates   : 08:00 AM - 03:00 PM local  (UTC: 15:00-22:00)
-# NoCuates : 03:00 PM - 12:00 PM local  (UTC: 22:00-19:00)
-#            CAMBIO: antes terminaba 2AM, ahora termina 12PM
+# Cuates   : 08:00-15:00 local = 15:00-22:00 UTC
+# NoCuates : 15:00-12:00 local = 22:00-19:00 UTC (21 horas)
 # ------------------------------------------------------------
 function Configurar-Horarios {
 
@@ -353,29 +427,8 @@ function Configurar-Horarios {
     $confirmar = Read-Host "  Deseas continuar? (s/n)"
     if ($confirmar -ne "s") { return }
 
-    # Funcion interna para construir el array de bytes de logon hours
-    function Build-LogonHours {
-        param([int[]]$HorasUTC)
-        $bits = New-Object bool[] 168
-        for ($dia = 0; $dia -lt 7; $dia++) {
-            foreach ($hora in $HorasUTC) {
-                $bits[$dia * 24 + $hora] = $true
-            }
-        }
-        $bytes = New-Object byte[] 21
-        for ($i = 0; $i -lt 168; $i++) {
-            if ($bits[$i]) {
-                $bytes[[math]::Floor($i / 8)] = $bytes[[math]::Floor($i / 8)] -bor (1 -shl ($i % 8))
-            }
-        }
-        return $bytes
-    }
-
-    # Cuates: 08:00-15:00 local = 15:00-22:00 UTC
-    $horasUTC_Cuates = @(15,16,17,18,19,20,21)
-
-    # NoCuates: 15:00-12:00 local = 22:00-19:00 UTC
-    # Horas UTC: 22,23,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18
+    # Usa la funcion global Build-LogonHours definida al inicio del archivo
+    $horasUTC_Cuates   = @(15,16,17,18,19,20,21)
     $horasUTC_NoCuates = @(22,23,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18)
 
     $bytesCuates   = Build-LogonHours -HorasUTC $horasUTC_Cuates
@@ -411,7 +464,6 @@ function Configurar-Horarios {
         }
     }
 
-    # GPO de cierre forzado
     Write-Host ""
     Write-Host "  Configurando GPO de cierre de sesion forzado..." -ForegroundColor Yellow
 
@@ -457,20 +509,6 @@ function Configurar-Horarios {
 
 # ------------------------------------------------------------
 # FUNCION 5: Configurar perfiles moviles + FSRM integrado
-#
-# Esta funcion hace TODO en orden:
-#   A) Crea y comparte C:\PerfilesMoviles como \\server\Perfiles$
-#   B) Configura permisos NTFS correctos para perfiles moviles
-#   C) Asigna ProfilePath en AD a cada usuario del CSV
-#   D) Aplica cuotas FSRM sobre C:\PerfilesMoviles\usuario
-#      (Cuates=10MB, NoCuates=5MB)
-#   E) Configura GPO de perfiles moviles
-#
-# POR QUE FSRM AQUI Y NO EN CARPETA SEPARADA:
-#   El perfil movil IS la carpeta del usuario. Todo lo que guarda
-#   en Escritorio, Documentos, etc. vive en esta carpeta cuando
-#   se sincroniza con el servidor. La cuota aqui SI aplica a
-#   todo lo que el usuario guarda.
 # ------------------------------------------------------------
 function Configurar-PerfilesYFSRM {
 
@@ -480,7 +518,6 @@ function Configurar-PerfilesYFSRM {
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host ""
 
-    # Verificar prereqs
     try {
         $dominio = Get-ADDomain -ErrorAction Stop
     } catch {
@@ -509,22 +546,14 @@ function Configurar-PerfilesYFSRM {
     Write-Host "    Cuates           : 10 MB por usuario"           -ForegroundColor Cyan
     Write-Host "    NoCuates         :  5 MB por usuario"           -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "  NOTA: Las cuotas aplican sobre la carpeta del" -ForegroundColor Yellow
-    Write-Host "  perfil en el servidor. Cualquier archivo que el" -ForegroundColor Yellow
-    Write-Host "  usuario guarde (Escritorio, Documentos, etc.)" -ForegroundColor Yellow
-    Write-Host "  cuenta contra su cuota al sincronizarse." -ForegroundColor Yellow
-    Write-Host ""
 
     $confirmar = Read-Host "  Deseas continuar? (s/n)"
     if ($confirmar -ne "s") { return }
 
     Write-Host ""
 
-    # ==============================================================
-    # PASO A: Crear carpeta raiz de perfiles moviles
-    # ==============================================================
+    # PASO A: Crear carpeta raiz
     Write-Host "  [A] Creando carpeta de perfiles moviles..." -ForegroundColor Yellow
-
     if (-not (Test-Path $script:CARPETA_PERFILES)) {
         New-Item -Path $script:CARPETA_PERFILES -ItemType Directory | Out-Null
         Write-Host "  [OK] Carpeta creada: $($script:CARPETA_PERFILES)" -ForegroundColor Green
@@ -532,61 +561,39 @@ function Configurar-PerfilesYFSRM {
         Write-Host "  [OK] Carpeta ya existe: $($script:CARPETA_PERFILES)" -ForegroundColor Yellow
     }
 
-    # ==============================================================
-    # PASO B: Permisos NTFS para perfiles moviles
-    # Los perfiles moviles de Windows requieren permisos especificos:
-    # - Admins y SYSTEM: Control Total
-    # - Creator Owner: Control Total SOLO en subcarpetas (InheritOnly)
-    #   Para que cada usuario tenga control total sobre SU carpeta
-    # - Domain Users: Solo CreateDirectories + ReadAndExecute en raiz
-    #   Para que Windows pueda crear la carpeta del perfil
-    # ==============================================================
+    # PASO B: Permisos NTFS
     Write-Host "  [B] Configurando permisos NTFS..." -ForegroundColor Yellow
-
     try {
         $acl = Get-Acl $script:CARPETA_PERFILES
         $acl.SetAccessRuleProtection($true, $false)
-
         $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
             "NT AUTHORITY\SYSTEM", "FullControl",
-            "ContainerInherit,ObjectInherit", "None", "Allow"
-        )))
+            "ContainerInherit,ObjectInherit", "None", "Allow")))
         $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
             "BUILTIN\Administrators", "FullControl",
-            "ContainerInherit,ObjectInherit", "None", "Allow"
-        )))
+            "ContainerInherit,ObjectInherit", "None", "Allow")))
         $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
             "PRACTICA8\Domain Admins", "FullControl",
-            "ContainerInherit,ObjectInherit", "None", "Allow"
-        )))
-        # Creator Owner hereda a subcarpetas SOLAMENTE (clave para perfiles moviles)
+            "ContainerInherit,ObjectInherit", "None", "Allow")))
         $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
             "CREATOR OWNER", "FullControl",
-            "ContainerInherit,ObjectInherit", "InheritOnly", "Allow"
-        )))
-        # Domain Users puede crear carpetas en la raiz (Windows crea la subcarpeta del perfil)
+            "ContainerInherit,ObjectInherit", "InheritOnly", "Allow")))
         $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule(
             "PRACTICA8\Domain Users", "ReadAndExecute, CreateDirectories",
-            "None", "None", "Allow"
-        )))
-
+            "None", "None", "Allow")))
         Set-Acl $script:CARPETA_PERFILES $acl
         Write-Host "  [OK] Permisos NTFS configurados." -ForegroundColor Green
     } catch {
         Write-Host "  [ERROR] Permisos NTFS: $($_.Exception.Message)" -ForegroundColor Red
     }
 
-    # ==============================================================
-    # PASO C: Compartir carpeta en la red
-    # ==============================================================
+    # PASO C: Compartir carpeta
     Write-Host "  [C] Configurando recurso compartido..." -ForegroundColor Yellow
-
     $shareExiste = Get-SmbShare -Name $script:SHARE_NAME -ErrorAction SilentlyContinue
     if ($shareExiste) {
         Remove-SmbShare -Name $script:SHARE_NAME -Force -ErrorAction SilentlyContinue
         Write-Host "  [INFO] Share anterior eliminado para recrear." -ForegroundColor DarkGray
     }
-
     try {
         New-SmbShare `
             -Name        $script:SHARE_NAME `
@@ -599,40 +606,18 @@ function Configurar-PerfilesYFSRM {
         return
     }
 
-    # ==============================================================
-    # PASO D: Asignar ProfilePath en AD y crear carpetas con cuotas
-    # ==============================================================
-    Write-Host "  [D] Asignando perfiles y cuotas FSRM..." -ForegroundColor Yellow
+    # PASO D: Plantillas FSRM (usa la funcion global, sin duplicacion)
+    Write-Host "  [D] Creando plantillas FSRM..." -ForegroundColor Yellow
+    Crear-PlantillasFSRM
+
     Write-Host ""
-
-    # Crear plantillas de cuota FSRM
-    $plantillas = @(
-        @{ Nombre = "Practica8-Cuates-10MB";  Tamano = 10MB },
-        @{ Nombre = "Practica8-NoCuates-5MB"; Tamano = 5MB  }
-    )
-
-    foreach ($p in $plantillas) {
-        try {
-            $existe = Get-FsrmQuotaTemplate -Name $p.Nombre -ErrorAction SilentlyContinue
-            if ($existe) {
-                Write-Host "  [OK] Plantilla '$($p.Nombre)' ya existe." -ForegroundColor Yellow
-            } else {
-                New-FsrmQuotaTemplate -Name $p.Nombre -Size $p.Tamano -SoftLimit:$false | Out-Null
-                Write-Host "  [CREADO] Plantilla '$($p.Nombre)' ($($p.Tamano / 1MB) MB)." -ForegroundColor Green
-            }
-        } catch {
-            Write-Host "  [ERROR] Plantilla '$($p.Nombre)': $($_.Exception.Message)" -ForegroundColor Red
-        }
-    }
-
+    Write-Host "  Asignando perfiles y cuotas por usuario..." -ForegroundColor Yellow
     Write-Host ""
 
     $ok      = 0
     $errores = 0
 
     foreach ($u in $usuarios) {
-
-        # Determinar cuota segun departamento
         if ($u.Departamento -eq "Cuates") {
             $plantillaNombre = "Practica8-Cuates-10MB"
             $tamanoBytes     = 10MB
@@ -646,12 +631,9 @@ function Configurar-PerfilesYFSRM {
             continue
         }
 
-        # Ruta UNC para AD (sin extension .V6, Windows la agrega solo)
-        $rutaUNC       = "$($script:SHARE_UNC)\$($u.Usuario)"
-        # Ruta local para FSRM (el servidor ve la ruta local)
-        $carpetaLocal  = "$($script:CARPETA_PERFILES)\$($u.Usuario)"
+        $rutaUNC      = "$($script:SHARE_UNC)\$($u.Usuario)"
+        $carpetaLocal = "$($script:CARPETA_PERFILES)\$($u.Usuario)"
 
-        # 1. Asignar ProfilePath en AD
         try {
             Set-ADUser -Identity $u.Usuario -ProfilePath $rutaUNC -ErrorAction Stop
             Write-Host "  [AD] $($u.Usuario) ProfilePath -> $rutaUNC" -ForegroundColor Green
@@ -661,9 +643,6 @@ function Configurar-PerfilesYFSRM {
             continue
         }
 
-        # 2. Crear carpeta local (necesaria para que FSRM pueda aplicar cuota)
-        # Windows creara la subcarpeta .V6 automaticamente en el primer login,
-        # pero necesitamos la carpeta base para FSRM.
         if (-not (Test-Path $carpetaLocal)) {
             try {
                 New-Item -Path $carpetaLocal -ItemType Directory | Out-Null
@@ -675,24 +654,17 @@ function Configurar-PerfilesYFSRM {
             }
         }
 
-        # 3. Aplicar cuota FSRM sobre la carpeta del perfil
         try {
             $cuotaExistente  = Get-FsrmQuota -Path $carpetaLocal -ErrorAction SilentlyContinue
             $existePlantilla = Get-FsrmQuotaTemplate -Name $plantillaNombre -ErrorAction SilentlyContinue
 
             if ($cuotaExistente) {
-                if ($existePlantilla) {
-                    Set-FsrmQuota -Path $carpetaLocal -Template $plantillaNombre | Out-Null
-                } else {
-                    Set-FsrmQuota -Path $carpetaLocal -Size $tamanoBytes -SoftLimit:$false | Out-Null
-                }
+                if ($existePlantilla) { Set-FsrmQuota -Path $carpetaLocal -Template $plantillaNombre | Out-Null }
+                else { Set-FsrmQuota -Path $carpetaLocal -Size $tamanoBytes -SoftLimit:$false | Out-Null }
                 Write-Host "  [CUOTA] $($u.Usuario) ($($u.Departamento)) -> $tamanoTexto (actualizada)" -ForegroundColor Yellow
             } else {
-                if ($existePlantilla) {
-                    New-FsrmQuota -Path $carpetaLocal -Template $plantillaNombre | Out-Null
-                } else {
-                    New-FsrmQuota -Path $carpetaLocal -Size $tamanoBytes -SoftLimit:$false | Out-Null
-                }
+                if ($existePlantilla) { New-FsrmQuota -Path $carpetaLocal -Template $plantillaNombre | Out-Null }
+                else { New-FsrmQuota -Path $carpetaLocal -Size $tamanoBytes -SoftLimit:$false | Out-Null }
                 Write-Host "  [CUOTA] $($u.Usuario) ($($u.Departamento)) -> $tamanoTexto" -ForegroundColor Green
             }
             $ok++
@@ -702,12 +674,9 @@ function Configurar-PerfilesYFSRM {
         }
     }
 
-    # ==============================================================
     # PASO E: GPO de perfiles moviles
-    # ==============================================================
     Write-Host ""
     Write-Host "  [E] Configurando GPO de perfiles moviles..." -ForegroundColor Yellow
-
     try {
         $gpoNombre = "Practica8-PerfilesMoviles"
         $dcBase    = $dominio.DistinguishedName
@@ -720,23 +689,15 @@ function Configurar-PerfilesYFSRM {
             Write-Host "  [OK] GPO ya existe, actualizando." -ForegroundColor Yellow
         }
 
-        # No verificar espacio suficiente en disco
         Set-GPRegistryValue -Name $gpoNombre `
             -Key "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" `
-            -ValueName "CompatibleRUPSecurity" `
-            -Type DWord -Value 1 | Out-Null
-
-        # Siempre cargar el perfil movil aunque la red sea lenta
+            -ValueName "CompatibleRUPSecurity" -Type DWord -Value 1 | Out-Null
         Set-GPRegistryValue -Name $gpoNombre `
             -Key "HKLM\SOFTWARE\Policies\Microsoft\Windows\System" `
-            -ValueName "SlowLinkDefaultProfile" `
-            -Type DWord -Value 1 | Out-Null
-
-        # Timeout de red lenta = 0 (siempre cargar)
+            -ValueName "SlowLinkDefaultProfile" -Type DWord -Value 1 | Out-Null
         Set-GPRegistryValue -Name $gpoNombre `
             -Key "HKLM\SOFTWARE\Policies\Microsoft\Windows\System" `
-            -ValueName "SlowLinkTimeOut" `
-            -Type DWord -Value 0 | Out-Null
+            -ValueName "SlowLinkTimeOut" -Type DWord -Value 0 | Out-Null
 
         try {
             New-GPLink -Name $gpoNombre -Target $dcBase -ErrorAction Stop | Out-Null
@@ -744,10 +705,8 @@ function Configurar-PerfilesYFSRM {
         } catch {
             Write-Host "  [OK] GPO ya vinculada." -ForegroundColor Yellow
         }
-
         gpupdate /force 2>&1 | Out-Null
         Write-Host "  [OK] GPO aplicada." -ForegroundColor Green
-
     } catch {
         Write-Host "  [WARN] GPO perfiles: $($_.Exception.Message)" -ForegroundColor Yellow
     }
@@ -755,18 +714,7 @@ function Configurar-PerfilesYFSRM {
     Write-Host ""
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host "  | PERFILES MOVILES + FSRM CONFIGURADOS     |" -ForegroundColor Cyan
-    Write-Host "  +------------------------------------------+" -ForegroundColor Cyan
-    Write-Host "  | Ruta servidor: $($script:CARPETA_PERFILES)" -ForegroundColor White
-    Write-Host "  | Ruta de red  : $($script:SHARE_UNC)"        -ForegroundColor White
-    Write-Host "  | Cuotas OK    : $ok"                          -ForegroundColor Green
-    Write-Host "  | Errores      : $errores"                     -ForegroundColor Red
-    Write-Host "  +------------------------------------------+" -ForegroundColor Cyan
-    Write-Host "  | SIGUIENTE PASO en el cliente Windows:    |" -ForegroundColor Yellow
-    Write-Host "  |  1. Unir al dominio (unir_windows.ps1)   |" -ForegroundColor Yellow
-    Write-Host "  |  2. gpupdate /force                      |" -ForegroundColor Yellow
-    Write-Host "  |  3. Cerrar sesion y volver a entrar      |" -ForegroundColor Yellow
-    Write-Host "  |  4. Al cerrar sesion el perfil se guarda |" -ForegroundColor Yellow
-    Write-Host "  |     en $($script:CARPETA_PERFILES)\usuario.V6" -ForegroundColor Yellow
+    Write-Host "  | Cuotas OK: $ok | Errores: $errores"        -ForegroundColor Cyan
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host ""
 }
@@ -774,12 +722,8 @@ function Configurar-PerfilesYFSRM {
 
 # ------------------------------------------------------------
 # FUNCION 6: Configurar apantallamiento de archivos (FSRM)
-#
-# APLICA sobre C:\PerfilesMoviles\usuario
-# (misma carpeta que las cuotas, es el perfil del usuario)
-#
-# Bloquea: .mp3 .mp4 .exe .msi
-# Tipo   : Active Screening (bloqueo en tiempo real)
+# Aplica sobre C:\PerfilesMoviles\usuario
+# Bloquea: .mp3 .mp4 .exe .msi  (Active Screening)
 # ------------------------------------------------------------
 function Configurar-Apantallamiento {
 
@@ -801,8 +745,7 @@ function Configurar-Apantallamiento {
         return
     }
 
-    $usuarios    = Import-Csv -Path $csvPath
-    $grupoNombre = "Practica8-ArchivosProhibidos"
+    $usuarios = Import-Csv -Path $csvPath
 
     Write-Host "  Archivos bloqueados en carpetas de perfil:" -ForegroundColor White
     Write-Host "    Multimedia  : *.mp3, *.mp4" -ForegroundColor Cyan
@@ -810,13 +753,9 @@ function Configurar-Apantallamiento {
     Write-Host ""
     Write-Host "  Carpeta objetivo: $($script:CARPETA_PERFILES)\<usuario>" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "  Tipo: ACTIVO - bloqueo en tiempo real." -ForegroundColor Yellow
-    Write-Host ""
 
-    # Verificar que la carpeta de perfiles existe
     if (-not (Test-Path $script:CARPETA_PERFILES)) {
-        Write-Host "  [ERROR] No existe $($script:CARPETA_PERFILES)." -ForegroundColor Red
-        Write-Host "  Ejecuta primero la opcion 5." -ForegroundColor Yellow
+        Write-Host "  [ERROR] No existe $($script:CARPETA_PERFILES). Ejecuta opcion 5." -ForegroundColor Red
         return
     }
 
@@ -825,55 +764,16 @@ function Configurar-Apantallamiento {
 
     Write-Host ""
 
-    # Crear grupo de archivos prohibidos
-    Write-Host "  Creando grupo de archivos prohibidos..." -ForegroundColor Yellow
-    try {
-        $grupoExistente = Get-FsrmFileGroup -Name $grupoNombre -ErrorAction SilentlyContinue
-        if ($grupoExistente) {
-            Set-FsrmFileGroup -Name $grupoNombre -IncludePattern @("*.mp3","*.mp4","*.exe","*.msi") | Out-Null
-            Write-Host "  [OK] Grupo '$grupoNombre' actualizado." -ForegroundColor Yellow
-        } else {
-            New-FsrmFileGroup -Name $grupoNombre -IncludePattern @("*.mp3","*.mp4","*.exe","*.msi") | Out-Null
-            Write-Host "  [CREADO] Grupo '$grupoNombre'." -ForegroundColor Green
-        }
-    } catch {
-        Write-Host "  [ERROR] Grupo: $($_.Exception.Message)" -ForegroundColor Red
-        return
-    }
+    # Crear/actualizar grupo y plantilla (usa funcion global)
+    Crear-PlantillasFSRM
 
-    # Crear plantilla de apantallamiento
-    Write-Host "  Creando plantilla de apantallamiento..." -ForegroundColor Yellow
     $plantillaNombre = "Practica8-Apantallamiento"
-    try {
-        $plantillaExistente = Get-FsrmFileScreenTemplate -Name $plantillaNombre -ErrorAction SilentlyContinue
-        if ($plantillaExistente) {
-            Set-FsrmFileScreenTemplate -Name $plantillaNombre -Active:$true -IncludeGroup @($grupoNombre) | Out-Null
-            Write-Host "  [OK] Plantilla '$plantillaNombre' actualizada." -ForegroundColor Yellow
-        } else {
-            New-FsrmFileScreenTemplate -Name $plantillaNombre -Active:$true -IncludeGroup @($grupoNombre) | Out-Null
-            Write-Host "  [CREADO] Plantilla '$plantillaNombre'." -ForegroundColor Green
-        }
-    } catch {
-        Write-Host "  [ERROR] Plantilla: $($_.Exception.Message)" -ForegroundColor Red
-        return
-    }
-
-    # Aplicar apantallamiento a carpetas de perfiles
-    Write-Host ""
-    Write-Host "  Aplicando apantallamiento a perfiles de usuarios..." -ForegroundColor Yellow
-    Write-Host ""
-
     $creados  = 0
     $omitidos = 0
     $errores  = 0
 
     foreach ($u in $usuarios) {
-        # La carpeta del perfil puede existir como:
-        # C:\PerfilesMoviles\usuario     (antes del primer login)
-        # C:\PerfilesMoviles\usuario.V6  (despues del primer login en Windows 10)
-        # Aplicamos en ambas si existen
         $carpetasAplicar = @()
-
         $carpetaBase = "$($script:CARPETA_PERFILES)\$($u.Usuario)"
         $carpetaV6   = "$($script:CARPETA_PERFILES)\$($u.Usuario).V6"
 
@@ -881,13 +781,9 @@ function Configurar-Apantallamiento {
         if (Test-Path $carpetaV6)   { $carpetasAplicar += $carpetaV6   }
 
         if ($carpetasAplicar.Count -eq 0) {
-            Write-Host "  [AVISO] $($u.Usuario): carpeta no existe todavia." -ForegroundColor Yellow
-            Write-Host "          Se aplicara automaticamente cuando haga login." -ForegroundColor DarkGray
-            # Crear la carpeta base para poder aplicar el screen ahora
             try {
                 New-Item -Path $carpetaBase -ItemType Directory -Force | Out-Null
                 $carpetasAplicar += $carpetaBase
-                Write-Host "          Carpeta creada: $carpetaBase" -ForegroundColor DarkGray
             } catch {}
         }
 
@@ -900,7 +796,7 @@ function Configurar-Apantallamiento {
                     $omitidos++
                 } else {
                     New-FsrmFileScreen -Path $carpeta -Template $plantillaNombre | Out-Null
-                    Write-Host "  [OK] $($u.Usuario) ($carpeta) -> bloqueados .mp3 .mp4 .exe .msi" -ForegroundColor Green
+                    Write-Host "  [OK] $($u.Usuario) ($carpeta) -> .mp3 .mp4 .exe .msi bloqueados" -ForegroundColor Green
                     $creados++
                 }
             } catch {
@@ -916,11 +812,6 @@ function Configurar-Apantallamiento {
     Write-Host "  | Creados     : $creados"                    -ForegroundColor Green
     Write-Host "  | Actualizados: $omitidos"                   -ForegroundColor Yellow
     Write-Host "  | Errores     : $errores"                    -ForegroundColor Red
-    Write-Host "  +------------------------------------------+" -ForegroundColor Cyan
-    Write-Host "  | NOTA: Cuando el usuario haga primer login |" -ForegroundColor White
-    Write-Host "  | Windows crea la carpeta .V6 automatico.  |" -ForegroundColor White
-    Write-Host "  | Vuelve a ejecutar esta opcion despues     |" -ForegroundColor White
-    Write-Host "  | del primer login para cubrir .V6 tambien.|" -ForegroundColor White
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host ""
 }
@@ -928,7 +819,6 @@ function Configurar-Apantallamiento {
 
 # ------------------------------------------------------------
 # FUNCION 7: Configurar AppLocker
-# (sin cambios respecto a version original)
 # ------------------------------------------------------------
 function Configurar-AppLocker {
 
@@ -958,7 +848,6 @@ function Configurar-AppLocker {
 
     Write-Host ""
 
-    # Obtener SID de NoCuates
     Write-Host "  Obteniendo SID del grupo NoCuates..." -ForegroundColor Yellow
     try {
         $sidNoCuates = (Get-ADGroup -Identity "NoCuates").SID.Value
@@ -1060,12 +949,6 @@ function Configurar-AppLocker {
     Write-Host "  | AppLocker configurado.                   |" -ForegroundColor Cyan
     Write-Host "  | Cuates   : notepad.exe PERMITIDO         |" -ForegroundColor Green
     Write-Host "  | NoCuates : notepad.exe BLOQUEADO (hash)  |" -ForegroundColor Red
-    Write-Host "  +------------------------------------------+" -ForegroundColor Cyan
-    Write-Host "  | En el cliente Windows:                   |" -ForegroundColor Yellow
-    Write-Host "  | sc.exe config AppIDSvc start= auto       |" -ForegroundColor Yellow
-    Write-Host "  | sc.exe start AppIDSvc                    |" -ForegroundColor Yellow
-    Write-Host "  | gpupdate /force                          |" -ForegroundColor Yellow
-    Write-Host "  | Cerrar sesion y volver a entrar          |" -ForegroundColor Yellow
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host ""
 }
@@ -1073,13 +956,6 @@ function Configurar-AppLocker {
 
 # ------------------------------------------------------------
 # FUNCION 8: Crear usuario dinamicamente
-#
-# Crea un usuario nuevo con todos los ajustes aplicados:
-#   - OU correcta (Cuates/NoCuates)
-#   - Horario de acceso
-#   - ProfilePath apuntando a C:\PerfilesMoviles\usuario
-#   - Cuota FSRM en la carpeta del perfil
-#   - Apantallamiento de archivos
 # ------------------------------------------------------------
 function Crear-UsuarioDinamico {
 
@@ -1097,9 +973,6 @@ function Crear-UsuarioDinamico {
     }
 
     $dcBase = $dominio.DistinguishedName
-
-    Write-Host "  Ingresa los datos del nuevo usuario:" -ForegroundColor White
-    Write-Host ""
 
     $nombre = Read-Host "  Nombre"
     if ([string]::IsNullOrWhiteSpace($nombre)) { Write-Host "  [ERROR] Nombre vacio." -ForegroundColor Red; return }
@@ -1126,46 +999,16 @@ function Crear-UsuarioDinamico {
     Write-Host ""
     $deptoOpcion = Read-Host "  Selecciona (1 o 2)"
 
-    if ($deptoOpcion -eq "1")      { $departamento = "Cuates" }
-    elseif ($deptoOpcion -eq "2")  { $departamento = "NoCuates" }
+    if ($deptoOpcion -eq "1")     { $departamento = "Cuates" }
+    elseif ($deptoOpcion -eq "2") { $departamento = "NoCuates" }
     else { Write-Host "  [ERROR] Opcion invalida." -ForegroundColor Red; return }
 
-    Write-Host ""
-    Write-Host "  +------------------------------------------+" -ForegroundColor Yellow
-    Write-Host "  | RESUMEN                                  |" -ForegroundColor Yellow
-    Write-Host "  | Nombre  : $nombre $apellido"             -ForegroundColor White
-    Write-Host "  | Usuario : $usuario@practica8.local"      -ForegroundColor White
-    Write-Host "  | Grupo   : $departamento"                 -ForegroundColor White
-    if ($departamento -eq "Cuates") {
-        Write-Host "  | Horario : 08:00-15:00 | Cuota: 10 MB  |" -ForegroundColor White
-    } else {
-        Write-Host "  | Horario : 15:00-12:00 | Cuota:  5 MB  |" -ForegroundColor White
-    }
-    Write-Host "  +------------------------------------------+" -ForegroundColor Yellow
-    Write-Host ""
-
-    $confirmar = Read-Host "  Confirmar? (s/n)"
+    $confirmar = Read-Host "  Confirmar creacion de $usuario en $departamento? (s/n)"
     if ($confirmar -ne "s") { return }
 
     Write-Host ""
 
-    # Funcion interna Build-LogonHours (necesaria dentro de esta funcion)
-    function Build-LogonHours {
-        param([int[]]$HorasUTC)
-        $bits = New-Object bool[] 168
-        for ($dia = 0; $dia -lt 7; $dia++) {
-            foreach ($hora in $HorasUTC) { $bits[$dia * 24 + $hora] = $true }
-        }
-        $bytes = New-Object byte[] 21
-        for ($i = 0; $i -lt 168; $i++) {
-            if ($bits[$i]) {
-                $bytes[[math]::Floor($i / 8)] = $bytes[[math]::Floor($i / 8)] -bor (1 -shl ($i % 8))
-            }
-        }
-        return $bytes
-    }
-
-    # PASO 1: Crear usuario en AD
+    # PASO 1: Crear usuario
     Write-Host "  [1/5] Creando usuario en AD..." -ForegroundColor Yellow
     try {
         $passwordSegura = ConvertTo-SecureString $password -AsPlainText -Force
@@ -1196,14 +1039,14 @@ function Crear-UsuarioDinamico {
         Write-Host "  [AVISO] $($_.Exception.Message)" -ForegroundColor Yellow
     }
 
-    # PASO 3: Horario de acceso
+    # PASO 3: Horario (usa Build-LogonHours global)
     Write-Host ""
     Write-Host "  [3/5] Aplicando horario..." -ForegroundColor Yellow
     try {
-        if ($departamento -eq "Cuates") {
-            $horasUTC = @(15,16,17,18,19,20,21)
+        $horasUTC = if ($departamento -eq "Cuates") {
+            @(15,16,17,18,19,20,21)
         } else {
-            $horasUTC = @(22,23,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18)
+            @(22,23,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18)
         }
         $bytesHorario = Build-LogonHours -HorasUTC $horasUTC
         Set-ADUser -Identity $usuario -Clear logonHours
@@ -1220,7 +1063,6 @@ function Crear-UsuarioDinamico {
     $rutaUNC      = "$($script:SHARE_UNC)\$usuario"
     $carpetaLocal = "$($script:CARPETA_PERFILES)\$usuario"
 
-    # Asignar ProfilePath
     try {
         Set-ADUser -Identity $usuario -ProfilePath $rutaUNC -ErrorAction Stop
         Write-Host "  [OK] ProfilePath -> $rutaUNC" -ForegroundColor Green
@@ -1228,7 +1070,6 @@ function Crear-UsuarioDinamico {
         Write-Host "  [AVISO] ProfilePath: $($_.Exception.Message)" -ForegroundColor Yellow
     }
 
-    # Crear carpeta local
     if (-not (Test-Path $carpetaLocal)) {
         try {
             New-Item -Path $carpetaLocal -ItemType Directory | Out-Null
@@ -1238,17 +1079,10 @@ function Crear-UsuarioDinamico {
         }
     }
 
-    # Aplicar cuota
     try {
-        if ($departamento -eq "Cuates") {
-            $plantillaNombre = "Practica8-Cuates-10MB"
-            $tamanoBytes     = 10MB
-            $tamanoTexto     = "10 MB"
-        } else {
-            $plantillaNombre = "Practica8-NoCuates-5MB"
-            $tamanoBytes     = 5MB
-            $tamanoTexto     = " 5 MB"
-        }
+        $plantillaNombre = if ($departamento -eq "Cuates") { "Practica8-Cuates-10MB" } else { "Practica8-NoCuates-5MB" }
+        $tamanoBytes     = if ($departamento -eq "Cuates") { 10MB } else { 5MB }
+        $tamanoTexto     = if ($departamento -eq "Cuates") { "10 MB" } else { " 5 MB" }
 
         $existePlantilla = Get-FsrmQuotaTemplate -Name $plantillaNombre -ErrorAction SilentlyContinue
         $cuotaExistente  = Get-FsrmQuota -Path $carpetaLocal -ErrorAction SilentlyContinue
@@ -1270,8 +1104,7 @@ function Crear-UsuarioDinamico {
     Write-Host "  [5/5] Apantallamiento de archivos..." -ForegroundColor Yellow
     $plantillaScreen = "Practica8-Apantallamiento"
     try {
-        $plantillaExiste = Get-FsrmFileScreenTemplate -Name $plantillaScreen -ErrorAction SilentlyContinue
-        if (-not $plantillaExiste) {
+        if (-not (Get-FsrmFileScreenTemplate -Name $plantillaScreen -ErrorAction SilentlyContinue)) {
             Write-Host "  [AVISO] Plantilla apantallamiento no existe. Ejecuta opcion 6." -ForegroundColor Yellow
         } else {
             $screenExistente = Get-FsrmFileScreen -Path $carpetaLocal -ErrorAction SilentlyContinue
@@ -1291,9 +1124,6 @@ function Crear-UsuarioDinamico {
     Write-Host "  | USUARIO CREADO: $usuario@practica8.local" -ForegroundColor Green
     Write-Host "  | Grupo   : $departamento"                  -ForegroundColor Green
     Write-Host "  | Perfil  : $rutaUNC"                       -ForegroundColor Green
-    Write-Host "  | [OK] AD | [OK] Grupo | [OK] Horario      |" -ForegroundColor Green
-    Write-Host "  | [OK] Perfil Movil | [OK] Cuota FSRM      |" -ForegroundColor Green
-    Write-Host "  | [OK] Apantallamiento                     |" -ForegroundColor Green
     Write-Host "  +==========================================+" -ForegroundColor Cyan
     Write-Host ""
 }
@@ -1301,57 +1131,147 @@ function Crear-UsuarioDinamico {
 
 # ------------------------------------------------------------
 # FUNCION 9: Ver perfiles almacenados en el servidor
+#
+# CORRECCION: mide AMBAS ubicaciones:
+#   - C:\PerfilesMoviles  (perfil roaming .V6)
+#   - C:\Usuarios         (redireccion Desktop/Documents)
+# Antes solo media C:\PerfilesMoviles y siempre mostraba 0 MB
+# durante sesion activa porque la sincronizacion ocurre al
+# cerrar sesion. Los archivos del Escritorio/Documentos van
+# a C:\Usuarios en tiempo real.
 # ------------------------------------------------------------
 function Ver-PerfilesAlmacenados {
 
     Write-Host ""
-    Write-Host "  +==========================================+" -ForegroundColor Cyan
-    Write-Host "  |   PERFILES ALMACENADOS EN EL SERVIDOR    |" -ForegroundColor Cyan
-    Write-Host "  +==========================================+" -ForegroundColor Cyan
+    Write-Host "  +============================================+" -ForegroundColor Cyan
+    Write-Host "  |   PERFILES ALMACENADOS EN EL SERVIDOR      |" -ForegroundColor Cyan
+    Write-Host "  +============================================+" -ForegroundColor Cyan
+    Write-Host ""
+
+    # -------------------------------------------------------
+    # SECCION 1: C:\PerfilesMoviles (perfil roaming .V6)
+    # -------------------------------------------------------
+    Write-Host "  SECCION 1: Perfiles Moviles (roaming)" -ForegroundColor Yellow
+    Write-Host "  Carpeta : $($script:CARPETA_PERFILES)" -ForegroundColor DarkGray
     Write-Host ""
 
     if (-not (Test-Path $script:CARPETA_PERFILES)) {
-        Write-Host "  [INFO] La carpeta $($script:CARPETA_PERFILES) no existe aun." -ForegroundColor Yellow
-        Write-Host "         Ejecuta la opcion 5 primero." -ForegroundColor DarkGray
-        return
-    }
-
-    $carpetas = Get-ChildItem $script:CARPETA_PERFILES -ErrorAction SilentlyContinue
-    if (-not $carpetas -or $carpetas.Count -eq 0) {
-        Write-Host "  [INFO] No hay perfiles todavia." -ForegroundColor Yellow
-        Write-Host "         Los perfiles aparecen cuando el usuario cierra" -ForegroundColor DarkGray
-        Write-Host "         sesion por primera vez en el cliente Windows." -ForegroundColor DarkGray
-        return
-    }
-
-    Write-Host "  Perfiles en: $($script:CARPETA_PERFILES)" -ForegroundColor White
-    Write-Host ""
-    Write-Host "  +--------------------------------------------------------------+" -ForegroundColor White
-    Write-Host "  | Nombre                    | Tamano     | Ultima modificacion |" -ForegroundColor White
-    Write-Host "  +--------------------------------------------------------------+" -ForegroundColor White
-
-    foreach ($c in $carpetas) {
-        $tamanoBytes = (Get-ChildItem $c.FullName -Recurse -ErrorAction SilentlyContinue |
-            Measure-Object -Property Length -Sum).Sum
-        $tamanoMB = if ($tamanoBytes) { [math]::Round($tamanoBytes / 1MB, 2) } else { 0 }
-        $fecha    = $c.LastWriteTime.ToString("dd/MM/yyyy HH:mm")
-        $linea    = "  | {0,-25} | {1,8} MB | {2,-19} |" -f $c.Name, $tamanoMB, $fecha
-        # Color segun si ya es perfil .V6 (login completado) o carpeta base
-        if ($c.Name -match "\.V6$") {
-            Write-Host $linea -ForegroundColor Green
+        Write-Host "  [INFO] $($script:CARPETA_PERFILES) no existe. Ejecuta opcion 5." -ForegroundColor Yellow
+    } else {
+        $carpetas = Get-ChildItem $script:CARPETA_PERFILES -ErrorAction SilentlyContinue
+        if (-not $carpetas -or $carpetas.Count -eq 0) {
+            Write-Host "  [INFO] Sin perfiles todavia." -ForegroundColor Yellow
+            Write-Host "         Los perfiles .V6 aparecen al cerrar sesion en el cliente." -ForegroundColor DarkGray
         } else {
-            Write-Host $linea -ForegroundColor Yellow
+            Write-Host "  +--------------------------------------------------------------+" -ForegroundColor White
+            Write-Host "  | Nombre                    | Tamano     | Modificado          |" -ForegroundColor White
+            Write-Host "  +--------------------------------------------------------------+" -ForegroundColor White
+            foreach ($c in $carpetas) {
+                $mb    = Get-TamanoMB -Ruta $c.FullName
+                $fecha = $c.LastWriteTime.ToString("dd/MM/yyyy HH:mm")
+                $color = if ($c.Name -match "\.V6$") { "Green" } else { "Yellow" }
+                Write-Host ("  | {0,-25} | {1,8} MB | {2,-19} |" -f $c.Name, $mb, $fecha) -ForegroundColor $color
+            }
+            Write-Host "  +--------------------------------------------------------------+" -ForegroundColor White
+            Write-Host "  Verde    = .V6 sincronizado (primer login completado)" -ForegroundColor Green
+            Write-Host "  Amarillo = carpeta base, usuario no ha hecho login aun" -ForegroundColor Yellow
         }
     }
-    Write-Host "  +--------------------------------------------------------------+" -ForegroundColor White
+
+    # -------------------------------------------------------
+    # SECCION 2: C:\Usuarios (redireccion Desktop/Documents)
+    # -------------------------------------------------------
     Write-Host ""
-    Write-Host "  Verde  = perfil .V6 sincronizado (usuario ya inicio sesion)" -ForegroundColor Green
-    Write-Host "  Amarillo = carpeta base creada, usuario aun no ha hecho login" -ForegroundColor Yellow
+    Write-Host "  ------------------------------------------------" -ForegroundColor DarkGray
     Write-Host ""
-    Write-Host "  Total: $($carpetas.Count) carpeta(s)" -ForegroundColor Cyan
+    Write-Host "  SECCION 2: Redireccion de Carpetas (Desktop/Documents)" -ForegroundColor Yellow
+    Write-Host "  Carpeta : $($script:CARPETA_USUARIOS)" -ForegroundColor DarkGray
     Write-Host ""
-    Write-Host "  NOTA: Windows 10 guarda el perfil como '<usuario>.V6'" -ForegroundColor DarkGray
-    Write-Host "        Si solo ves '<usuario>' sin .V6, el usuario aun" -ForegroundColor DarkGray
-    Write-Host "        no ha cerrado sesion desde el cliente." -ForegroundColor DarkGray
+
+    if (-not (Test-Path $script:CARPETA_USUARIOS)) {
+        Write-Host "  [INFO] $($script:CARPETA_USUARIOS) no existe. Ejecuta opcion 5 de Perfiles Moviles." -ForegroundColor Yellow
+    } else {
+        $subcarpetas = Get-ChildItem $script:CARPETA_USUARIOS -Directory -ErrorAction SilentlyContinue
+        if (-not $subcarpetas -or $subcarpetas.Count -eq 0) {
+            Write-Host "  [INFO] Sin carpetas de usuario todavia." -ForegroundColor Yellow
+        } else {
+            Write-Host "  +----------------------------------------------------------------------+" -ForegroundColor White
+            Write-Host "  | Usuario       | Desktop (MB) | Documents (MB) | Total (MB) | Cuota  |" -ForegroundColor White
+            Write-Host "  +----------------------------------------------------------------------+" -ForegroundColor White
+
+            foreach ($c in $subcarpetas) {
+                $mbDesktop   = Get-TamanoMB -Ruta "$($c.FullName)\Desktop"
+                $mbDocuments = Get-TamanoMB -Ruta "$($c.FullName)\Documents"
+                $mbTotal     = [math]::Round($mbDesktop + $mbDocuments, 2)
+
+                $cuotaInfo = "N/A"
+                $color     = "Green"
+                $cuota = Get-FsrmQuota -Path $c.FullName -ErrorAction SilentlyContinue
+                if ($cuota) {
+                    $limMB     = [math]::Round($cuota.Size / 1MB)
+                    $usaMB     = [math]::Round($cuota.Usage / 1MB, 2)
+                    $cuotaInfo = "$usaMB/$limMB MB"
+                    $pct       = if ($cuota.Size -gt 0) { ($cuota.Usage / $cuota.Size) * 100 } else { 0 }
+                    if ($pct -ge 80)    { $color = "Red" }
+                    elseif ($pct -ge 50){ $color = "Yellow" }
+                }
+
+                Write-Host ("  | {0,-13} | {1,12} | {2,14} | {3,10} | {4,-6} |" -f `
+                    $c.Name, $mbDesktop, $mbDocuments, $mbTotal, $cuotaInfo) -ForegroundColor $color
+            }
+            Write-Host "  +----------------------------------------------------------------------+" -ForegroundColor White
+            Write-Host "  Verde    = uso normal (menos del 50% de cuota)" -ForegroundColor Green
+            Write-Host "  Amarillo = uso moderado (50-79% de cuota)"      -ForegroundColor Yellow
+            Write-Host "  Rojo     = uso alto (80%+ de cuota)"            -ForegroundColor Red
+        }
+    }
+
+    # -------------------------------------------------------
+    # SECCION 3: Resumen total por usuario del CSV
+    # -------------------------------------------------------
+    Write-Host ""
+    Write-Host "  ------------------------------------------------" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "  SECCION 3: Resumen total por usuario" -ForegroundColor Yellow
+    Write-Host ""
+
+    $csvPath = "$PSScriptRoot\usuarios.csv"
+    if (Test-Path $csvPath) {
+        $usuarios = Import-Csv $csvPath -ErrorAction SilentlyContinue
+        if ($usuarios) {
+            Write-Host "  +-------------------------------------------------------------+" -ForegroundColor White
+            Write-Host "  | Usuario       | Perfil .V6 | Redireccion | TOTAL      | Grp |" -ForegroundColor White
+            Write-Host "  +-------------------------------------------------------------+" -ForegroundColor White
+
+            foreach ($u in $usuarios) {
+                $mbPerfil = 0
+                foreach ($sufijo in @(".V6", "")) {
+                    $ruta = "$($script:CARPETA_PERFILES)\$($u.Usuario)$sufijo"
+                    if (Test-Path $ruta) { $mbPerfil = Get-TamanoMB -Ruta $ruta; break }
+                }
+
+                $mbRedir = 0
+                $rutaU = "$($script:CARPETA_USUARIOS)\$($u.Usuario)"
+                if (Test-Path $rutaU) { $mbRedir = Get-TamanoMB -Ruta $rutaU }
+
+                $mbTotal = [math]::Round($mbPerfil + $mbRedir, 2)
+                $color   = if ($u.Departamento -eq "Cuates") { "Cyan" } else { "Magenta" }
+
+                Write-Host ("  | {0,-13} | {1,10} | {2,11} | {3,10} | {4,-3} |" -f `
+                    $u.Usuario, "$mbPerfil MB", "$mbRedir MB", "$mbTotal MB",
+                    $u.Departamento.Substring(0,3)) -ForegroundColor $color
+            }
+            Write-Host "  +-------------------------------------------------------------+" -ForegroundColor White
+            Write-Host "  Cyan    = Cuates   (cuota 10 MB)" -ForegroundColor Cyan
+            Write-Host "  Magenta = NoCuates (cuota  5 MB)" -ForegroundColor Magenta
+        }
+    }
+
+    Write-Host ""
+    Write-Host "  NOTA: Perfil .V6 = 0 MB durante sesion activa es NORMAL." -ForegroundColor DarkGray
+    Write-Host "  Los archivos del Escritorio/Documentos van a C:\Usuarios" -ForegroundColor DarkGray
+    Write-Host "  en tiempo real. El .V6 se sincroniza al cerrar sesion." -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "  >>> CAPTURA ESTA PANTALLA como evidencia <<<" -ForegroundColor Magenta
     Write-Host ""
 }
