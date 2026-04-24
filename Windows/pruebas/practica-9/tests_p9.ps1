@@ -45,7 +45,7 @@ function Pedir-Captura {
     param([string]$Descripcion)
     Write-Host ""
     Write-Host "  ============================================" -ForegroundColor Magenta
-    Write-Host "  >>> Pikachu <<<" -ForegroundColor Yellow
+    Write-Host "  Pikachu " -ForegroundColor Yellow
     Write-Host "  $Descripcion" -ForegroundColor Magenta
     Write-Host "  ============================================" -ForegroundColor Magenta
     Write-Host ""
@@ -185,7 +185,7 @@ function Test1A-IdentidadResetPassword {
         Write-Host ""
         Write-Host "  Usuario objetivo : $($usuarioObjetivo.SamAccountName)" -ForegroundColor White
         Write-Host ""
-        $pwdInput = Read-Host "  Ingresa la nueva contraseña (esta NO DEBERÍA FALLAR, ej. Delegado2026!!)"
+        $pwdInput = Read-Host "  Ingresa la nueva contrasena (esta NO DEBERIA FALLAR, ej. Delegado2026!!)"
         
         Write-Host ""
         Write-Host "  Intentando resetear password como '$usuarioActual'..." -ForegroundColor Yellow
@@ -294,7 +294,7 @@ function Test1B-StorageDeny {
         Write-Host "  Usuario objetivo : $($usuarioObjetivo.SamAccountName)" -ForegroundColor White
         Write-Host ""
         
-        $pwdInput = Read-Host "  Ingresa la nueva contraseña (esta DEBERÍA FALLAR por Acceso Denegado)"
+        $pwdInput = Read-Host "  Ingresa la nueva contrasena (esta DEBERIA FALLAR por Acceso Denegado)"
 
         Write-Host ""
         Write-Host "  Intentando resetear password como '$usuarioActual'..." -ForegroundColor Yellow
@@ -437,7 +437,7 @@ function Test2-FGPP {
     # Intento de poner password corta (debe fallar)
     Write-Host "  [2/3] Intentando asignar password a admin_identidad..." -ForegroundColor Yellow
     Write-Host ""
-    $pwdCortaInput = Read-Host "        Ingresa una contraseña corta (DEBERÍA FALLAR por longitud, ej. Corta1!!)"
+    $pwdCortaInput = Read-Host "        Ingresa una contrasena corta (DEBERIA FALLAR por longitud, ej. Corta1!!)"
     Write-Host ""
 
     try {
@@ -490,9 +490,9 @@ function Test2-FGPP {
 
     # Intento con password valida (12+ chars) para confirmar que SI funciona
     Write-Host ""
-    Write-Host "  [3/3] Verificando que una password válida SÍ es aceptada..." -ForegroundColor Yellow
+    Write-Host "  [3/3] Verificando que una password valida SI es aceptada..." -ForegroundColor Yellow
     Write-Host ""
-    $pwdLargaInput = Read-Host "        Ingresa una contraseña larga (NO DEBERÍA FALLAR, ej. Hardening2026!)"
+    $pwdLargaInput = Read-Host "        Ingresa una contrasena larga (NO DEBERIA FALLAR, ej. Hardening2026!)"
     Write-Host ""
 
     try {
