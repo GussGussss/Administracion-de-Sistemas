@@ -289,7 +289,22 @@ function Test1B-StorageDeny {
             Read-Host "  Presiona Enter..." ; return
         }
 
-        $usuarioObjetivo = $usuariosCuates | Select-Object -First 1
+        Write-Host ""
+Write-Host "  Usuarios disponibles en OU Cuates:" -ForegroundColor White
+$i = 1
+$usuariosCuates | ForEach-Object {
+    Write-Host "  $i. $($_.SamAccountName)" -ForegroundColor Cyan
+    $i++
+}
+Write-Host ""
+$seleccion = Read-Host "  Numero de usuario a usar (Enter = primero)"
+
+if ([string]::IsNullOrWhiteSpace($seleccion)) {
+    $usuarioObjetivo = $usuariosCuates | Select-Object -First 1
+} else {
+    $idx = [int]$seleccion - 1
+    $usuarioObjetivo = @($usuariosCuates)[$idx]
+}
         Write-Host ""
         Write-Host "  Usuario objetivo : $($usuarioObjetivo.SamAccountName)" -ForegroundColor White
         Write-Host ""
