@@ -389,8 +389,9 @@ function Ver-PerfilesAlmacenados {
     function Get-TamanoMB {
         param([string]$Ruta)
         if (-not (Test-Path $Ruta)) { return 0 }
-        $bytes = (Get-ChildItem $Ruta -Recurse -Force -ErrorAction SilentlyContinue |
-            Measure-Object -Property Length -Sum).Sum
+        $archivos = Get-ChildItem $Ruta -Recurse -Force -File -ErrorAction SilentlyContinue
+        if (-not $archivos) { return 0 }
+        $bytes = ($archivos | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
         if ($bytes) { return [math]::Round($bytes / 1MB, 2) } else { return 0 }
     }
 
