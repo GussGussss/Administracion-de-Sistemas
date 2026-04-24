@@ -23,6 +23,9 @@ do {
     Write-Host "  |  7. Activar MFA y generar clave celular    |" -ForegroundColor White
     Write-Host "  |  8. Ejecutar tests de evaluacion           |" -ForegroundColor Yellow
     Write-Host "  |                                            |" -ForegroundColor Cyan
+    Write-Host "  |  9. Ir al menu Practica 08                 |" -ForegroundColor Magenta
+    Write-Host "  |     (P08 + Perfiles Moviles)               |" -ForegroundColor DarkMagenta
+    Write-Host "  |                                            |" -ForegroundColor Cyan
     Write-Host "  |  0. Salir                                  |" -ForegroundColor Red
     Write-Host "  |                                            |" -ForegroundColor Cyan
     Write-Host "  +============================================+`n" -ForegroundColor Cyan
@@ -36,6 +39,23 @@ do {
         '6' { Instalar-MFA }
         '7' { Activar-MFA }
         '8' { Ejecutar-Tests }
+        '9' {
+            $scriptP8 = "$PSScriptRoot\main_p8.ps1"
+            if (Test-Path $scriptP8) {
+                # Detener AppIDSvc antes de ir a P8 para evitar conflictos
+                Write-Host "`n  [INFO] Deteniendo AppIDSvc para evitar conflictos..." -ForegroundColor Yellow
+                sc.exe stop AppIDSvc 2>$null | Out-Null
+                sc.exe config AppIDSvc start= demand 2>$null | Out-Null
+                Write-Host "  [OK] AppIDSvc detenido." -ForegroundColor Green
+                Write-Host "  [INFO] Abriendo menu Practica 08...`n" -ForegroundColor Cyan
+                & $scriptP8
+            } else {
+                Write-Host "`n  [ERROR] No se encontro main_p8.ps1 en:" -ForegroundColor Red
+                Write-Host "  $PSScriptRoot" -ForegroundColor Red
+                Write-Host "  Asegurate de que todos los scripts esten en la misma carpeta." -ForegroundColor Yellow
+                Start-Sleep -Seconds 3
+            }
+        }
         '0' { Write-Host "`n  Saliendo. Buen trabajo!" -ForegroundColor Green }
         default {
             Write-Host "`n  [ERROR] Opcion no valida." -ForegroundColor Red
