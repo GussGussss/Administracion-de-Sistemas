@@ -57,7 +57,6 @@ function Pedir-Captura {
 # ============================================================
 function Mostrar-Menu {
     do {
-        Clear-Host
         Write-Host ""
         Write-Host "  +============================================+" -ForegroundColor Cyan
         Write-Host "  |   PROTOCOLO DE PRUEBAS - PRACTICA 09       |" -ForegroundColor Cyan
