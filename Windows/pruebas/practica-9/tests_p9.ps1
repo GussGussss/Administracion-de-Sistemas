@@ -1,5 +1,5 @@
 # ============================================================
-#  tests_p9.ps1 -- Protocolo de Pruebas Practica 09
+#  tests_p9.ps1 -- Protocolo de Pruebas Practica 09 (Modificado)
 #  Hardening AD, RBAC, FGPP, Auditoria y MFA
 #
 #  IMPORTANTE: Cada test se ejecuta desde la sesion del
@@ -39,17 +39,17 @@ function Mostrar-UsuarioActual {
 }
 
 # ------------------------------------------------------------
-# UTILIDAD: Pausar y mostrar instruccion de captura
+# UTILIDAD: Pausar y mostrar instruccion discreta de evidencia
 # ------------------------------------------------------------
 function Pedir-Captura {
     param([string]$Descripcion)
     Write-Host ""
     Write-Host "  ============================================" -ForegroundColor Magenta
-    Write-Host "  >>> TOMA CAPTURA DE PANTALLA AHORA <<<" -ForegroundColor Magenta
-    Write-Host "  >>> $Descripcion" -ForegroundColor Magenta
+    Write-Host "  >>> Pikachu <<<" -ForegroundColor Yellow
+    Write-Host "  $Descripcion" -ForegroundColor Magenta
     Write-Host "  ============================================" -ForegroundColor Magenta
     Write-Host ""
-    Read-Host "  Presiona Enter cuando hayas tomado la captura..."
+    Read-Host "  Presiona Enter para continuar..."
 }
 
 # ============================================================
@@ -61,7 +61,7 @@ function Mostrar-Menu {
         Write-Host ""
         Write-Host "  +============================================+" -ForegroundColor Cyan
         Write-Host "  |   PROTOCOLO DE PRUEBAS - PRACTICA 09       |" -ForegroundColor Cyan
-        Write-Host "  |   Hardening AD, RBAC, FGPP y MFA          |" -ForegroundColor Cyan
+        Write-Host "  |   Hardening AD, RBAC, FGPP y MFA           |" -ForegroundColor Cyan
         Write-Host "  +============================================+" -ForegroundColor Cyan
         Mostrar-UsuarioActual
         Write-Host "  +--------------------------------------------+" -ForegroundColor White
@@ -76,7 +76,7 @@ function Mostrar-Menu {
         Write-Host "  |   (verificar rechazo de pwd corta)         |" -ForegroundColor DarkCyan
         Write-Host "  +--------------------------------------------+" -ForegroundColor White
         Write-Host "  | TEST 3: Flujo MFA Google Authenticator     |" -ForegroundColor White
-        Write-Host "  |   Instrucciones para captura de evidencia  |" -ForegroundColor DarkCyan
+        Write-Host "  |   Instrucciones para evidencia             |" -ForegroundColor DarkCyan
         Write-Host "  +--------------------------------------------+" -ForegroundColor White
         Write-Host "  | TEST 4: Bloqueo por MFA fallido            |" -ForegroundColor White
         Write-Host "  |   Ejecutar como Administrator              |" -ForegroundColor Cyan
@@ -185,12 +185,14 @@ function Test1A-IdentidadResetPassword {
 
         Write-Host ""
         Write-Host "  Usuario objetivo : $($usuarioObjetivo.SamAccountName)" -ForegroundColor White
-        Write-Host "  Nueva password   : Delegado2026!!" -ForegroundColor White
+        Write-Host ""
+        $pwdInput = Read-Host "  Ingresa la nueva contraseña (esta NO DEBERÍA FALLAR, ej. Delegado2026!!)"
+        
         Write-Host ""
         Write-Host "  Intentando resetear password como '$usuarioActual'..." -ForegroundColor Yellow
         Write-Host ""
 
-        $nuevaPwd = ConvertTo-SecureString "Delegado2026!!" -AsPlainText -Force
+        $nuevaPwd = ConvertTo-SecureString $pwdInput -AsPlainText -Force
 
         try {
             Set-ADAccountPassword `
@@ -203,8 +205,8 @@ function Test1A-IdentidadResetPassword {
             Write-Host "  | [PASS] PASSWORD RESETEADA EXITOSAMENTE      |" -ForegroundColor Green
             Write-Host "  |                                            |" -ForegroundColor Green
             Write-Host "  | Usuario : $($usuarioObjetivo.SamAccountName)" -ForegroundColor Green
-            Write-Host "  | Nueva   : Delegado2026!!"                    -ForegroundColor Green
-            Write-Host "  | Por     : $usuarioActual (admin_identidad)  |" -ForegroundColor Green
+            Write-Host "  | Nueva   : $pwdInput"                    -ForegroundColor Green
+            Write-Host "  | Por     : $usuarioActual (admin_identidad) |" -ForegroundColor Green
             Write-Host "  +--------------------------------------------+" -ForegroundColor Green
 
             Pedir-Captura "TEST 1A EXITOSO: admin_identidad reseteo password de $($usuarioObjetivo.SamAccountName)"
@@ -218,7 +220,7 @@ function Test1A-IdentidadResetPassword {
                 "Ejecutado por  : $usuarioActual@$dominioActual",
                 "Usuario objetivo: $($usuarioObjetivo.SamAccountName)",
                 "Resultado: PASS - Password reseteada exitosamente",
-                "Nueva password: Delegado2026!!",
+                "Nueva password: $pwdInput",
                 "",
                 "CONCLUSION: La delegacion de admin_identidad funciona correctamente.",
                 "La ACL permite a este rol resetear passwords en OU Cuates."
@@ -237,7 +239,7 @@ function Test1A-IdentidadResetPassword {
             Write-Host "  (Aplicar permisos RBAC) y cierra/reabre sesion como" -ForegroundColor Yellow
             Write-Host "  admin_identidad para que Kerberos actualice el token." -ForegroundColor Yellow
 
-            Pedir-Captura "TEST 1A FALLIDO - tomar captura del error para el reporte"
+            Pedir-Captura "TEST 1A FALLIDO - registrar el error para el reporte"
         }
 
     } catch {
@@ -291,13 +293,16 @@ function Test1B-StorageDeny {
         $usuarioObjetivo = $usuariosCuates | Select-Object -First 1
         Write-Host ""
         Write-Host "  Usuario objetivo : $($usuarioObjetivo.SamAccountName)" -ForegroundColor White
-        Write-Host "  Nueva password   : Delegado2026!!" -ForegroundColor White
+        Write-Host ""
+        
+        $pwdInput = Read-Host "  Ingresa la nueva contraseña (esta DEBERÍA FALLAR por Acceso Denegado)"
+
         Write-Host ""
         Write-Host "  Intentando resetear password como '$usuarioActual'..." -ForegroundColor Yellow
         Write-Host "  (Se espera que falle con Acceso Denegado)" -ForegroundColor DarkGray
         Write-Host ""
 
-        $nuevaPwd = ConvertTo-SecureString "Delegado2026!!" -AsPlainText -Force
+        $nuevaPwd = ConvertTo-SecureString $pwdInput -AsPlainText -Force
 
         try {
             Set-ADAccountPassword `
@@ -316,7 +321,7 @@ function Test1B-StorageDeny {
             Write-Host "  Solucion: Ejecuta Opcion 3 del menu P9 y vuelve" -ForegroundColor Yellow
             Write-Host "  a iniciar sesion como admin_storage." -ForegroundColor Yellow
 
-            Pedir-Captura "TEST 1B FALLIDO - el DENY no funciona, tomar captura"
+            Pedir-Captura "TEST 1B FALLIDO - el DENY no funciona, registrar evidencia"
 
         } catch {
             $msg = $_.Exception.Message
@@ -358,7 +363,7 @@ function Test1B-StorageDeny {
                 }
             }
 
-            Pedir-Captura "TEST 1B: admin_storage obtuvo ACCESO DENEGADO - tomar captura comparativa con Test 1A"
+            Pedir-Captura "TEST 1B: admin_storage obtuvo ACCESO DENEGADO - registrar evidencia comparativa con Test 1A"
 
             # Guardar log
             $logPath = "$rutaSalida\Test1B_Resultado.txt"
@@ -387,19 +392,17 @@ function Test1B-StorageDeny {
 
 
 # ============================================================
-# TEST 2: FGPP - Intentar poner password de 8 chars a admin_identidad
+# TEST 2: FGPP - Intentar poner password corta a admin_identidad
 #
 # EJECUTAR DESDE: Administrator (o cualquier admin con permisos)
-# El test simula que un admin intenta poner una pwd corta
-# a admin_identidad, que tiene FGPP de 12 chars minimo.
 # ============================================================
 function Test2-FGPP {
     Clear-Host
     Write-Host ""
     Write-Host "  +============================================+" -ForegroundColor Cyan
     Write-Host "  |  TEST 2 - FGPP: Politica de Contrasena     |" -ForegroundColor Cyan
-    Write-Host "  |  Accion: Poner pwd 8 chars a admin_identidad|" -ForegroundColor Cyan
-    Write-Host "  |  Resultado esperado: RECHAZADA             |" -ForegroundColor Green
+    Write-Host "  |  Accion: Asignar pwd a admin_identidad     |" -ForegroundColor Cyan
+    Write-Host "  |  Resultado esperado: RECHAZADA (si corta)  |" -ForegroundColor Green
     Write-Host "  +============================================+" -ForegroundColor Cyan
     Mostrar-UsuarioActual
 
@@ -423,7 +426,7 @@ function Test2-FGPP {
             Write-Host "  | Precedencia     : $($pso.Precedence)" -ForegroundColor Cyan
             Write-Host "  +--------------------------------------------+" -ForegroundColor White
             Write-Host ""
-            Pedir-Captura "TEST 2 - Captura la FGPP vigente (longitud minima 12 chars)"
+            Pedir-Captura "TEST 2 - Registro de la FGPP vigente (longitud minima 12 chars)"
         } else {
             Write-Host "  [WARN] No se encontro PSO para admin_identidad." -ForegroundColor Yellow
             Write-Host "         Ejecuta Opcion 4 del menu P9 (Configurar FGPP)." -ForegroundColor Yellow
@@ -432,13 +435,14 @@ function Test2-FGPP {
         Write-Host "  [WARN] No se pudo leer PSO: $($_.Exception.Message)" -ForegroundColor Yellow
     }
 
-    # Intento de poner password de 8 chars (debe fallar)
-    Write-Host "  [2/3] Intentando asignar password de 8 caracteres a admin_identidad..." -ForegroundColor Yellow
-    Write-Host "        Password a probar: 'Corta1!!' (8 caracteres)" -ForegroundColor DarkGray
+    # Intento de poner password corta (debe fallar)
+    Write-Host "  [2/3] Intentando asignar password a admin_identidad..." -ForegroundColor Yellow
+    Write-Host ""
+    $pwdCortaInput = Read-Host "        Ingresa una contraseña corta (DEBERÍA FALLAR por longitud, ej. Corta1!!)"
     Write-Host ""
 
     try {
-        $pwdCorta = ConvertTo-SecureString "Corta1!!" -AsPlainText -Force
+        $pwdCorta = ConvertTo-SecureString $pwdCortaInput -AsPlainText -Force
         Set-ADAccountPassword `
             -Identity    "admin_identidad" `
             -NewPassword $pwdCorta `
@@ -452,12 +456,12 @@ function Test2-FGPP {
         Write-Host "  +--------------------------------------------+" -ForegroundColor Red
         Write-Host ""
         Write-Host "  Solucion: Ejecuta Opcion 4 del menu P9 para configurar FGPP." -ForegroundColor Yellow
-        Pedir-Captura "TEST 2 FALLIDO - la FGPP no rechazo la password corta"
+        Pedir-Captura "TEST 2 FALLIDO - registrar evidencia de que la FGPP no rechazo la password corta"
 
     } catch {
         $msg = $_.Exception.Message
         Write-Host "  +--------------------------------------------+" -ForegroundColor Green
-        Write-Host "  | [PASS] PASSWORD DE 8 CHARS RECHAZADA        |" -ForegroundColor Green
+        Write-Host "  | [PASS] PASSWORD DE $($pwdCortaInput.Length) CHARS RECHAZADA          |" -ForegroundColor Green
         Write-Host "  |                                            |" -ForegroundColor Green
         Write-Host "  | La FGPP exige minimo 12 caracteres.        |" -ForegroundColor Green
         Write-Host "  | La politica funciona correctamente.        |" -ForegroundColor Green
@@ -466,7 +470,7 @@ function Test2-FGPP {
         Write-Host "  Error recibido del sistema:" -ForegroundColor DarkGray
         Write-Host "  $msg" -ForegroundColor DarkGray
 
-        Pedir-Captura "TEST 2 PASS - captura el error de rechazo de password corta (evidencia FGPP)"
+        Pedir-Captura "TEST 2 PASS - registrar el error de rechazo de password corta (evidencia FGPP)"
 
         $logPath = "$rutaSalida\Test2_FGPP_Resultado.txt"
         @(
@@ -475,7 +479,7 @@ function Test2-FGPP {
             "Fecha    : $(Get-Date -Format 'dd/MM/yyyy HH:mm:ss')",
             "Ejecutado por : $usuarioActual@$dominioActual",
             "Usuario objetivo: admin_identidad",
-            "Password probada: Corta1!! (8 caracteres)",
+            "Password probada: $pwdCortaInput ($($pwdCortaInput.Length) caracteres)",
             "Resultado: PASS - Password rechazada por longitud insuficiente",
             "Error   : $msg",
             "",
@@ -487,22 +491,23 @@ function Test2-FGPP {
 
     # Intento con password valida (12+ chars) para confirmar que SI funciona
     Write-Host ""
-    Write-Host "  [3/3] Verificando que una password de 12+ chars SI es aceptada..." -ForegroundColor Yellow
-    Write-Host "        Password a probar: 'Hardening2026!' (14 caracteres)" -ForegroundColor DarkGray
+    Write-Host "  [3/3] Verificando que una password válida SÍ es aceptada..." -ForegroundColor Yellow
+    Write-Host ""
+    $pwdLargaInput = Read-Host "        Ingresa una contraseña larga (NO DEBERÍA FALLAR, ej. Hardening2026!)"
     Write-Host ""
 
     try {
-        $pwdLarga = ConvertTo-SecureString "Hardening2026!" -AsPlainText -Force
+        $pwdLarga = ConvertTo-SecureString $pwdLargaInput -AsPlainText -Force
         Set-ADAccountPassword `
             -Identity    "admin_identidad" `
             -NewPassword $pwdLarga `
             -Reset `
             -ErrorAction Stop
 
-        Write-Host "  [OK] Password de 14 chars ACEPTADA (correcto)." -ForegroundColor Green
+        Write-Host "  [OK] Password de $($pwdLargaInput.Length) chars ACEPTADA (correcto)." -ForegroundColor Green
         Write-Host "       La FGPP permite passwords largas." -ForegroundColor DarkGray
 
-        # Restaurar la password original
+        # Restaurar la password original para no causar problemas
         $pwdOriginal = ConvertTo-SecureString "Hardening2026!" -AsPlainText -Force
         Set-ADAccountPassword -Identity "admin_identidad" -NewPassword $pwdOriginal -Reset -ErrorAction SilentlyContinue
         Write-Host "  [OK] Password restaurada a: Hardening2026!" -ForegroundColor DarkGray
@@ -519,10 +524,6 @@ function Test2-FGPP {
 
 # ============================================================
 # TEST 3: Flujo MFA - Instrucciones para captura de evidencia
-#
-# Este test no puede automatizarse completamente porque
-# requiere cerrar sesion y entrar fisicamente al servidor.
-# El script guia paso a paso y avisa cuando tomar capturas.
 # ============================================================
 function Test3-MFA {
     Clear-Host
@@ -558,7 +559,7 @@ function Test3-MFA {
         if (Test-Path $carpetaUsers) {
             $dbs = Get-ChildItem $carpetaUsers -Filter "*.db" -ErrorAction SilentlyContinue
             Write-Host "  [OK] Usuarios MFA registrados: $($dbs.Count)" -ForegroundColor Green
-            $dbs | ForEach-Object { Write-Host "       - $($_.BaseName)" -ForegroundColor DarkGray }
+            $dbs | ForEach-Object { Write-Host "        - $($_.BaseName)" -ForegroundColor DarkGray }
         }
 
         # Verificar secreto guardado
@@ -585,7 +586,7 @@ function Test3-MFA {
     Write-Host "  El codigo de 6 digitos se renueva cada 30 segundos." -ForegroundColor White
     Write-Host ""
 
-    Pedir-Captura "TEST 3 PASO 2 - Captura tu celular mostrando el codigo TOTP activo"
+    Pedir-Captura "TEST 3 PASO 2 - registrar celular con TOTP activo"
 
     Write-Host ""
     Write-Host "  PASO 3: Evidencia del login con MFA" -ForegroundColor Cyan
@@ -598,7 +599,7 @@ function Test3-MFA {
     Write-Host "     - Escribe tu usuario y contrasena normales" -ForegroundColor White
     Write-Host "     - El Credential Provider de multiOTP pedira el codigo TOTP" -ForegroundColor White
     Write-Host "     - Escribe el codigo de 6 digitos de Google Authenticator" -ForegroundColor White
-    Write-Host "  C) Tomar captura/foto de la pantalla mostrando el campo TOTP" -ForegroundColor Yellow
+    Write-Host "  C) Registrar evidencia de la pantalla mostrando el campo TOTP" -ForegroundColor Yellow
     Write-Host "  D) Volver a ejecutar este script y continuar con el Test 4" -ForegroundColor Yellow
     Write-Host ""
     Write-Host "  NOTA: Si el Credential Provider NO aparece:" -ForegroundColor Red
@@ -641,10 +642,6 @@ function Test3-MFA {
 
 # ============================================================
 # TEST 4: Bloqueo por MFA fallido
-#
-# EJECUTAR DESDE: Administrator (para ver estado de cuentas)
-# El bloqueo ocurre cuando alguien falla el TOTP 3 veces.
-# Este test verifica el estado de bloqueo en AD.
 # ============================================================
 function Test4-BloqueoMFA {
     Clear-Host
@@ -724,7 +721,7 @@ function Test4-BloqueoMFA {
         Write-Host "  | de MFA. Duracion del bloqueo: 30 minutos.  |" -ForegroundColor Green
         Write-Host "  +--------------------------------------------+" -ForegroundColor Green
 
-        Pedir-Captura "TEST 4 PASS - captura la cuenta marcada como BLOQUEADA en el script"
+        Pedir-Captura "TEST 4 PASS - registrar cuenta BLOQUEADA"
 
         # Opcion de desbloquear
         Write-Host ""
@@ -771,7 +768,7 @@ function Test4-BloqueoMFA {
             Pop-Location
         }
 
-        Pedir-Captura "TEST 4 - captura el estado actual de las cuentas (aunque no haya bloqueo visible)"
+        Pedir-Captura "TEST 4 - registrar estado actual (aunque no haya bloqueo visible)"
     }
 
     # Guardar log
@@ -797,9 +794,6 @@ function Test4-BloqueoMFA {
 
 # ============================================================
 # TEST 5: Reporte de Auditoria - Eventos ID 4625
-#
-# EJECUTAR DESDE: admin_auditoria
-# Genera archivo .txt con los ultimos 10 accesos denegados
 # ============================================================
 function Test5-Auditoria {
     Clear-Host
@@ -943,7 +937,7 @@ Evento         : ID 4625 - Inicio de sesion fallido
         Get-Content $rutaReporte | ForEach-Object { Write-Host "  $_" -ForegroundColor White }
         Write-Host "  --- FIN DEL REPORTE ---" -ForegroundColor Cyan
 
-        Pedir-Captura "TEST 5 - captura el reporte completo mostrado en pantalla (evidencia de auditoria)"
+        Pedir-Captura "TEST 5 - registrar el reporte completo mostrado en pantalla"
 
     } catch {
         Write-Host "  [ERROR] $($_.Exception.Message)" -ForegroundColor Red
@@ -953,8 +947,8 @@ Evento         : ID 4625 - Inicio de sesion fallido
     # Resumen final del test
     Write-Host ""
     Write-Host "  +--------------------------------------------+" -ForegroundColor Green
-    Write-Host "  | TEST 5 COMPLETADO                           |" -ForegroundColor Green
-    Write-Host "  | Archivos generados en $rutaSalida" -ForegroundColor Green
+    Write-Host "  | TEST 5 COMPLETADO                          |" -ForegroundColor Green
+    Write-Host "  | Archivos generados en $rutaSalida          |" -ForegroundColor Green
     Write-Host "  +--------------------------------------------+" -ForegroundColor Green
     Write-Host ""
     Write-Host "  Para adjuntar al reporte:" -ForegroundColor Yellow
