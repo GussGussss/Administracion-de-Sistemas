@@ -930,3 +930,5 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
     Write-Host "`n  [ERROR] Ejecuta como Administrador.`n" -ForegroundColor Red
     exit 1
 }
+
+Mostrar-Menu
