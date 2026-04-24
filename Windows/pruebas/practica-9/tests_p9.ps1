@@ -320,9 +320,7 @@ function Test1B-StorageDeny {
 
         } catch {
             $msg = $_.Exception.Message
-            $esDeny = $msg -match "Access.is.denied|Access denied|UnauthorizedAccess|" +
-                             "no tiene acceso|PermissionDenied|AccesoD|" +
-                             "Insufficient access|insufficient rights"
+            $esDeny = $msg -match "Access.is.denied|Access denied|UnauthorizedAccess|no tiene acceso|PermissionDenied|AccesoD|Insufficient access|insufficient rights|Acceso denegado|denegado"
 
             if ($esDeny) {
                 Write-Host "  +--------------------------------------------+" -ForegroundColor Green
