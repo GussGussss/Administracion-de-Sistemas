@@ -204,3 +204,53 @@ lanzar_contenedor_web() {
     docker cp web/index.html web_server:/www/index.html
     echo "Servidor Web en linea y expuesto en el puerto 80 del host."
 }
+
+# Funcion: Desplegar Base de Datos PostgreSQL
+desplegar_db() {
+    echo "Preparando despliegue de PostgreSQL..."
+    
+    # Definir variables de base de datos
+    local DB_NAME="practica_db"
+    local DB_USER="admin_user"
+    local DB_PASS="root123" # En produccion esto seria una variable de entorno
+
+    # 1. Crear script de respaldo automatizado en el host
+    if [ ! -f "db/backup.sh" ]; then
+        echo "Creando script de respaldo automatizado..."
+        cat << EOF > db/backup.sh
+#!/bin/bash
+# Script de respaldo generado automaticamente
+fecha=\$(date +"%Y%m%d_%H%M%S")
+docker exec db_postgres pg_dump -U $DB_USER $DB_NAME > ./db/respaldo_\$fecha.sql
+echo "Respaldo creado: respaldo_\$fecha.sql"
+EOF
+        chmod +x db/backup.sh
+    fi
+
+    # 2. Despliegue del Contenedor
+    if docker ps -a --format '{{.Names}}' | grep -Eq "^db_postgres\$"; then
+        echo "El contenedor db_postgres ya existe."
+        if preguntar_confirmacion "Desea recrear la base de datos? (Se perderan datos no persistidos)"; then
+            docker rm -f db_postgres
+            lanzar_contenedor_db "$DB_NAME" "$DB_USER" "$DB_PASS"
+        fi
+    else
+        lanzar_contenedor_db "$DB_NAME" "$DB_USER" "$DB_PASS"
+    fi
+}
+
+# Funcion auxiliar para lanzar PostgreSQL
+lanzar_contenedor_db() {
+    echo "Iniciando contenedor PostgreSQL..."
+    docker run -d \
+        --name db_postgres \
+        --network infra_red \
+        -e POSTGRES_DB=$1 \
+        -e POSTGRES_USER=$2 \
+        -e POSTGRES_PASSWORD=$3 \
+        -v db_data:/var/lib/postgresql/data \
+        --memory="512m" \
+        postgres:latest
+
+    echo "Base de datos PostgreSQL en linea (Red: infra_red, Puerto: 5432)."
+}
