@@ -1,45 +1,47 @@
 #!/bin/bash
+# Archivo: main_p10.sh
 
-# Validacion de Privilegios ROOT
+# 1. Validación estricta de privilegios (sudo)
 if [ "$EUID" -ne 0 ]; then
-    echo "ERROR: Se requieren privilegios de administrador para gestionar contenedores."
-    echo "Use: sudo bash $0"
+    echo "============================================================"
+    echo " ERROR: Este script requiere privilegios administrativos."
+    echo " Por favor, ejecútalo usando: sudo ./main_p10.sh"
+    echo "============================================================"
     exit 1
 fi
 
-# Importar funciones
-source ./funciones_p10.sh
+# 2. Carga de las funciones
+# Validamos que el archivo de funciones exista antes de cargarlo
+if [ -f "./funciones_p10.sh" ]; then
+    source ./funciones_p10.sh
+else
+    echo "ERROR: No se encontró el archivo funciones_p10.sh en el directorio actual."
+    exit 1
+fi
 
-mostrar_menu() {
-    echo "=========================================="
-    echo "   ADMINISTRACION DE SISTEMAS - TAREA 10"
-    echo "=========================================="
-    echo "1. Descargar Utilidades (Imagenes Docker)"
-    echo "2. Instalar Dependencias (Docker Engine)"
-    echo "3. Preparar Entorno (Red y Volumenes)"
-    echo "4. Desplegar Servidor Web (Nginx Seguro)"
-    echo "5. Desplegar Base de Datos"
-    echo "6. Desplegar Servidor FTP"
-    echo "7. Limpiar Contenedores"
-    echo "0. Salir"
-    echo "=========================================="
-    echo -n "Seleccione una opcion: "
-}
-
+# 3. Bucle infinito del Menú Principal
 while true; do
-    mostrar_menu
-    read opcion
+    echo "=========================================================="
+    echo " Práctica 10: Virtualización Nativa y Contenedores"
+    echo "=========================================================="
+    echo "1. Validar e Instalar Dependencias (Docker, Compose)"
+    echo ""
+    echo "0. Salir del script"
+    echo "=========================================================="
+    read -p "Selecciona una opción: " opcion
+
     case $opcion in
-        1) descargar_utilidades ;;
-        2) instalar_docker ;;
-        3) preparar_entorno ;;
-        4) desplegar_web ;;
-        5) desplegar_db ;;
-        6) echo "Proximamente: FTP..." ;;
-        7) limpiar_todo ;;
-        0) echo "Cerrando script..."; exit 0 ;;
-        *) echo "Opcion no valida." ;;
+        1)
+            clear
+            instalar_dependencias
+            ;;
+        0)
+            echo "Saliendo del asistente. ¡Hasta luego!"
+            exit 0
+            ;;
+        *)
+            echo "Opción no válida. Por favor, selecciona una opción del menú."
+            sleep 2
+            ;;
     esac
-    echo "Presione enter para continuar..."
-    read
 done
