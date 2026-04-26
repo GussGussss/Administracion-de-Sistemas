@@ -76,3 +76,97 @@ preparar_entorno_docker() {
     
     read -p "Presiona Enter para continuar..."
 }
+
+generar_archivos_configuracion() {
+    echo "----------------------------------------"
+    echo " Generando Archivos de Configuracion Web"
+    echo "----------------------------------------"
+
+    # Validacion para no sobrescribir sin permiso
+    if [ -f "./web/Dockerfile" ]; then
+        read -p "El Dockerfile y archivos web ya existen. ¿Deseas sobrescribirlos? (s/n): " sobrescribir_web
+        if [[ "$sobrescribir_web" != "s" && "$sobrescribir_web" != "S" ]]; then
+            echo "Omitiendo creacion de archivos web."
+            generar_web="no"
+        else
+            generar_web="si"
+        fi
+    else
+        generar_web="si"
+    fi
+
+    if [ "$generar_web" == "si" ]; then
+        echo "Creando nginx.conf..."
+        cat << 'EOF' > ./web/nginx.conf
+worker_processes 1;
+events { worker_connections 1024; }
+http {
+    include mime.types;
+    default_type application/octet-stream;
+    sendfile on;
+    # Requisito de la practica: Eliminar firmas del servidor
+    server_tokens off;
+    
+    server {
+        # Usamos 8080 porque los puertos menores a 1024 requieren root en el contenedor
+        listen 8080;
+        server_name localhost;
+        
+        location / {
+            root /usr/share/nginx/html;
+            index index.html index.htm;
+        }
+    }
+}
+EOF
+
+        echo "Creando index.html (Recurso estatico)..."
+        cat << 'EOF' > ./web/index.html
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Practica 10 - Web Segura</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #2c3e50; color: #ecf0f1; text-align: center; padding: 50px; }
+        h1 { color: #3498db; }
+    </style>
+</head>
+<body>
+    <h1>Servidor Web Seguro (Docker)</h1>
+    <p>Nginx en Alpine Linux | Usuario No Administrativo | Server Tokens Off</p>
+</body>
+</html>
+EOF
+
+        echo "Creando Dockerfile personalizado..."
+        cat << 'EOF' > ./web/Dockerfile
+FROM nginx:alpine
+
+# Copiar configuracion y contenido web a la imagen
+COPY nginx.conf /etc/nginx/nginx.conf
+COPY index.html /usr/share/nginx/html/index.html
+
+# Configurar permisos para permitir ejecucion sin root
+RUN chown -R nginx:nginx /usr/share/nginx/html && \
+    chown -R nginx:nginx /var/cache/nginx && \
+    chown -R nginx:nginx /var/log/nginx && \
+    chown -R nginx:nginx /etc/nginx/conf.d && \
+    touch /var/run/nginx.pid && \
+    chown -R nginx:nginx /var/run/nginx.pid
+
+# Cambiar al usuario no privilegiado
+USER nginx
+
+# Exponer el puerto configurado
+EXPOSE 8080
+EOF
+        echo "  - Archivos creados exitosamente en el directorio ./web"
+    fi
+
+    echo "----------------------------------------"
+    echo " Proceso de configuracion finalizado."
+    echo "----------------------------------------"
+    
+    read -p "Presiona Enter para continuar..."
+}
