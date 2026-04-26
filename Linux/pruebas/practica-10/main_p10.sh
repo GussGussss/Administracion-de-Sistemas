@@ -35,7 +35,7 @@ while true; do
         2) instalar_docker ;;
         3) preparar_entorno ;;
         4) desplegar_web ;;
-        5) echo "Proximamente: BD..." ;;
+        5) desplegar_db ;;
         6) echo "Proximamente: FTP..." ;;
         7) limpiar_todo ;;
         0) echo "Cerrando script..."; exit 0 ;;
