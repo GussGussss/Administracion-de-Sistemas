@@ -16,7 +16,9 @@ else
     exit 1
 fi
 
+# 3. Bucle infinito del Menú Principal
 while true; do
+    clear
     echo "=========================================================="
     echo " Práctica 10: Virtualización Nativa y Contenedores"
     echo "=========================================================="
@@ -24,6 +26,7 @@ while true; do
     echo "2. Preparar Estructura de Carpetas y Red (infra_red)"
     echo "3. Generar Archivos de Configuracion Web (Dockerfile)"
     echo "4. Desplegar Contenedores (Web, BD, FTP)"
+    echo "5. Ejecutar Protocolo de Pruebas (Validación)"
     echo ""
     echo "0. Salir del script"
     echo "=========================================================="
@@ -34,6 +37,7 @@ while true; do
         2) preparar_entorno_docker ;;
         3) generar_archivos_configuracion ;;
         4) desplegar_contenedores ;;
+        5) menu_pruebas ;;
         0)
             echo "Saliendo del asistente. ¡Hasta luego!"
             exit 0
