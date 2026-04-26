@@ -1,7 +1,6 @@
 #!/bin/bash
 # Archivo: main_p10.sh
 
-# 1. Validación estricta de privilegios (sudo)
 if [ "$EUID" -ne 0 ]; then
     echo "============================================================"
     echo " ERROR: Este script requiere privilegios administrativos."
@@ -10,8 +9,6 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-# 2. Carga de las funciones
-# Validamos que el archivo de funciones exista antes de cargarlo
 if [ -f "./funciones_p10.sh" ]; then
     source ./funciones_p10.sh
 else
@@ -19,13 +16,14 @@ else
     exit 1
 fi
 
-# 3. Bucle infinito del Menú Principal
 while true; do
+    clear
     echo "=========================================================="
     echo " Práctica 10: Virtualización Nativa y Contenedores"
     echo "=========================================================="
     echo "1. Validar e Instalar Dependencias (Docker, Compose)"
     echo "2. Preparar Estructura de Carpetas y Red (infra_red)"
+    echo "3. Generar Archivos de Configuracion Web (Dockerfile)"
     echo ""
     echo "0. Salir del script"
     echo "=========================================================="
