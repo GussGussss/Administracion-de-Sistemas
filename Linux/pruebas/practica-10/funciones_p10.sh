@@ -43,3 +43,36 @@ instalar_dependencias() {
     # Pausa para que el usuario pueda leer los mensajes antes de volver al menú
     read -p "Presiona Enter para continuar..."
 }
+
+preparar_entorno_docker() {
+    echo "----------------------------------------"
+    echo " Preparando Estructura y Red de Docker"
+    echo "----------------------------------------"
+
+    # 1. Creación de la estructura de directorios
+    echo "Validando estructura de carpetas locales..."
+    mkdir -p ./web ./db ./ftp
+    echo "  - Directorios locales (web, db, ftp) listos."
+
+    # 2. Creación de la red personalizada
+    echo "Validando red de Docker (infra_red - 172.20.0.0/16)..."
+    
+    # Verificamos si la red ya existe para no causar errores
+    if docker network ls | grep -q "infra_red"; then
+        echo "  - La red 'infra_red' ya existe en Docker. Omitiendo creación."
+    else
+        echo "  - La red no existe. Creando 'infra_red'..."
+        docker network create --subnet=172.20.0.0/16 infra_red
+        if [ $? -eq 0 ]; then
+            echo "  - Red 'infra_red' creada exitosamente."
+        else
+            echo "  - ERROR al intentar crear la red."
+        fi
+    fi
+
+    echo "----------------------------------------"
+    echo " Entorno de carpetas y red preparado."
+    echo "----------------------------------------"
+    
+    read -p "Presiona Enter para continuar..."
+}
