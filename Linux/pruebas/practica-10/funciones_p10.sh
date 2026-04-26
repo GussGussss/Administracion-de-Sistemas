@@ -276,3 +276,87 @@ EOF
     read -p "Presiona Enter para continuar..."
 }
 
+menu_pruebas() {
+    while true; do
+        clear
+        echo "=========================================================="
+        echo " Protocolo de Pruebas (Validación Práctica 10)"
+        echo "=========================================================="
+        echo "1. Prueba 10.1 (Persistencia de BD)"
+        echo "2. Prueba 10.2 (Aislamiento y Resolución DNS en Red)"
+        echo "3. Prueba 10.3 (Permisos y Compartición FTP -> Web)"
+        echo "4. Prueba 10.4 (Límites de Recursos - RAM y CPU)"
+        echo ""
+        echo "0. Volver al menú principal"
+        echo "=========================================================="
+        read -p "Selecciona la prueba a ejecutar: " op_prueba
+
+        case $op_prueba in
+            1)
+                echo "----------------------------------------"
+                echo " Ejecutando Prueba 10.1: Persistencia DB"
+                echo "----------------------------------------"
+                echo "1. Creando una tabla y un registro de prueba en PostgreSQL..."
+                docker exec base_datos_p10 psql -U admin -d base_practica -c "CREATE TABLE IF NOT EXISTS test_tabla (id serial, mensaje varchar(50)); INSERT INTO test_tabla (mensaje) VALUES ('Persistencia exitosa desde Los Mochis');"
+                
+                echo "2. Simulando desastre: Eliminando el contenedor de la BD a la fuerza..."
+                docker rm -f base_datos_p10
+                
+                echo "3. Levantando el contenedor nuevamente..."
+                cd "$DIR_BASE" && docker compose up -d db
+                sleep 5 # Esperamos a que la BD inicie completamente
+                
+                echo "4. Consultando el registro de nuevo..."
+                docker exec base_datos_p10 psql -U admin -d base_practica -c "SELECT * FROM test_tabla;"
+                echo "----------------------------------------"
+                read -p "Presiona Enter para continuar..."
+                ;;
+            2)
+                echo "----------------------------------------"
+                echo " Ejecutando Prueba 10.2: Red y DNS"
+                echo "----------------------------------------"
+                echo "Haciendo ping desde el servidor_web_p10 hacia base_datos_p10..."
+                # Alpine incluye ping por defecto. Enviamos 3 paquetes.
+                docker exec servidor_web_p10 ping -c 3 base_datos_p10
+                echo "----------------------------------------"
+                echo "Si ves respuesta de paquetes, la red 'infra_red' funciona perfectamente."
+                read -p "Presiona Enter para continuar..."
+                ;;
+            3)
+                echo "----------------------------------------"
+                echo " Ejecutando Prueba 10.3: FTP hacia Nginx"
+                echo "----------------------------------------"
+                echo "1. Creando un archivo local simulado..."
+                echo "<h2>Este archivo fue subido por FTP y servido por Nginx</h2>" > /tmp/archivo_ftp.html
+                
+                echo "2. Subiendo el archivo al servidor FTP (puerto 21) usando credenciales..."
+                # Usamos curl para subir el archivo vía FTP automatizadamente
+                curl -T /tmp/archivo_ftp.html ftp://adminftp:passwordftp@localhost/
+                
+                echo -e "\n3. Consultando el archivo a través del servidor Web (Nginx - puerto 80)..."
+                # Usamos curl para ver la web
+                curl http://localhost/archivo_ftp.html
+                echo -e "\n----------------------------------------"
+                echo "Si logras ver el <h2> arriba, el volumen compartido está funcionando."
+                read -p "Presiona Enter para continuar..."
+                ;;
+            4)
+                echo "----------------------------------------"
+                echo " Ejecutando Prueba 10.4: Límites"
+                echo "----------------------------------------"
+                echo "Mostrando las estadísticas de Docker (Toma captura de pantalla de esto para tu evidencia):"
+                echo ""
+                docker stats --no-stream
+                echo "----------------------------------------"
+                read -p "Presiona Enter para continuar..."
+                ;;
+            0)
+                break # Rompe este sub-bucle y vuelve al main
+                ;;
+            *)
+                echo "Opción no válida."
+                sleep 2
+                ;;
+        esac
+    done
+}
