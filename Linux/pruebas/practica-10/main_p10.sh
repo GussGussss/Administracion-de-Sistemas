@@ -23,21 +23,17 @@ while true; do
     echo "1. Validar e Instalar Dependencias (Docker, Compose)"
     echo "2. Preparar Estructura de Carpetas y Red (infra_red)"
     echo "3. Generar Archivos de Configuracion Web (Dockerfile)"
+    echo "4. Desplegar Contenedores (Web, BD, FTP)"
     echo ""
     echo "0. Salir del script"
     echo "=========================================================="
     read -p "Selecciona una opción: " opcion
 
     case $opcion in
-        1)
-            instalar_dependencias
-            ;;
-        2)
-            preparar_entorno_docker
-            ;;
-        3)
-            generar_archivos_configuracion
-            ;;
+        1) instalar_dependencias ;;
+        2) preparar_entorno_docker ;;
+        3) generar_archivos_configuracion ;;
+        4) desplegar_contenedores ;;
         0)
             echo "Saliendo del asistente. ¡Hasta luego!"
             exit 0
