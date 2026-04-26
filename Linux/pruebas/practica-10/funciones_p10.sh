@@ -159,3 +159,120 @@ EOF
     
     read -p "Presiona Enter para continuar..."
 }
+
+
+desplegar_contenedores() {
+    echo "----------------------------------------"
+    echo " Desplegando Infraestructura con Compose"
+    echo "----------------------------------------"
+
+    echo "Generando archivo docker-compose.yml en $DIR_BASE..."
+    
+    cat << EOF > "$DIR_BASE/docker-compose.yml"
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: base_datos_p10
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin_password
+      POSTGRES_DB: base_practica
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - infra_red
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+  ftp:
+    image: delfer/alpine-ftp-server
+    container_name: servidor_ftp_p10
+    restart: unless-stopped
+    environment:
+      USERS: "adminftp|passwordftp"
+    ports:
+      - "21:21"
+      - "21000-21010:21000-21010"
+    volumes:
+      - web_content:/ftp/adminftp
+    networks:
+      - infra_red
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: 256M
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: servidor_web_p10
+    restart: unless-stopped
+    ports:
+      - "80:8080"
+    volumes:
+      - web_content:/usr/share/nginx/html
+    networks:
+      - infra_red
+    depends_on:
+      - db
+      - ftp
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+volumes:
+  db_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: $DIR_BASE/db
+  web_content:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: $DIR_BASE/ftp
+
+networks:
+  infra_red:
+    external: true
+EOF
+
+    echo "  - Archivo Compose generado."
+    
+    echo "Iniciando descarga de imagenes y construccion de contenedores..."
+    # Nos movemos a la carpeta de infraestructura para ejecutar compose
+    cd "$DIR_BASE" || exit
+    
+    # El parametro -d levanta los contenedores en segundo plano (detached)
+    # El parametro --build fuerza a leer tu nuevo Dockerfile
+    docker compose up -d --build
+
+    if [ $? -eq 0 ]; then
+        echo "----------------------------------------"
+        echo " DESPLIEGUE EXITOSO."
+        echo " Los 3 servicios estan corriendo con limites de recursos."
+        echo " Puedes comprobarlo saliendo del script y usando 'docker ps'"
+        echo "----------------------------------------"
+    else
+        echo "----------------------------------------"
+        echo " ERROR: Hubo un fallo al intentar levantar los contenedores."
+        echo "----------------------------------------"
+    fi
+    
+    # Regresamos al directorio original donde esta el script
+    cd - > /dev/null
+    read -p "Presiona Enter para continuar..."
+}
+
