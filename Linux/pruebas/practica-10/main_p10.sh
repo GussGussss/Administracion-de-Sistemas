@@ -1,45 +1,45 @@
 #!/bin/bash
 
-# ==========================================
-# VALIDACIÓN DE PRIVILEGIOS
-# ==========================================
+# Validacion de Privilegios ROOT
 if [ "$EUID" -ne 0 ]; then
-    echo "ERROR: Este script gestiona infraestructura y requiere privilegios de administrador."
-    echo "Por favor, ejecútalo usando: sudo bash $0"
+    echo "ERROR: Se requieren privilegios de administrador para gestionar contenedores."
+    echo "Use: sudo bash $0"
     exit 1
 fi
 
-# Importar las funciones
+# Importar funciones
 source ./funciones_p10.sh
 
 mostrar_menu() {
     clear
     echo "=========================================="
-    echo "   ADMINISTRACIÓN DE SISTEMAS - TAREA 10"
+    echo "   ADMINISTRACION DE SISTEMAS - TAREA 10"
     echo "=========================================="
-    echo "1. Instalar Dependencias (Docker Engine)"
-    echo "2. Preparar Entorno (Carpetas, Red, Volúmenes)"
-    echo "3. Desplegar Servidor Web (Nginx + Seguridad)"
-    echo "4. Desplegar Base de Datos (PostgreSQL)"
-    echo "5. Desplegar Servidor FTP"
-    echo "6. Limpiar Contenedores (Reset)"
+    echo "1. Descargar Utilidades (Imagenes Docker)"
+    echo "2. Instalar Dependencias (Docker Engine)"
+    echo "3. Preparar Entorno (Red y Volumenes)"
+    echo "4. Desplegar Servidor Web"
+    echo "5. Desplegar Base de Datos"
+    echo "6. Desplegar Servidor FTP"
+    echo "7. Limpiar Contenedores"
     echo "0. Salir"
     echo "=========================================="
-    echo -n "Seleccione una opción: "
+    echo -n "Seleccione una opcion: "
 }
 
 while true; do
     mostrar_menu
     read opcion
     case $opcion in
-        1) instalar_docker ;;
-        2) preparar_entorno ;;
-        3) echo "Próximamente: Dockerfile Web..." ;;
-        4) echo "Próximamente: Config BD..." ;;
-        5) echo "Próximamente: Config FTP..." ;;
-        6) limpiar_todo ;;
-        0) echo "Saliendo del sistema..."; exit 0 ;;
-        *) echo "Opción no válida." ;;
+        1) descargar_utilidades ;;
+        2) instalar_docker ;;
+        3) preparar_entorno ;;
+        4) echo "Proximamente: Web..." ;;
+        5) echo "Proximamente: BD..." ;;
+        6) echo "Proximamente: FTP..." ;;
+        7) limpiar_todo ;;
+        0) echo "Cerrando script..."; exit 0 ;;
+        *) echo "Opcion no valida." ;;
     esac
     echo "Presione enter para continuar..."
     read
