@@ -91,3 +91,116 @@ limpiar_todo() {
     docker rm -f web_server db_postgres ftp_server 2>/dev/null
     echo "Limpieza completada."
 }
+
+# Funcion: Desplegar Servidor Web Seguro
+desplegar_web() {
+    echo "Preparando despliegue del Servidor Web (Nginx + Hardening)..."
+    
+    # 1. Generacion Automatica de Archivos de Configuracion
+    if [ ! -f "web/Dockerfile" ]; then
+        echo "Generando Dockerfile y nginx.conf automaticamente..."
+        
+        # Escribir nginx.conf
+        cat << 'EOF' > web/nginx.conf
+worker_processes 1;
+events { worker_connections 1024; }
+http {
+    include mime.types;
+    default_type application/octet-stream;
+    sendfile on;
+    keepalive_timeout 65;
+    
+    # SEGURIDAD: Ocultar la version exacta de Nginx (Server Tokens)
+    server_tokens off;
+
+    server {
+        # Puerto > 1024 para permitir ejecucion sin usuario root
+        listen 8080;
+        server_name localhost;
+        
+        # Directorio que se enlazara al volumen web_content
+        root /www;
+        index index.html;
+
+        location / {
+            try_files $uri $uri/ =404;
+        }
+    }
+}
+EOF
+
+        # Escribir Dockerfile
+        cat << 'EOF' > web/Dockerfile
+FROM alpine:latest
+
+# Instalar Nginx sin cache para mantener imagen ligera
+RUN apk update && apk add --no-cache nginx
+
+# SEGURIDAD: Crear usuario no administrativo
+RUN adduser -D -g 'www' www
+
+# Crear directorios y asignar propiedad al usuario seguro
+RUN mkdir -p /www /run/nginx && \
+    chown -R www:www /var/lib/nginx /www /run/nginx /var/log/nginx
+
+# Inyectar configuracion endurecida
+COPY nginx.conf /etc/nginx/nginx.conf
+
+# Exponer el puerto
+EXPOSE 8080
+
+# Forzar la ejecucion del contenedor con el usuario no-root
+USER www
+
+CMD ["nginx", "-g", "daemon off;"]
+EOF
+
+        # Crear un index de prueba
+        cat << 'EOF' > web/index.html
+<!DOCTYPE html>
+<html>
+<head><title>Practica 10 - Web</title></head>
+<body><h2>Servidor Nginx Seguro Funcionando</h2><p>Esperando archivos del FTP...</p></body>
+</html>
+EOF
+    fi
+
+    # 2. Construccion de la Imagen (Build)
+    if docker images -q nginx_seguro:local > /dev/null 2>&1; then
+        echo "La imagen nginx_seguro:local ya existe."
+        if preguntar_confirmacion "Desea reconstruir la imagen web?"; then
+            docker build -t nginx_seguro:local ./web
+        fi
+    else
+        echo "Construyendo imagen personalizada basada en Alpine..."
+        docker build -t nginx_seguro:local ./web
+    fi
+
+    # 3. Despliegue del Contenedor (Run)
+    if docker ps -a --format '{{.Names}}' | grep -Eq "^web_server\$"; then
+        echo "El contenedor web_server ya esta desplegado."
+        if preguntar_confirmacion "Desea destruirlo y recrearlo?"; then
+            docker rm -f web_server
+            lanzar_contenedor_web
+        fi
+    else
+        lanzar_contenedor_web
+    fi
+}
+
+# Funcion auxiliar para el comando run de la web
+lanzar_contenedor_web() {
+    echo "Iniciando contenedor web con limites de recursos..."
+    docker run -d \
+        --name web_server \
+        --network infra_red \
+        -p 80:8080 \
+        -v web_content:/www \
+        --cpus="0.5" \
+        --memory="512m" \
+        nginx_seguro:local
+        
+    # Copiar el index de prueba al volumen
+    docker cp web/index.html web_server:/www/index.html
+    echo "Servidor Web en linea y expuesto en el puerto 80 del host."
+}
