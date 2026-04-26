@@ -17,7 +17,6 @@ else
 fi
 
 while true; do
-    clear
     echo "=========================================================="
     echo " Práctica 10: Virtualización Nativa y Contenedores"
     echo "=========================================================="
