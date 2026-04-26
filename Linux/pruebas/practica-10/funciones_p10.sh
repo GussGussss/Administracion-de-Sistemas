@@ -1,7 +1,6 @@
 #!/bin/bash
 
 # Funcion auxiliar para preguntar al usuario (S/N)
-# No usa emojis por requerimiento
 preguntar_confirmacion() {
     local mensaje=$1
     read -p "$mensaje (s/n): " respuesta
