@@ -1,12 +1,14 @@
 #!/bin/bash
 # Archivo: funciones_p10.sh
 
+# Definición de la ruta raíz de infraestructura fuera del repositorio
+DIR_BASE="/opt/practica10"
+
 instalar_dependencias() {
     echo "----------------------------------------"
     echo " Preparando Dependencias del Sistema"
     echo "----------------------------------------"
 
-    # Validación de Docker
     if command -v docker &> /dev/null; then
         echo "Se ha detectado que Docker ya está instalado."
         read -p "¿Deseas forzar la reinstalación/actualización? (s/n): " reinstalar_docker
@@ -24,11 +26,9 @@ instalar_dependencias() {
         dnf install -y docker-ce docker-ce-cli containerd.io
     fi
 
-    # Asegurar que el demonio de Docker esté habilitado y corriendo
     systemctl enable docker
     systemctl start docker
 
-    # Validación de Docker Compose
     if docker compose version &> /dev/null || command -v docker-compose &> /dev/null; then
         echo "Se ha detectado que Docker Compose ya está instalado."
     else
@@ -40,7 +40,6 @@ instalar_dependencias() {
     echo " Dependencias listas y servicios activos."
     echo "----------------------------------------"
     
-    # Pausa para que el usuario pueda leer los mensajes antes de volver al menú
     read -p "Presiona Enter para continuar..."
 }
 
@@ -49,15 +48,16 @@ preparar_entorno_docker() {
     echo " Preparando Estructura y Red de Docker"
     echo "----------------------------------------"
 
-    # 1. Creación de la estructura de directorios
-    echo "Validando estructura de carpetas locales..."
-    mkdir -p ./web ./db ./ftp
-    echo "  - Directorios locales (web, db, ftp) listos."
+    # 1. Creación de la estructura en el directorio del sistema
+    echo "Creando directorios en $DIR_BASE..."
+    mkdir -p "$DIR_BASE/web" "$DIR_BASE/db" "$DIR_BASE/ftp"
+    # Aseguramos permisos para que el usuario pueda manipularlos si es necesario
+    chmod -R 755 "$DIR_BASE"
+    echo "  - Directorios en el sistema listos."
 
     # 2. Creación de la red personalizada
     echo "Validando red de Docker (infra_red - 172.20.0.0/16)..."
     
-    # Verificamos si la red ya existe para no causar errores
     if docker network ls | grep -q "infra_red"; then
         echo "  - La red 'infra_red' ya existe en Docker. Omitiendo creación."
     else
@@ -82,9 +82,8 @@ generar_archivos_configuracion() {
     echo " Generando Archivos de Configuracion Web"
     echo "----------------------------------------"
 
-    # Validacion para no sobrescribir sin permiso
-    if [ -f "./web/Dockerfile" ]; then
-        read -p "El Dockerfile y archivos web ya existen. ¿Deseas sobrescribirlos? (s/n): " sobrescribir_web
+    if [ -f "$DIR_BASE/web/Dockerfile" ]; then
+        read -p "El Dockerfile y archivos web ya existen en $DIR_BASE/web. ¿Deseas sobrescribirlos? (s/n): " sobrescribir_web
         if [[ "$sobrescribir_web" != "s" && "$sobrescribir_web" != "S" ]]; then
             echo "Omitiendo creacion de archivos web."
             generar_web="no"
@@ -96,19 +95,17 @@ generar_archivos_configuracion() {
     fi
 
     if [ "$generar_web" == "si" ]; then
-        echo "Creando nginx.conf..."
-        cat << 'EOF' > ./web/nginx.conf
+        echo "Creando nginx.conf en $DIR_BASE/web/..."
+        cat << 'EOF' > "$DIR_BASE/web/nginx.conf"
 worker_processes 1;
 events { worker_connections 1024; }
 http {
     include mime.types;
     default_type application/octet-stream;
     sendfile on;
-    # Requisito de la practica: Eliminar firmas del servidor
     server_tokens off;
     
     server {
-        # Usamos 8080 porque los puertos menores a 1024 requieren root en el contenedor
         listen 8080;
         server_name localhost;
         
@@ -120,8 +117,8 @@ http {
 }
 EOF
 
-        echo "Creando index.html (Recurso estatico)..."
-        cat << 'EOF' > ./web/index.html
+        echo "Creando index.html..."
+        cat << 'EOF' > "$DIR_BASE/web/index.html"
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -140,28 +137,20 @@ EOF
 EOF
 
         echo "Creando Dockerfile personalizado..."
-        cat << 'EOF' > ./web/Dockerfile
+        cat << 'EOF' > "$DIR_BASE/web/Dockerfile"
 FROM nginx:alpine
-
-# Copiar configuracion y contenido web a la imagen
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY index.html /usr/share/nginx/html/index.html
-
-# Configurar permisos para permitir ejecucion sin root
 RUN chown -R nginx:nginx /usr/share/nginx/html && \
     chown -R nginx:nginx /var/cache/nginx && \
     chown -R nginx:nginx /var/log/nginx && \
     chown -R nginx:nginx /etc/nginx/conf.d && \
     touch /var/run/nginx.pid && \
     chown -R nginx:nginx /var/run/nginx.pid
-
-# Cambiar al usuario no privilegiado
 USER nginx
-
-# Exponer el puerto configurado
 EXPOSE 8080
 EOF
-        echo "  - Archivos creados exitosamente en el directorio ./web"
+        echo "  - Archivos creados exitosamente en $DIR_BASE/web"
     fi
 
     echo "----------------------------------------"
