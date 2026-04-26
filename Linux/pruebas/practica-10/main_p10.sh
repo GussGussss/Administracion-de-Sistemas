@@ -11,7 +11,6 @@ fi
 source ./funciones_p10.sh
 
 mostrar_menu() {
-    clear
     echo "=========================================="
     echo "   ADMINISTRACION DE SISTEMAS - TAREA 10"
     echo "=========================================="
