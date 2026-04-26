@@ -38,6 +38,9 @@ while true; do
         2)
             preparar_entorno_docker
             ;;
+        3)
+            generar_archivos_configuracion
+            ;;
         0)
             echo "Saliendo del asistente. ¡Hasta luego!"
             exit 0
