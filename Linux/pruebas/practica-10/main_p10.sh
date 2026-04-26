@@ -1,9 +1,19 @@
 #!/bin/bash
 
+# ==========================================
+# VALIDACIÓN DE PRIVILEGIOS
+# ==========================================
+if [ "$EUID" -ne 0 ]; then
+    echo "ERROR: Este script gestiona infraestructura y requiere privilegios de administrador."
+    echo "Por favor, ejecútalo usando: sudo bash $0"
+    exit 1
+fi
+
 # Importar las funciones
 source ./funciones_p10.sh
 
 mostrar_menu() {
+    clear
     echo "=========================================="
     echo "   ADMINISTRACIÓN DE SISTEMAS - TAREA 10"
     echo "=========================================="
