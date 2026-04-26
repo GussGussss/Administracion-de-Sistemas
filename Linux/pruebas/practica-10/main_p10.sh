@@ -25,6 +25,7 @@ while true; do
     echo " Práctica 10: Virtualización Nativa y Contenedores"
     echo "=========================================================="
     echo "1. Validar e Instalar Dependencias (Docker, Compose)"
+    echo "2. Preparar Estructura de Carpetas y Red (infra_red)"
     echo ""
     echo "0. Salir del script"
     echo "=========================================================="
@@ -32,8 +33,10 @@ while true; do
 
     case $opcion in
         1)
-            clear
             instalar_dependencias
+            ;;
+        2)
+            preparar_entorno_docker
             ;;
         0)
             echo "Saliendo del asistente. ¡Hasta luego!"
