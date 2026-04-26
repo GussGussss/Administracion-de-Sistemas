@@ -188,21 +188,20 @@ EOF
     fi
 }
 
-# Funcion auxiliar para el comando run de la web
-lanzar_contenedor_web() {
-    echo "Iniciando contenedor web con limites de recursos..."
+# Funcion auxiliar para lanzar PostgreSQL (Corregida para Postgres 17/18+)
+lanzar_contenedor_db() {
+    echo "Iniciando contenedor PostgreSQL (Ajustado para version 18+)..."
     docker run -d \
-        --name web_server \
+        --name db_postgres \
         --network infra_red \
-        -p 80:8080 \
-        -v web_content:/www \
-        --cpus="0.5" \
+        -e POSTGRES_DB=$1 \
+        -e POSTGRES_USER=$2 \
+        -e POSTGRES_PASSWORD=$3 \
+        -v db_data:/var/lib/postgresql \
         --memory="512m" \
-        nginx_seguro:local
-        
-    # Copiar el index de prueba al volumen
-    docker cp web/index.html web_server:/www/index.html
-    echo "Servidor Web en linea y expuesto en el puerto 80 del host."
+        postgres:latest
+
+    echo "Base de datos PostgreSQL en linea (Red: infra_red, Puerto: 5432)."
 }
 
 # Funcion: Desplegar Base de Datos PostgreSQL
