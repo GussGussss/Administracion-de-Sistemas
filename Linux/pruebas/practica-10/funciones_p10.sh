@@ -309,8 +309,16 @@ menu_pruebas() {
                 
                 echo "3. Levantando el contenedor nuevamente y reconectando volumen..."
                 cd "$DIR_BASE" && docker compose up -d db
-                echo "Esperando 5 segundos a que el motor arranque..."
-                sleep 5
+                
+                echo "Esperando a que PostgreSQL termine su arranque seguro..."
+                # Bucle inteligente que pregunta a Postgres si ya está listo cada 2 segundos
+                for i in {1..15}; do
+                    if docker exec base_datos_p10 pg_isready -U admin >/dev/null 2>&1; then
+                        echo "  -> ¡Motor de base de datos 100% en linea!"
+                        break
+                    fi
+                    sleep 10
+                done
                 
                 echo "4. Consultando el ultimo registro insertado..."
                 docker exec base_datos_p10 psql -U admin -d base_practica -c "SELECT * FROM prueba_dinamica ORDER BY id DESC LIMIT 1;"
