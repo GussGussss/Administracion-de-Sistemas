@@ -280,12 +280,12 @@ menu_pruebas() {
     while true; do
         clear
         echo "=========================================================="
-        echo " Protocolo de Pruebas (Validación Práctica 10)"
+        echo " Protocolo de Pruebas Dinamico (Validación Práctica 10)"
         echo "=========================================================="
-        echo "1. Prueba 10.1 (Persistencia de BD)"
-        echo "2. Prueba 10.2 (Aislamiento y Resolución DNS en Red)"
-        echo "3. Prueba 10.3 (Permisos y Compartición FTP -> Web)"
-        echo "4. Prueba 10.4 (Límites de Recursos - RAM y CPU)"
+        echo "1. Prueba 10.1 (Persistencia con datos personalizados)"
+        echo "2. Prueba 10.2 (Ping de red con paquetes configurables)"
+        echo "3. Prueba 10.3 (Subida FTP de archivo personalizado)"
+        echo "4. Prueba 10.4 (Límites de Recursos en tiempo real)"
         echo ""
         echo "0. Volver al menú principal"
         echo "=========================================================="
@@ -296,18 +296,24 @@ menu_pruebas() {
                 echo "----------------------------------------"
                 echo " Ejecutando Prueba 10.1: Persistencia DB"
                 echo "----------------------------------------"
-                echo "1. Creando una tabla y un registro de prueba en PostgreSQL..."
-                docker exec base_datos_p10 psql -U admin -d base_practica -c "CREATE TABLE IF NOT EXISTS test_tabla (id serial, mensaje varchar(50)); INSERT INTO test_tabla (mensaje) VALUES ('Persistencia exitosa desde Los Mochis');"
+                read -p "Ingresa un mensaje personalizado para guardar en la BD: " mensaje_bd
                 
-                echo "2. Simulando desastre: Eliminando el contenedor de la BD a la fuerza..."
+                # Validacion: Si das Enter sin escribir nada, pone un valor por defecto
+                if [ -z "$mensaje_bd" ]; then mensaje_bd="Dato dinamico por defecto"; fi
+
+                echo "1. Creando tabla e insertando tu mensaje: '$mensaje_bd'..."
+                docker exec base_datos_p10 psql -U admin -d base_practica -c "CREATE TABLE IF NOT EXISTS prueba_dinamica (id serial, mensaje text); INSERT INTO prueba_dinamica (mensaje) VALUES ('$mensaje_bd');"
+                
+                echo "2. Simulando desastre: Eliminando el contenedor de la BD..."
                 docker rm -f base_datos_p10
                 
-                echo "3. Levantando el contenedor nuevamente..."
+                echo "3. Levantando el contenedor nuevamente y reconectando volumen..."
                 cd "$DIR_BASE" && docker compose up -d db
-                sleep 5 # Esperamos a que la BD inicie completamente
+                echo "Esperando 5 segundos a que el motor arranque..."
+                sleep 5
                 
-                echo "4. Consultando el registro de nuevo..."
-                docker exec base_datos_p10 psql -U admin -d base_practica -c "SELECT * FROM test_tabla;"
+                echo "4. Consultando el ultimo registro insertado..."
+                docker exec base_datos_p10 psql -U admin -d base_practica -c "SELECT * FROM prueba_dinamica ORDER BY id DESC LIMIT 1;"
                 echo "----------------------------------------"
                 read -p "Presiona Enter para continuar..."
                 ;;
@@ -315,46 +321,51 @@ menu_pruebas() {
                 echo "----------------------------------------"
                 echo " Ejecutando Prueba 10.2: Red y DNS"
                 echo "----------------------------------------"
-                echo "Haciendo ping desde el servidor_web_p10 hacia base_datos_p10..."
-                # Alpine incluye ping por defecto. Enviamos 3 paquetes.
-                docker exec servidor_web_p10 ping -c 3 base_datos_p10
+                read -p "Cuantos paquetes PING deseas enviar? (Ej. 4): " num_paquetes
+                
+                # Validacion: Si no metes un numero, asigna 3 por defecto
+                if ! [[ "$num_paquetes" =~ ^[0-9]+$ ]]; then num_paquetes=3; fi
+
+                echo "Haciendo ping ($num_paquetes paquetes) desde servidor_web_p10 hacia base_datos_p10..."
+                docker exec servidor_web_p10 ping -c $num_paquetes base_datos_p10
                 echo "----------------------------------------"
-                echo "Si ves respuesta de paquetes, la red 'infra_red' funciona perfectamente."
                 read -p "Presiona Enter para continuar..."
                 ;;
             3)
                 echo "----------------------------------------"
                 echo " Ejecutando Prueba 10.3: FTP hacia Nginx"
                 echo "----------------------------------------"
-                echo "1. Creando un archivo local simulado..."
-                echo "<h2>Este archivo fue subido por FTP y servido por Nginx</h2>" > /tmp/archivo_ftp.html
+                read -p "Ingresa el nombre del archivo a crear (ej. saludo.html): " nombre_archivo
+                if [ -z "$nombre_archivo" ]; then nombre_archivo="dinamico.html"; fi
                 
-                echo "2. Subiendo el archivo al servidor FTP (puerto 21) usando credenciales..."
-                # Usamos curl para subir el archivo vía FTP automatizadamente
-                curl -T /tmp/archivo_ftp.html ftp://adminftp:passwordftp@localhost/
+                read -p "Ingresa una frase para el contenido web: " frase_web
+                if [ -z "$frase_web" ]; then frase_web="Contenido autogenerado"; fi
+
+                echo "1. Creando archivo local /tmp/$nombre_archivo..."
+                echo "<h1>$frase_web</h1><p>Archivo: $nombre_archivo</p>" > "/tmp/$nombre_archivo"
                 
-                echo -e "\n3. Consultando el archivo a través del servidor Web (Nginx - puerto 80)..."
-                # Usamos curl para ver la web
-                curl http://localhost/archivo_ftp.html
+                echo "2. Subiendo $nombre_archivo por FTP..."
+                curl -T "/tmp/$nombre_archivo" ftp://adminftp:passwordftp@localhost/
+                
+                echo -e "\n3. Consultando el archivo servido por Nginx (puerto 80)..."
+                curl "http://localhost/$nombre_archivo"
                 echo -e "\n----------------------------------------"
-                echo "Si logras ver el <h2> arriba, el volumen compartido está funcionando."
                 read -p "Presiona Enter para continuar..."
                 ;;
             4)
                 echo "----------------------------------------"
-                echo " Ejecutando Prueba 10.4: Límites"
+                echo " Ejecutando Prueba 10.4: Limites de Recursos"
                 echo "----------------------------------------"
-                echo "Mostrando las estadísticas de Docker (Toma captura de pantalla de esto para tu evidencia):"
-                echo ""
+                echo "Leyendo estadisticas directamente del daemon de Docker en tiempo real..."
                 docker stats --no-stream
                 echo "----------------------------------------"
                 read -p "Presiona Enter para continuar..."
                 ;;
             0)
-                break # Rompe este sub-bucle y vuelve al main
+                break
                 ;;
             *)
-                echo "Opción no válida."
+                echo "Opcion no valida."
                 sleep 2
                 ;;
         esac
