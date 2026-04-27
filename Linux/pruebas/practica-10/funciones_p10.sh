@@ -294,34 +294,39 @@ menu_pruebas() {
         case $op_prueba in
             1)
                 echo "----------------------------------------"
-                echo " Ejecutando Prueba 10.1: Persistencia DB"
+                echo " Ejecutando Prueba 10.1: Persistencia Real"
                 echo "----------------------------------------"
-                read -p "Ingresa un mensaje personalizado para guardar en la BD: " mensaje_bd
-                
-                # Validacion: Si das Enter sin escribir nada, pone un valor por defecto
-                if [ -z "$mensaje_bd" ]; then mensaje_bd="Dato dinamico por defecto"; fi
+                # Le pedimos al usuario que cree su propia base de datos
+                read -p "Ingresa el nombre de la BASE DE DATOS a crear: " nombre_db
+                if [ -z "$nombre_db" ]; then nombre_db="db_prueba_$(date +%s)"; fi
 
-                echo "1. Creando tabla e insertando tu mensaje: '$mensaje_bd'..."
-                docker exec base_datos_p10 psql -U admin -d base_practica -c "CREATE TABLE IF NOT EXISTS prueba_dinamica (id serial, mensaje text); INSERT INTO prueba_dinamica (mensaje) VALUES ('$mensaje_bd');"
+                echo "1. Creando Base de Datos '$nombre_db' dentro de Postgres..."
+                # Usamos la BD por defecto 'postgres' para poder crear una nueva
+                docker exec base_datos_p10 psql -U admin -d postgres -c "CREATE DATABASE $nombre_db;"
                 
-                echo "2. Simulando desastre: Eliminando el contenedor de la BD..."
+                echo "2. Creando una tabla y registro dentro de '$nombre_db'..."
+                docker exec base_datos_p10 psql -U admin -d $nombre_db -c "CREATE TABLE persistencia (id serial, nota text); INSERT INTO persistencia (nota) VALUES ('Datos guardados en $nombre_db');"
+                
+                echo "3. Simulando desastre: Eliminando contenedor 'base_datos_p10'..."
                 docker rm -f base_datos_p10
                 
-                echo "3. Levantando el contenedor nuevamente y reconectando volumen..."
+                echo "4. Levantando un contenedor NUEVO con el mismo volumen..."
                 cd "$DIR_BASE" && docker compose up -d db
                 
-                echo "Esperando a que PostgreSQL termine su arranque seguro..."
-                # Bucle inteligente que pregunta a Postgres si ya está listo cada 2 segundos
+                echo "Esperando arranque del motor..."
                 for i in {1..15}; do
                     if docker exec base_datos_p10 pg_isready -U admin >/dev/null 2>&1; then
-                        echo "  -> ¡Motor de base de datos 100% en linea!"
                         break
                     fi
-                    sleep 10
+                    sleep 2
                 done
                 
-                echo "4. Consultando el ultimo registro insertado..."
-                docker exec base_datos_p10 psql -U admin -d base_practica -c "SELECT * FROM prueba_dinamica ORDER BY id DESC LIMIT 1;"
+                echo "5. Verificando si la base de datos '$nombre_db' sobrevivio..."
+                # Listamos las bases de datos para ver si existe la que creamos
+                docker exec base_datos_p10 psql -U admin -d postgres -l | grep "$nombre_db"
+                
+                echo -e "\n6. Consultando datos dentro de '$nombre_db'..."
+                docker exec base_datos_p10 psql -U admin -d $nombre_db -c "SELECT * FROM persistencia;"
                 echo "----------------------------------------"
                 read -p "Presiona Enter para continuar..."
                 ;;
