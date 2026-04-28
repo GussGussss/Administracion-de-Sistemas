@@ -28,12 +28,17 @@
         if (isset($_GET['practica']) && $_GET['practica'] == '1') {
             echo "<h3>Ejecutando Tarea 1...</h3>";
             
-            // Fíjate en la ruta: apunta directamente a tu script original en tu Home
-            $comando = "/home/srv-linux-sistemas/Administracion-de-Sistemas/Linux/Tarea-1-Entorno-de-Virtualizacion-e-infraestructura-Base/tarea1_diagnostico.sh";
+            // Ruta exacta al script. El " 2>&1" al final es MAGIA: captura los errores para mostrarlos en pantalla
+            $comando = "/home/srv-linux-sistemas/Administracion-de-Sistemas/Linux/Tarea-1-Entorno-de-Virtualizacion-e-infraestructura-Base/tarea1_diagnostico.sh 2>&1";
             
             // Ejecutamos el comando
             $salida = shell_exec($comando);
             
+            // Verificamos si PHP no pudo ejecutar nada en absoluto
+            if ($salida === null) {
+                $salida = "Error fatal de PHP: No se pudo invocar el script. Revisa la ruta.";
+            }
+
             echo "<div class='consola'>$salida</div>";
         } else {
             echo "<p>Selecciona una práctica del menú.</p>";
