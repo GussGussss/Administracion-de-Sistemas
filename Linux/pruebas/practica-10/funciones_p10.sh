@@ -278,7 +278,6 @@ EOF
 
 menu_pruebas() {
     while true; do
-        clear
         echo "=========================================================="
         echo " Protocolo de Pruebas Dinamico (Validación Práctica 10)"
         echo "=========================================================="
