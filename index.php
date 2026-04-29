@@ -29,7 +29,7 @@
             echo "<h3>Ejecutando Tarea 1...</h3>";
             
             // Ruta exacta al script. El " 2>&1" al final es MAGIA: captura los errores para mostrarlos en pantalla
-            $comando = "/home/srv-linux-sistemas/Administracion-de-Sistemas/Linux/Tarea-1-Entorno-de-Virtualizacion-e-infraestructura-Base/check_status.sh;
+            $comando = "/home/srv-linux-sistemas/Administracion-de-Sistemas/Linux/Tarea-1-Entorno-de-Virtualizacion-e-infraestructura-Base/check_status.sh";
             
             // Ejecutamos el comando
             $salida = shell_exec($comando);
