@@ -42,7 +42,7 @@ sudo setsebool -P httpd_unified 1
 sudo chcon -R -t httpd_sys_content_t /home/srv-linux-sistemas/Administracion-de-Sistemas
 
 # Asegurar que el script de diagnóstico tenga permisos de ejecución nativos
-sudo chmod +x /home/srv-linux-sistemas/Administracion-de-Sistemas/Linux/Tarea-1-Entorno-de-Virtualizacion-e-infraestructura-Base/tarea1_diagnostico.sh
+sudo chmod +x /home/srv-linux-sistemas/Administracion-de-Sistemas/Linux/Tarea-1-Entorno-de-Virtualizacion-e-infraestructura-Base/check_status.sh
 
 # Aplicar los cambios reiniciando el servicio web
 echo "Reiniciando el servicio web para aplicar las configuraciones..."
