@@ -408,6 +408,26 @@ menu(){
 
 }
 
+# ==========================================
+# MODO WEB (Integración con PHP)
+# ==========================================
+if [ -n "$1" ]; then
+    case $1 in
+        "estado") estado_dhcp_kea ;;
+        "leases") mexicanada ;;
+        "instalar") 
+            echo "Instalando KEA de forma desatendida..."
+            sudo dnf install -y kea > /dev/null 2>&1
+            echo "Instalación finalizada."
+            ;;
+        *) echo "Comando web no reconocido" ;;
+    esac
+    exit 0
+fi
+
+# ==========================================
+# MODO INTERACTIVO (Terminal original)
+# ==========================================
 while true; do
 	menu
 done
