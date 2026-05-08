@@ -18,6 +18,7 @@ while [ "$opcion" -ne 0 ]; do
     echo "------------------------------------------------"
     echo "1. Verificar e instalar dependencias"
     echo "2. Configurar infraestructura (Archivos YAML/ENV)"
+    echo "3. Desplegar servicios y aplicar Hardening"
     echo "0. Salir"
     echo "------------------------------------------------"
     read -p "Seleccione una opcion: " opcion
@@ -29,6 +30,9 @@ while [ "$opcion" -ne 0 ]; do
             ;;
         2)
             configurar_infraestructura
+            ;;
+        3)
+            desplegar_y_asegurar
             ;;
         0)
             echo "Saliendo del script..."
