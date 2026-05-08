@@ -25,7 +25,6 @@ verificar_instalar_paquete() {
 }
 
 preparar_entorno() {
-    clear
     echo "=== Preparación del Entorno ==="
     
     echo "[*] Verificando directorio de infraestructura externa..."
