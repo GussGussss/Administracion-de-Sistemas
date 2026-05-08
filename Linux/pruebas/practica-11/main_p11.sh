@@ -1,52 +1,44 @@
 #!/bin/bash
+# main_p11.sh
+# Controlador principal de la Práctica 11
+
+# Validación Estricta de Sudo/Root
+if [ "$EUID" -ne 0 ]; then
+    echo "ERROR CRÍTICO: Este script altera la infraestructura del sistema y gestiona contenedores."
+    echo "Debe ser ejecutado con privilegios de superusuario (root o sudo)."
+    exit 1
+fi
 
 # Importar funciones
 source ./funciones_p11.sh
 
-# Validacion de privilegios root
-if [ "$EUID" -ne 0 ]; then
-    echo "Error: Este script debe ejecutarse con privilegios de superusuario (sudo)."
-    exit 1
-fi
+# Bucle principal del menú interactivo
+while true; do
+    clear
+    echo "=========================================================="
+    echo " Administrador de Infraestructura - Práctica 11"
+    echo " Orquestación de Microservicios y Túneles"
+    echo "=========================================================="
+    echo " 1. Preparar Entorno e Instalar Dependencias"
+    echo " 2. Generar Archivos de Configuración (docker-compose y .env)"
+    echo " 3. Desplegar Infraestructura (Docker Compose Up)"
+    echo " 4. Protocolo de Pruebas Dinámicas"
+    echo " 0. Salir del sistema"
+    echo "=========================================================="
+    read -p "Seleccione una opción [0-4]: " opcion_principal
 
-opcion=-1
-
-while [ "$opcion" -ne 0 ]; do
-    echo "------------------------------------------------"
-    echo "  ADMINISTRACION DE SISTEMAS - PRACTICA 11"
-    echo "    ORQUESTACION Y TUNELES SEGUROS"
-    echo "------------------------------------------------"
-    echo "1. Verificar e instalar dependencias"
-    echo "2. Configurar infraestructura (Archivos YAML/ENV)"
-    echo "3. Desplegar servicios y aplicar Hardening"
-    echo "4. Ejecutar Protocolo de Pruebas (QA)"
-    echo "5. Mostrar comando para Tunel SSH de Gestion"
-    echo "0. Salir"
-    echo "------------------------------------------------"
-    read -p "Seleccione una opcion: " opcion
-
-    case $opcion in
-        1)
-            # Llamada a la funcion de verificacion de dependencias
-            verificar_dependencias
+    case $opcion_principal in
+        1) preparar_entorno ;;
+        2) echo "[!] Módulo de generación en construcción..." ; read -p "Presione ENTER..." ;;
+        3) echo "[!] Módulo de despliegue en construcción..." ; read -p "Presione ENTER..." ;;
+        4) submodo_pruebas ;;
+        0) 
+            echo "Finalizando operaciones. Hasta pronto."
+            exit 0 
             ;;
-        2)
-            configurar_infraestructura
-            ;;
-        3)
-            desplegar_y_asegurar
-            ;;
-        4)
-            menu_pruebas
-            ;;
-        5)
-            instrucciones_tunel
-            ;;
-        0)
-            echo "Saliendo del script..."
-            ;;
-        *)
-            echo "Opcion no valida."
+        *) 
+            echo "ERROR: Opción inválida. Seleccione un número del 0 al 4."
+            sleep 2
             ;;
     esac
 done
