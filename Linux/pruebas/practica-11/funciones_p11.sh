@@ -81,3 +81,108 @@ submodo_pruebas() {
         *) echo "[!] Prueba aún no implementada." ; read -p "Presione ENTER para continuar..." ;;
     esac
 }
+
+generar_archivos() {
+    echo "=== Generación de Archivos de Orquestación ==="
+    
+    # Validación de existencia para no sobrescribir sin permiso
+    if [ -f "$DIRECTORIO_INFRA/docker-compose.yml" ] || [ -f "$DIRECTORIO_INFRA/.env" ]; then
+        echo "[!] Los archivos de configuración ya existen en $DIRECTORIO_INFRA."
+        read -p "¿Desea sobrescribirlos y perder la configuración actual? (s/N): " resp_conf
+        if [[ ! "$resp_conf" =~ ^[sS]$ ]]; then
+            echo "[-] Omitiendo generación de archivos."
+            read -p "Presione ENTER para continuar..."
+            return
+        fi
+    fi
+
+    echo "[*] Generando archivo de variables de entorno (.env)..."
+    cat <<EOF > "$DIRECTORIO_INFRA/.env"
+# Credenciales de Base de Datos PostgreSQL
+POSTGRES_USER=admin_db
+POSTGRES_PASSWORD=SuperSecretPassword2026
+POSTGRES_DB=practica11_db
+
+# Credenciales de Administrador pgAdmin
+PGADMIN_DEFAULT_EMAIL=admin@practica11.local
+PGADMIN_DEFAULT_PASSWORD=AdminPassword2026
+EOF
+    chmod 600 "$DIRECTORIO_INFRA/.env" # Seguridad: solo root puede leer este archivo
+
+    echo "[*] Generando configuración de Nginx (Hardening)..."
+    mkdir -p "$DIRECTORIO_INFRA/nginx"
+    cat <<EOF > "$DIRECTORIO_INFRA/nginx/default.conf"
+server {
+    listen 80;
+    server_tokens off; # Ocultar cabeceras de versión del servidor
+
+    location / {
+        proxy_pass http://app_interna:80;
+    }
+}
+EOF
+
+    echo "[*] Generando archivo de orquestación docker-compose.yml..."
+    cat <<EOF > "$DIRECTORIO_INFRA/docker-compose.yml"
+version: '3.8'
+
+networks:
+  red_publica:
+    driver: bridge
+  red_datos:
+    driver: bridge
+    internal: true # Aislamiento total: sin salida a internet
+
+volumes:
+  db_data:
+
+services:
+  frontend:
+    image: nginx:alpine
+    container_name: nginx_balancer
+    restart: always
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - red_publica
+      - red_datos
+
+  app_server:
+    image: httpd:alpine
+    container_name: app_interna
+    restart: always
+    networks:
+      - red_datos
+
+  db:
+    image: postgres:15-alpine
+    container_name: postgres_db
+    restart: always
+    env_file: .env
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - red_datos
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \$\${POSTGRES_USER} -d \$\${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: servidor_pgadmin
+    restart: always
+    env_file: .env
+    networks:
+      - red_datos
+    depends_on:
+      db:
+        condition: service_healthy
+EOF
+
+    echo "[+] Archivos generados correctamente en $DIRECTORIO_INFRA."
+    read -p "Presione ENTER para continuar..."
+}
