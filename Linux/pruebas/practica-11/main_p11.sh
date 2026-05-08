@@ -19,6 +19,7 @@ while [ "$opcion" -ne 0 ]; do
     echo "1. Verificar e instalar dependencias"
     echo "2. Configurar infraestructura (Archivos YAML/ENV)"
     echo "3. Desplegar servicios y aplicar Hardening"
+    echo "4. Ejecutar Protocolo de Pruebas (QA)"
     echo "0. Salir"
     echo "------------------------------------------------"
     read -p "Seleccione una opcion: " opcion
@@ -33,6 +34,9 @@ while [ "$opcion" -ne 0 ]; do
             ;;
         3)
             desplegar_y_asegurar
+            ;;
+        4)
+            menu_pruebas
             ;;
         0)
             echo "Saliendo del script..."
