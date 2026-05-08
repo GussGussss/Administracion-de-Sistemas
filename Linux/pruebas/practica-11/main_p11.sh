@@ -1,28 +1,29 @@
 #!/bin/bash
 
 # Importar funciones
-source ./funciones_11.sh
+source ./funciones_p11.sh
 
-# REGLA 2: Validacion de privilegios de root
-if [[ $EUID -ne 0 ]]; then
-   echo "Error: Este script debe ejecutarse con privilegios de sudo."
-   exit 1
+# Validacion de privilegios root
+if [ "$EUID" -ne 0 ]; then
+    echo "Error: Este script debe ejecutarse con privilegios de superusuario (sudo)."
+    exit 1
 fi
 
 opcion=-1
 
 while [ "$opcion" -ne 0 ]; do
     echo "------------------------------------------------"
-    echo "  Administracion de Sistemas - Tarea 11"
-    echo "  Orquestacion y Tuneles Seguros"
-    echo "-----------------------------------------------"
-    echo "1. Instalar/Verificar dependencias (Docker & Compose)"
+    echo "  ADMINISTRACION DE SISTEMAS - PRACTICA 11"
+    echo "    ORQUESTACION Y TUNELES SEGUROS"
+    echo "------------------------------------------------"
+    echo "1. Verificar e instalar dependencias"
     echo "0. Salir"
-    echo "-----------------------------------------------"
+    echo "------------------------------------------------"
     read -p "Seleccione una opcion: " opcion
 
     case $opcion in
         1)
+            # Llamada a la funcion de verificacion de dependencias
             verificar_dependencias
             ;;
         0)
