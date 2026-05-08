@@ -25,7 +25,6 @@ verificar_instalar_paquete() {
 }
 
 preparar_entorno() {
-    clear
     echo "=== Preparación del Entorno ==="
     
     echo "[*] Verificando directorio de infraestructura externa..."
@@ -48,7 +47,6 @@ preparar_entorno() {
 }
 
 submodo_pruebas() {
-    clear
     echo "=== Protocolo de Pruebas Dinámicas ==="
     echo "1. Prueba 11.1: Validación de aislamiento de red"
     echo "2. Prueba 11.2: Validación de resolución interna DNS"
