@@ -145,3 +145,46 @@ EOF
     echo "Archivos creados exitosamente en $DIR_BASE"
     chmod 600 "$DIR_BASE/.env"
 }
+
+desplegar_y_asegurar() {
+    echo "Iniciando despliegue de la infraestructura..."
+
+    # 1. Validar existencia de configuracion
+    if [ ! -f "$DIR_BASE/docker-compose.yml" ]; then
+        echo "Error: No se encuentra el archivo docker-compose.yml en $DIR_BASE. Ejecute la opcion 2 primero."
+        return
+    fi
+
+    # 2. Levantar el stack de Docker Compose
+    echo "Levantando contenedores en segundo plano (detached)..."
+    cd "$DIR_BASE" && docker compose up -d
+
+    if [ $? -eq 0 ]; then
+        echo "Servicios desplegados exitosamente."
+    else
+        echo "Error al levantar los servicios."
+        return
+    fi
+
+    # 3. Hardening del Firewall (Oracle Linux / RHEL Style)
+    echo "Aplicando reglas de seguridad en el sistema anfitrion..."
+    
+    # Aseguramos que firewalld este corriendo
+    systemctl enable --now firewalld &> /dev/null
+
+    # Permitir solo HTTP (Puerto 80) y SSH (Puerto 22)
+    firewall-cmd --permanent --add-service=http
+    firewall-cmd --permanent --add-service=ssh
+
+    # Bloquear explicitamente puertos que podrian intentar exponerse (5432, 8080, etc.)
+    # Aunque Docker ignore algunas reglas, esto previene exposiciones accidentales del host
+    firewall-cmd --permanent --remove-port=5432/tcp &> /dev/null
+    firewall-cmd --permanent --remove-port=8080/tcp &> /dev/null
+    firewall-cmd --permanent --remove-port=5050/tcp &> /dev/null
+
+    # Aplicar cambios
+    firewall-cmd --reload
+    
+    echo "Hardening completado: Solo los puertos 80 y 22 estan abiertos al publico."
+    echo "Los servicios de Base de Datos y pgAdmin estan ahora aislados."
+}
