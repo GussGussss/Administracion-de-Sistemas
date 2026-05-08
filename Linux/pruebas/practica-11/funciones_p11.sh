@@ -25,6 +25,7 @@ verificar_instalar_paquete() {
 }
 
 preparar_entorno() {
+    clear
     echo "=== Preparación del Entorno ==="
     
     echo "[*] Verificando directorio de infraestructura externa..."
@@ -35,9 +36,29 @@ preparar_entorno() {
         echo "[-] El directorio $DIRECTORIO_INFRA ya existe. Omitiendo creación."
     fi
 
-    echo "[*] Verificando dependencias base (Docker y Docker Compose)..."
-    verificar_instalar_paquete "docker"
-    verificar_instalar_paquete "docker-compose-plugin" # Nombre estándar en repositorios RHEL/Oracle modernos
+    echo "[*] Verificando herramientas de gestión de repositorios..."
+    verificar_instalar_paquete "dnf-plugins-core"
+
+    echo "[*] Configurando repositorio oficial de Docker CE..."
+    if [ -f "/etc/yum.repos.d/docker-ce.repo" ]; then
+        echo "[!] El repositorio Docker CE ya existe en el sistema."
+        read -p "¿Desea forzar su descarga nuevamente? (s/N): " resp_repo
+        if [[ "$resp_repo" =~ ^[sS]$ ]]; then
+            echo "[+] Actualizando repositorio Docker CE..."
+            dnf config-manager --add-repo=https://download.docker.com/linux/centos/docker-ce.repo
+        else
+            echo "[-] Omitiendo descarga del repositorio para ahorrar datos."
+        fi
+    else
+        echo "[+] Añadiendo repositorio oficial de Docker CE..."
+        dnf config-manager --add-repo=https://download.docker.com/linux/centos/docker-ce.repo
+    fi
+
+    echo "[*] Verificando dependencias base (Motor Docker y Compose)..."
+    verificar_instalar_paquete "docker-ce"
+    verificar_instalar_paquete "docker-ce-cli"
+    verificar_instalar_paquete "containerd.io"
+    verificar_instalar_paquete "docker-compose-plugin"
 
     echo "[*] Asegurando que el demonio de Docker esté habilitado y en ejecución..."
     systemctl enable --now docker
