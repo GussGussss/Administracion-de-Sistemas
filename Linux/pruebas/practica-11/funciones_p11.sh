@@ -263,10 +263,35 @@ ejecutar_prueba_11_2() {
 }
 
 ejecutar_prueba_11_3() {
+    clear
     echo "--- Prueba 11.3: Validación de Túnel Cifrado de Gestión ---"
+    
+    # 1. Sincronización DNS de emergencia
+    # Volvemos a extraer la IP y actualizar /etc/hosts en caso de que un reinicio 
+    # previo (como la prueba 4) haya cambiado las IPs de los contenedores.
+    IP_PGADMIN=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' servidor_pgadmin 2>/dev/null | head -n 1)
+    if [ -n "$IP_PGADMIN" ]; then
+        sed -i '/servidor_pgadmin/d' /etc/hosts
+        echo "$IP_PGADMIN servidor_pgadmin" >> /etc/hosts
+    fi
+
+    # 2. Lógica de Autodetección de Entorno
+    # SUDO_USER contiene el nombre del usuario real que ejecutó el script con sudo
+    DEFAULT_USER=${SUDO_USER:-$USER}
+    
+    # Extraemos la IP IPv4 específicamente del adaptador enp0s3 (Red Puente)
+    DEFAULT_IP=$(ip -4 addr show enp0s3 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}')
+    DEFAULT_IP=${DEFAULT_IP:-"No_detectada"}
+
     echo "Para esta prueba, usted debe actuar desde su computadora FISICA (Windows 10 / Ubuntu)."
-    read -p "Ingrese su nombre de usuario en Oracle Linux (ej. root, alumno): " usr_ssh
-    read -p "Ingrese la IP de este servidor Oracle Linux: " ip_ssh
+    
+    # Solicitamos datos ofreciendo el valor por defecto (ENTER para aceptar)
+    read -p "Ingrese su nombre de usuario en Oracle Linux [Enter para usar '$DEFAULT_USER']: " usr_ssh
+    usr_ssh=${usr_ssh:-$DEFAULT_USER}
+
+    read -p "Ingrese la IP (Adaptador enp0s3) [Enter para usar '$DEFAULT_IP']: " ip_ssh
+    ip_ssh=${ip_ssh:-$DEFAULT_IP}
+
     echo "---------------------------------------------------"
     echo "PASO 1: Abra la terminal o CMD en su maquina fisica."
     echo "PASO 2: Ejecute exactamente el siguiente comando:"
@@ -277,7 +302,7 @@ ejecutar_prueba_11_3() {
     echo "PASO 4: Abra su navegador en Windows y entre a: http://localhost:8080"
     echo "---------------------------------------------------"
     echo "Debera ver la pantalla de inicio de sesion de pgAdmin."
-    echo "Credenciales definidas en su .env: admin@practica11.local / AdminPassword2026"
+    echo "Credenciales definidas en su .env: admin@practica11.com / AdminPassword2026"
     read -p "Presione ENTER una vez que haya validado el acceso en su navegador..."
 }
 
