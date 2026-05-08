@@ -313,7 +313,6 @@ ejecutar_prueba_11_4() {
 
 submodo_pruebas() {
     while true; do
-        clear
         echo "======================================"
         echo " Protocolo de Pruebas Dinámicas"
         echo "======================================"
