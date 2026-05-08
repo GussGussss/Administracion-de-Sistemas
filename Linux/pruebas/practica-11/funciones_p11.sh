@@ -234,3 +234,21 @@ menu_pruebas() {
         esac
     done
 }
+
+instrucciones_tunel() {
+    echo ""
+    echo ">>> GUIA DE ADMINISTRACION SEGURA (PRUEBA 11.3) <<<"
+    echo "Para acceder al panel pgAdmin (que esta oculto), ejecuta esto"
+    echo "desde la terminal de tu computadora CLIENTE (Windows/Ubuntu):"
+    echo ""
+    read -p "Cual es la IP de este servidor? " ip_serv
+    read -p "Cual es tu usuario de Linux en este servidor? " user_serv
+    echo ""
+    echo "COMANDO A EJECUTAR EN TU PC:"
+    echo "ssh -L 8080:pgadmin_panel:80 ${user_serv}@${ip_serv}"
+    echo ""
+    echo "Explicacion:"
+    echo "1. El puerto local 8080 de tu PC se conectara al puerto 80 del contenedor."
+    echo "2. Una vez ejecutado, abre tu navegador y entra a: http://localhost:8080"
+    echo "3. El trafico viajara cifrado por el puerto 22 (SSH)."
+}
