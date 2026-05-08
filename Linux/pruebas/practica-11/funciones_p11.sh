@@ -237,7 +237,7 @@ desplegar_infraestructura() {
 }
 
 ejecutar_prueba_11_1() {
-    clear
+
     echo "--- Prueba 11.1: Validación de Aislamiento de Red ---"
     echo "Vamos a simular un ataque externo intentando acceder a la base de datos."
     read -p "Ingrese la IP de este servidor Oracle Linux (o 'localhost' si prueba localmente): " ip_host
@@ -251,7 +251,6 @@ ejecutar_prueba_11_1() {
 }
 
 ejecutar_prueba_11_2() {
-    clear
     echo "--- Prueba 11.2: Validación de Resolución Interna DNS ---"
     echo "Demostraremos que Nginx puede encontrar a los otros contenedores por nombre."
     read -p "Ingrese el nombre del servicio a buscar (ej. db, app_server, pgadmin): " target_dns
@@ -264,7 +263,6 @@ ejecutar_prueba_11_2() {
 }
 
 ejecutar_prueba_11_3() {
-    clear
     echo "--- Prueba 11.3: Validación de Túnel Cifrado de Gestión ---"
     echo "Para esta prueba, usted debe actuar desde su computadora FISICA (Windows 10 / Ubuntu)."
     read -p "Ingrese su nombre de usuario en Oracle Linux (ej. root, alumno): " usr_ssh
@@ -299,7 +297,6 @@ ejecutar_prueba_11_4() {
     
     # Bucle de observación de 15 segundos para ver el cambio de estado
     for i in {1..15}; do
-        clear
         echo "Monitoreando estado (Intento $i/15). Observe la columna STATUS:"
         docker compose ps
         sleep 2
