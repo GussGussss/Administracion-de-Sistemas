@@ -284,7 +284,6 @@ ejecutar_prueba_11_3() {
 }
 
 ejecutar_prueba_11_4() {
-    clear
     echo "--- Prueba 11.4: Validación de Persistencia y Healthcheck ---"
     cd "$DIRECTORIO_INFRA" || return
     echo "[*] Simulando caida del sistema. Destruyendo contenedores actuales..."
