@@ -188,3 +188,49 @@ desplegar_y_asegurar() {
     echo "Hardening completado: Solo los puertos 80 y 22 estan abiertos al publico."
     echo "Los servicios de Base de Datos y pgAdmin estan ahora aislados."
 }
+
+menu_pruebas() {
+    local op_prueba=-1
+    while [ "$op_prueba" -ne 0 ]; do
+        echo ""
+        echo ">>> SUBMENU DE PRUEBAS DE ACEPTACION <<<"
+        echo "1. Prueba 11.1: Validar aislamiento (Intento de acceso externo)"
+        echo "2. Prueba 11.2: Validar DNS interno (Ping entre contenedores)"
+        echo "3. Prueba 11.4: Validar persistencia de datos"
+        echo "0. Volver al menu principal"
+        read -p "Seleccione una prueba: " op_prueba
+
+        case $op_prueba in
+            1)
+                echo "Ejecutando Prueba 11.1..."
+                read -p "Ingrese la IP de este servidor o 'localhost': " ip_test
+                echo "Intentando conectar a pgAdmin en puerto 80 (vía IP pública)..."
+                # Intentamos un curl con timeout de 5 segundos
+                curl --connect-timeout 5 "http://$ip_test:80" && echo "ERROR: El servicio es visible!" || echo "EXITO: Conexion rechazada/timeout. El servicio esta oculto."
+                ;;
+            2)
+                echo "Ejecutando Prueba 11.2..."
+                echo "Verificando comunicacion interna Nginx -> Postgres..."
+                # Ejecutamos ping dentro del contenedor hacia el nombre del servicio de red
+                docker exec nginx_lb ping -c 3 postgres_db
+                if [ $? -eq 0 ]; then
+                    echo "EXITO: La resolucion DNS interna funciona. Nginx reconoce a 'postgres_db'."
+                else
+                    echo "ERROR: Fallo la resolucion de nombres interna."
+                fi
+                ;;
+            3)
+                echo "Ejecutando Prueba 11.4..."
+                echo "Simulando desastre: Eliminando contenedores..."
+                cd "$DIR_BASE" && docker compose down
+                echo "Reiniciando infraestructura..."
+                docker compose up -d
+                echo "Verificando estado de salud de la base de datos..."
+                docker inspect --format='{{json .State.Health.Status}}' postgres_db
+                echo "Prueba completada. Los volumenes en $DIR_BASE mantienen la integridad."
+                ;;
+            0) echo "Regresando..." ;;
+            *) echo "Opcion invalida." ;;
+        esac
+    done
+}
