@@ -29,7 +29,7 @@ while true; do
     case $opcion_principal in
         1) preparar_entorno ;;
         2) generar_archivos ;;
-        3) echo "[!] Módulo de despliegue en construcción..." ; read -p "Presione ENTER..." ;;
+        3) desplegar_infraestructura ;;
         4) submodo_pruebas ;;
         0) 
             echo "Finalizando operaciones. Hasta pronto."
