@@ -20,6 +20,7 @@ while [ "$opcion" -ne 0 ]; do
     echo "2. Configurar infraestructura (Archivos YAML/ENV)"
     echo "3. Desplegar servicios y aplicar Hardening"
     echo "4. Ejecutar Protocolo de Pruebas (QA)"
+    echo "5. Mostrar comando para Tunel SSH de Gestion"
     echo "0. Salir"
     echo "------------------------------------------------"
     read -p "Seleccione una opcion: " opcion
@@ -37,6 +38,9 @@ while [ "$opcion" -ne 0 ]; do
             ;;
         4)
             menu_pruebas
+            ;;
+        5)
+            instrucciones_tunel
             ;;
         0)
             echo "Saliendo del script..."
