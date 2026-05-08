@@ -17,6 +17,7 @@ while [ "$opcion" -ne 0 ]; do
     echo "    ORQUESTACION Y TUNELES SEGUROS"
     echo "------------------------------------------------"
     echo "1. Verificar e instalar dependencias"
+    echo "2. Configurar infraestructura (Archivos YAML/ENV)"
     echo "0. Salir"
     echo "------------------------------------------------"
     read -p "Seleccione una opcion: " opcion
@@ -25,6 +26,9 @@ while [ "$opcion" -ne 0 ]; do
         1)
             # Llamada a la funcion de verificacion de dependencias
             verificar_dependencias
+            ;;
+        2)
+            configurar_infraestructura
             ;;
         0)
             echo "Saliendo del script..."
