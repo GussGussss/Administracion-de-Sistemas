@@ -235,3 +235,104 @@ desplegar_infraestructura() {
     echo "======================================"
     read -p "Presione ENTER para continuar..."
 }
+
+ejecutar_prueba_11_1() {
+    clear
+    echo "--- Prueba 11.1: Validación de Aislamiento de Red ---"
+    echo "Vamos a simular un ataque externo intentando acceder a la base de datos."
+    read -p "Ingrese la IP de este servidor Oracle Linux (o 'localhost' si prueba localmente): " ip_host
+    echo "[*] Ejecutando: curl --connect-timeout 5 -v telnet://$ip_host:5432"
+    echo "[!] Resultado esperado: Connection timed out o Connection refused."
+    echo "---------------------------------------------------"
+    curl --connect-timeout 5 -v telnet://"$ip_host":5432
+    echo "---------------------------------------------------"
+    echo "Si la conexion fallo, el aislamiento es EXITOSO. Nadie puede ver su BD."
+    read -p "Presione ENTER para continuar..."
+}
+
+ejecutar_prueba_11_2() {
+    clear
+    echo "--- Prueba 11.2: Validación de Resolución Interna DNS ---"
+    echo "Demostraremos que Nginx puede encontrar a los otros contenedores por nombre."
+    read -p "Ingrese el nombre del servicio a buscar (ej. db, app_server, pgadmin): " target_dns
+    echo "[*] Ejecutando ping desde el contenedor nginx_balancer hacia '$target_dns'..."
+    echo "---------------------------------------------------"
+    docker exec nginx_balancer ping -c 4 "$target_dns"
+    echo "---------------------------------------------------"
+    echo "Si hubo respuesta (0% packet loss), el DNS de Docker es EXITOSO."
+    read -p "Presione ENTER para continuar..."
+}
+
+ejecutar_prueba_11_3() {
+    clear
+    echo "--- Prueba 11.3: Validación de Túnel Cifrado de Gestión ---"
+    echo "Para esta prueba, usted debe actuar desde su computadora FISICA (Windows 10 / Ubuntu)."
+    read -p "Ingrese su nombre de usuario en Oracle Linux (ej. root, alumno): " usr_ssh
+    read -p "Ingrese la IP de este servidor Oracle Linux: " ip_ssh
+    echo "---------------------------------------------------"
+    echo "PASO 1: Abra la terminal o CMD en su maquina fisica."
+    echo "PASO 2: Ejecute exactamente el siguiente comando:"
+    echo ""
+    echo "    ssh -L 8080:servidor_pgadmin:80 $usr_ssh@$ip_ssh"
+    echo ""
+    echo "PASO 3: Inicie sesion con su contrasena."
+    echo "PASO 4: Abra su navegador en Windows y entre a: http://localhost:8080"
+    echo "---------------------------------------------------"
+    echo "Debera ver la pantalla de inicio de sesion de pgAdmin."
+    echo "Credenciales definidas en su .env: admin@practica11.local / AdminPassword2026"
+    read -p "Presione ENTER una vez que haya validado el acceso en su navegador..."
+}
+
+ejecutar_prueba_11_4() {
+    clear
+    echo "--- Prueba 11.4: Validación de Persistencia y Healthcheck ---"
+    cd "$DIRECTORIO_INFRA" || return
+    echo "[*] Simulando caida del sistema. Destruyendo contenedores actuales..."
+    docker compose down
+    echo "[*] Sistema abajo. Comprobando estado:"
+    docker compose ps
+    echo "---------------------------------------------------"
+    read -p "Presione ENTER para iniciar la recuperacion del sistema..."
+    
+    echo "[*] Levantando infraestructura nuevamente..."
+    docker compose up -d
+    echo "[*] Observando el orden de arranque (verifique que pgadmin espere a que db sea 'healthy')..."
+    
+    # Bucle de observación de 15 segundos para ver el cambio de estado
+    for i in {1..15}; do
+        clear
+        echo "Monitoreando estado (Intento $i/15). Observe la columna STATUS:"
+        docker compose ps
+        sleep 2
+    done
+    
+    echo "---------------------------------------------------"
+    echo "Recuperacion finalizada. Si pgadmin esta 'Up', el Healthcheck funciono."
+    echo "Los datos de su base de datos siguen intactos gracias al volumen persistente."
+    read -p "Presione ENTER para continuar..."
+}
+
+submodo_pruebas() {
+    while true; do
+        clear
+        echo "======================================"
+        echo " Protocolo de Pruebas Dinámicas"
+        echo "======================================"
+        echo " 1. Prueba 11.1: Aislamiento de red (curl)"
+        echo " 2. Prueba 11.2: Resolución DNS interna (ping)"
+        echo " 3. Prueba 11.3: Túnel cifrado de gestión (ssh -L)"
+        echo " 4. Prueba 11.4: Persistencia y Healthcheck (down/up)"
+        echo " 0. Regresar al menú principal"
+        echo "======================================"
+        read -p "Seleccione una prueba a ejecutar [0-4]: " opcion_prueba
+
+        case $opcion_prueba in
+            1) ejecutar_prueba_11_1 ;;
+            2) ejecutar_prueba_11_2 ;;
+            3) ejecutar_prueba_11_3 ;;
+            4) ejecutar_prueba_11_4 ;;
+            0) break ;;
+            *) echo "[-] Opción inválida." ; sleep 2 ;;
+        esac
+    done
+}
