@@ -186,3 +186,52 @@ EOF
     echo "[+] Archivos generados correctamente en $DIRECTORIO_INFRA."
     read -p "Presione ENTER para continuar..."
 }
+
+desplegar_infraestructura() {
+    echo "=== Despliegue de Infraestructura ==="
+    
+    if [ ! -f "$DIRECTORIO_INFRA/docker-compose.yml" ]; then
+        echo "[!] No se encontró el archivo de orquestación. Ejecute la Opción 2 primero."
+        read -p "Presione ENTER para continuar..."
+        return
+    fi
+
+    cd "$DIRECTORIO_INFRA" || return
+
+    echo "[*] Verificando estado de las imágenes locales..."
+    # Lógica de Ahorro de Datos: Preguntar antes de descargar/actualizar
+    read -p "¿Desea forzar la búsqueda y descarga de actualizaciones de imágenes desde internet? (s/N): " resp_pull
+    if [[ "$resp_pull" =~ ^[sS]$ ]]; then
+        echo "[+] Conectando a los repositorios para actualizar imágenes..."
+        docker compose pull
+    else
+        echo "[-] Omitiendo actualización de imágenes. Se utilizará la caché local para ahorrar datos."
+    fi
+
+    echo "[*] Levantando los servicios en segundo plano..."
+    docker compose up -d
+
+    echo "[*] Esperando la inicialización y Healthchecks (10 segundos)..."
+    sleep 10
+
+    echo "[*] Configurando resolución DNS a nivel de Sistema Operativo para el túnel SSH..."
+    # Extraer la IP dinámica del contenedor pgadmin usando inspección de Docker
+    IP_PGADMIN=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' servidor_pgadmin 2>/dev/null | head -n 1)
+    
+    if [ -n "$IP_PGADMIN" ]; then
+        # Limpiar cualquier entrada previa para evitar conflictos
+        sed -i '/servidor_pgadmin/d' /etc/hosts
+        
+        # Inyectar la nueva IP para que el demonio SSH pueda resolver el nombre
+        echo "$IP_PGADMIN servidor_pgadmin" >> /etc/hosts
+        echo "[+] Resolución SSH configurada: 'servidor_pgadmin' apunta a la IP interna $IP_PGADMIN."
+    else
+        echo "[-] Advertencia: No se pudo obtener la IP de servidor_pgadmin. Es posible que el contenedor aún no esté listo."
+    fi
+
+    echo "[+] Despliegue finalizado."
+    echo "Servicios activos en este momento:"
+    docker compose ps
+    echo "======================================"
+    read -p "Presione ENTER para continuar..."
+}
