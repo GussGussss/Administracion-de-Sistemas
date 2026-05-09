@@ -1,141 +1,75 @@
 #!/bin/bash
 # funciones_p11.sh
-# Lógica de soporte para la Práctica 11
+# Lógica de soporte para la Práctica 11 (Versión Definitiva)
 
 DIRECTORIO_INFRA="/opt/practica11"
 
-# Función crítica: Verifica si un paquete existe antes de intentar descargarlo
 verificar_instalar_paquete() {
     local paquete=$1
-    
-    # Verificamos si el paquete ya está instalado
     if rpm -q "$paquete" &> /dev/null; then
-        echo "[!] El paquete '$paquete' ya se encuentra instalado en el sistema."
-        read -p "¿Desea forzar su descarga y reinstalación desde internet? (s/N): " respuesta
+        echo "[!] El paquete '$paquete' ya se encuentra instalado."
+        read -p "¿Desea forzar su descarga y reinstalación? (s/N): " respuesta
         if [[ "$respuesta" =~ ^[sS]$ ]]; then
-            echo "[+] Forzando reinstalación de $paquete..."
             dnf reinstall -y "$paquete"
-        else
-            echo "[-] Omitiendo instalación de $paquete para ahorrar datos."
         fi
     else
-        echo "[+] El paquete '$paquete' no existe. Descargando e instalando..."
+        echo "[+] Descargando e instalando '$paquete'..."
         dnf install -y "$paquete"
     fi
 }
 
 preparar_entorno() {
+    clear
     echo "=== Preparación del Entorno ==="
+    mkdir -p "$DIRECTORIO_INFRA"
     
-    echo "[*] Verificando directorio de infraestructura externa..."
-    if [ ! -d "$DIRECTORIO_INFRA" ]; then
-        mkdir -p "$DIRECTORIO_INFRA"
-        echo "[+] Directorio $DIRECTORIO_INFRA creado exitosamente."
-    else
-        echo "[-] El directorio $DIRECTORIO_INFRA ya existe. Omitiendo creación."
-    fi
-
-    echo "[*] Verificando herramientas de gestión de repositorios..."
     verificar_instalar_paquete "dnf-plugins-core"
-
-    echo "[*] Configurando repositorio oficial de Docker CE..."
-    if [ -f "/etc/yum.repos.d/docker-ce.repo" ]; then
-        echo "[!] El repositorio Docker CE ya existe en el sistema."
-        read -p "¿Desea forzar su descarga nuevamente? (s/N): " resp_repo
-        if [[ "$resp_repo" =~ ^[sS]$ ]]; then
-            echo "[+] Actualizando repositorio Docker CE..."
-            dnf config-manager --add-repo=https://download.docker.com/linux/centos/docker-ce.repo
-        else
-            echo "[-] Omitiendo descarga del repositorio para ahorrar datos."
-        fi
-    else
-        echo "[+] Añadiendo repositorio oficial de Docker CE..."
+    if [ ! -f "/etc/yum.repos.d/docker-ce.repo" ]; then
         dnf config-manager --add-repo=https://download.docker.com/linux/centos/docker-ce.repo
     fi
 
-    echo "[*] Verificando dependencias base (Motor Docker y Compose)..."
     verificar_instalar_paquete "docker-ce"
     verificar_instalar_paquete "docker-ce-cli"
     verificar_instalar_paquete "containerd.io"
     verificar_instalar_paquete "docker-compose-plugin"
 
-    echo "[*] Asegurando que el demonio de Docker esté habilitado y en ejecución..."
     systemctl enable --now docker
-
-    echo "[+] Preparación de entorno finalizada."
+    echo "[+] Preparación finalizada."
     read -p "Presione ENTER para continuar..."
 }
 
-submodo_pruebas() {
-    echo "=== Protocolo de Pruebas Dinámicas ==="
-    echo "1. Prueba 11.1: Validación de aislamiento de red"
-    echo "2. Prueba 11.2: Validación de resolución interna DNS"
-    echo "3. Prueba 11.3: Validación de túnel cifrado de gestión"
-    echo "4. Prueba 11.4: Validación de persistencia y healthcheck"
-    echo "0. Regresar al menú principal"
-    echo "======================================"
-    read -p "Seleccione una prueba a ejecutar: " opcion_prueba
-
-    case $opcion_prueba in
-        0) return ;;
-        *) echo "[!] Prueba aún no implementada." ; read -p "Presione ENTER para continuar..." ;;
-    esac
-}
-
 generar_archivos() {
+    clear
     echo "=== Generación de Archivos de Orquestación ==="
     
-    # Validación de existencia para no sobrescribir sin permiso
-    if [ -f "$DIRECTORIO_INFRA/docker-compose.yml" ] || [ -f "$DIRECTORIO_INFRA/.env" ]; then
-        echo "[!] Los archivos de configuración ya existen en $DIRECTORIO_INFRA."
-        read -p "¿Desea sobrescribirlos y perder la configuración actual? (s/N): " resp_conf
-        if [[ ! "$resp_conf" =~ ^[sS]$ ]]; then
-            echo "[-] Omitiendo generación de archivos."
-            read -p "Presione ENTER para continuar..."
-            return
-        fi
-    fi
-
-    echo "[*] Generando archivo de variables de entorno (.env)..."
     cat <<EOF > "$DIRECTORIO_INFRA/.env"
-# Credenciales de Base de Datos PostgreSQL
 POSTGRES_USER=admin_db
 POSTGRES_PASSWORD=SuperSecretPassword2026
 POSTGRES_DB=practica11_db
-
-# Credenciales de Administrador pgAdmin
-PGADMIN_DEFAULT_EMAIL=admin@practica11.local
+PGADMIN_DEFAULT_EMAIL=admin@practica11.com
 PGADMIN_DEFAULT_PASSWORD=AdminPassword2026
 EOF
-    chmod 600 "$DIRECTORIO_INFRA/.env" # Seguridad: solo root puede leer este archivo
+    chmod 600 "$DIRECTORIO_INFRA/.env"
 
-    echo "[*] Generando configuración de Nginx (Hardening)..."
     mkdir -p "$DIRECTORIO_INFRA/nginx"
     cat <<EOF > "$DIRECTORIO_INFRA/nginx/default.conf"
 server {
     listen 80;
-    server_tokens off; # Ocultar cabeceras de versión del servidor
-
-    location / {
-        proxy_pass http://app_interna:80;
-    }
+    server_tokens off;
+    location / { proxy_pass http://app_interna:80; }
 }
 EOF
 
-    echo "[*] Generando archivo de orquestación docker-compose.yml..."
+    # Se eliminó "internal: true" de red_datos para permitir enrutamiento del anfitrión
     cat <<EOF > "$DIRECTORIO_INFRA/docker-compose.yml"
 version: '3.8'
-
 networks:
   red_publica:
     driver: bridge
   red_datos:
     driver: bridge
-    internal: true # Aislamiento total: sin salida a internet
-
 volumes:
   db_data:
-
 services:
   frontend:
     image: nginx:alpine
@@ -148,14 +82,12 @@ services:
     networks:
       - red_publica
       - red_datos
-
   app_server:
     image: httpd:alpine
     container_name: app_interna
     restart: always
     networks:
       - red_datos
-
   db:
     image: postgres:15-alpine
     container_name: postgres_db
@@ -170,7 +102,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
   pgadmin:
     image: dpage/pgadmin4
     container_name: servidor_pgadmin
@@ -182,110 +113,88 @@ services:
       db:
         condition: service_healthy
 EOF
-
-    echo "[+] Archivos generados correctamente en $DIRECTORIO_INFRA."
+    echo "[+] Archivos generados en $DIRECTORIO_INFRA."
     read -p "Presione ENTER para continuar..."
 }
 
+# Helper crítico: Actualiza DNS preservando el contexto SELinux
+actualizar_resolucion_dns() {
+    local target_ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' servidor_pgadmin 2>/dev/null | head -n 1)
+    if [ -n "$target_ip" ]; then
+        grep -v "servidor_pgadmin" /etc/hosts > /tmp/hosts.tmp
+        echo "$target_ip servidor_pgadmin" >> /tmp/hosts.tmp
+        cat /tmp/hosts.tmp > /etc/hosts
+        rm -f /tmp/hosts.tmp
+        # Restaurar contexto SELinux para que SSHD pueda leerlo
+        restorecon -v /etc/hosts >/dev/null 2>&1 || true
+        export IP_PGADMIN_DETECTADA="$target_ip"
+    fi
+}
+
 desplegar_infraestructura() {
-    echo "=== Despliegue de Infraestructura ==="
-    
-    if [ ! -f "$DIRECTORIO_INFRA/docker-compose.yml" ]; then
-        echo "[!] No se encontró el archivo de orquestación. Ejecute la Opción 2 primero."
-        read -p "Presione ENTER para continuar..."
-        return
-    fi
-
+    clear
     cd "$DIRECTORIO_INFRA" || return
-
-    echo "[*] Verificando estado de las imágenes locales..."
-    # Lógica de Ahorro de Datos: Preguntar antes de descargar/actualizar
-    read -p "¿Desea forzar la búsqueda y descarga de actualizaciones de imágenes desde internet? (s/N): " resp_pull
-    if [[ "$resp_pull" =~ ^[sS]$ ]]; then
-        echo "[+] Conectando a los repositorios para actualizar imágenes..."
-        docker compose pull
-    else
-        echo "[-] Omitiendo actualización de imágenes. Se utilizará la caché local para ahorrar datos."
-    fi
-
-    echo "[*] Levantando los servicios en segundo plano..."
     docker compose up -d
-
-    echo "[*] Esperando la inicialización y Healthchecks (10 segundos)..."
+    echo "[*] Esperando inicialización (10s)..."
     sleep 10
-
-    echo "[*] Configurando resolución DNS a nivel de Sistema Operativo para el túnel SSH..."
-    # Extraer la IP dinámica del contenedor pgadmin usando inspección de Docker
-    IP_PGADMIN=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' servidor_pgadmin 2>/dev/null | head -n 1)
-    
-    if [ -n "$IP_PGADMIN" ]; then
-        # Limpiar cualquier entrada previa para evitar conflictos
-        sed -i '/servidor_pgadmin/d' /etc/hosts
-        
-        # Inyectar la nueva IP para que el demonio SSH pueda resolver el nombre
-        echo "$IP_PGADMIN servidor_pgadmin" >> /etc/hosts
-        echo "[+] Resolución SSH configurada: 'servidor_pgadmin' apunta a la IP interna $IP_PGADMIN."
-    else
-        echo "[-] Advertencia: No se pudo obtener la IP de servidor_pgadmin. Es posible que el contenedor aún no esté listo."
-    fi
-
+    actualizar_resolucion_dns
     echo "[+] Despliegue finalizado."
-    echo "Servicios activos en este momento:"
-    docker compose ps
-    echo "======================================"
     read -p "Presione ENTER para continuar..."
 }
 
 ejecutar_prueba_11_1() {
-
-    echo "--- Prueba 11.1: Validación de Aislamiento de Red ---"
-    echo "Vamos a simular un ataque externo intentando acceder a la base de datos."
-    read -p "Ingrese la IP de este servidor Oracle Linux (o 'localhost' si prueba localmente): " ip_host
-    echo "[*] Ejecutando: curl --connect-timeout 5 -v telnet://$ip_host:5432"
-    echo "[!] Resultado esperado: Connection timed out o Connection refused."
-    echo "---------------------------------------------------"
+    clear
+    read -p "Ingrese la IP de Oracle Linux: " ip_host
     curl --connect-timeout 5 -v telnet://"$ip_host":5432
-    echo "---------------------------------------------------"
-    echo "Si la conexion fallo, el aislamiento es EXITOSO. Nadie puede ver su BD."
     read -p "Presione ENTER para continuar..."
 }
 
 ejecutar_prueba_11_2() {
-    echo "--- Prueba 11.2: Validación de Resolución Interna DNS ---"
-    echo "Demostraremos que Nginx puede encontrar a los otros contenedores por nombre."
-    read -p "Ingrese el nombre del servicio a buscar (ej. db, app_server, pgadmin): " target_dns
-    echo "[*] Ejecutando ping desde el contenedor nginx_balancer hacia '$target_dns'..."
-    echo "---------------------------------------------------"
+    clear
+    read -p "Ingrese nombre del servicio (ej. db): " target_dns
     docker exec nginx_balancer ping -c 4 "$target_dns"
-    echo "---------------------------------------------------"
-    echo "Si hubo respuesta (0% packet loss), el DNS de Docker es EXITOSO."
     read -p "Presione ENTER para continuar..."
 }
 
 ejecutar_prueba_11_3() {
+    clear
     echo "--- Prueba 11.3: Validación de Túnel Cifrado de Gestión ---"
     
-    # 1. Sincronización DNS de emergencia
-    # Volvemos a extraer la IP y actualizar /etc/hosts en caso de que un reinicio 
-    # previo (como la prueba 4) haya cambiado las IPs de los contenedores.
+    echo "[*] Diagnosticando estado de red del contenedor..."
+    # 1. Extracción ultra-robusta de IP
     IP_PGADMIN=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' servidor_pgadmin 2>/dev/null | head -n 1)
-    if [ -n "$IP_PGADMIN" ]; then
-        sed -i '/servidor_pgadmin/d' /etc/hosts
-        echo "$IP_PGADMIN servidor_pgadmin" >> /etc/hosts
+    
+    if [ -z "$IP_PGADMIN" ]; then
+        echo "[-] ERROR CRÍTICO: La IP está vacía. El contenedor 'servidor_pgadmin' no está corriendo o falló."
+        echo "Estado actual del contenedor:"
+        docker ps -a -f name=servidor_pgadmin
+        read -p "Presione ENTER para regresar al menú..."
+        return
     fi
 
-    # 2. Lógica de Autodetección de Entorno
-    # SUDO_USER contiene el nombre del usuario real que ejecutó el script con sudo
-    DEFAULT_USER=${SUDO_USER:-$USER}
-    
-    # Extraemos la IP IPv4 específicamente del adaptador enp0s3 (Red Puente)
-    DEFAULT_IP=$(ip -4 addr show enp0s3 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}')
-    DEFAULT_IP=${DEFAULT_IP:-"No_detectada"}
+    echo "[+] Contenedor detectado. IP interna: $IP_PGADMIN"
 
-    echo "Para esta prueba, usted debe actuar desde su computadora FISICA (Windows 10 / Ubuntu)."
+    # 2. Inyección segura en /etc/hosts (Mitigación del bug de EOF)
+    echo "[*] Sincronizando tabla de enrutamiento DNS del anfitrión..."
+    sed -i '/servidor_pgadmin/d' /etc/hosts
     
-    # Solicitamos datos ofreciendo el valor por defecto (ENTER para aceptar)
-    read -p "Ingrese su nombre de usuario en Oracle Linux [Enter para usar '$DEFAULT_USER']: " usr_ssh
+    # Truco de Bash: Asegurar que el archivo termina en un salto de línea antes de añadir texto
+    tail -c1 /etc/hosts | read -r _ || echo >> /etc/hosts
+    
+    # Inyectar la variable de forma limpia
+    echo "$IP_PGADMIN servidor_pgadmin" >> /etc/hosts
+    
+    # Imprimir la última línea de /etc/hosts para validar visualmente que no hay corrupción
+    echo "[+] Verificación de inyección en /etc/hosts:"
+    tail -n 1 /etc/hosts
+
+    # 3. Lógica de Autodetección
+    DEFAULT_USER=${SUDO_USER:-$USER}
+    DEFAULT_IP=$(ip -4 addr show enp0s3 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -n 1)
+    DEFAULT_IP=${DEFAULT_IP:-"192.168.1.15"} # Respaldo en caso de fallo de detección
+
+    echo "---------------------------------------------------"
+    read -p "Ingrese su usuario en Oracle Linux [Enter para usar '$DEFAULT_USER']: " usr_ssh
     usr_ssh=${usr_ssh:-$DEFAULT_USER}
 
     read -p "Ingrese la IP (Adaptador enp0s3) [Enter para usar '$DEFAULT_IP']: " ip_ssh
@@ -300,58 +209,25 @@ ejecutar_prueba_11_3() {
     echo "PASO 3: Inicie sesion con su contrasena."
     echo "PASO 4: Abra su navegador en Windows y entre a: http://localhost:8080"
     echo "---------------------------------------------------"
-    echo "Debera ver la pantalla de inicio de sesion de pgAdmin."
     echo "Credenciales definidas en su .env: admin@practica11.com / AdminPassword2026"
     read -p "Presione ENTER una vez que haya validado el acceso en su navegador..."
 }
 
-ejecutar_prueba_11_4() {
-    echo "--- Prueba 11.4: Validación de Persistencia y Healthcheck ---"
-    cd "$DIRECTORIO_INFRA" || return
-    echo "[*] Simulando caida del sistema. Destruyendo contenedores actuales..."
-    docker compose down
-    echo "[*] Sistema abajo. Comprobando estado:"
-    docker compose ps
-    echo "---------------------------------------------------"
-    read -p "Presione ENTER para iniciar la recuperacion del sistema..."
-    
-    echo "[*] Levantando infraestructura nuevamente..."
-    docker compose up -d
-    echo "[*] Observando el orden de arranque (verifique que pgadmin espere a que db sea 'healthy')..."
-    
-    # Bucle de observación de 15 segundos para ver el cambio de estado
-    for i in {1..15}; do
-        echo "Monitoreando estado (Intento $i/15). Observe la columna STATUS:"
-        docker compose ps
-        sleep 2
-    done
-    
-    echo "---------------------------------------------------"
-    echo "Recuperacion finalizada. Si pgadmin esta 'Up', el Healthcheck funciono."
-    echo "Los datos de su base de datos siguen intactos gracias al volumen persistente."
-    read -p "Presione ENTER para continuar..."
-}
-
 submodo_pruebas() {
     while true; do
-        echo "======================================"
-        echo " Protocolo de Pruebas Dinámicas"
-        echo "======================================"
-        echo " 1. Prueba 11.1: Aislamiento de red (curl)"
-        echo " 2. Prueba 11.2: Resolución DNS interna (ping)"
-        echo " 3. Prueba 11.3: Túnel cifrado de gestión (ssh -L)"
-        echo " 4. Prueba 11.4: Persistencia y Healthcheck (down/up)"
-        echo " 0. Regresar al menú principal"
-        echo "======================================"
-        read -p "Seleccione una prueba a ejecutar [0-4]: " opcion_prueba
-
-        case $opcion_prueba in
+        clear
+        echo " 1. Prueba 11.1: Aislamiento (curl)"
+        echo " 2. Prueba 11.2: DNS interna (ping)"
+        echo " 3. Prueba 11.3: Túnel cifrado (ssh -L)"
+        echo " 4. Prueba 11.4: Persistencia (down/up)"
+        echo " 0. Salir"
+        read -p "Opción: " opt
+        case $opt in
             1) ejecutar_prueba_11_1 ;;
             2) ejecutar_prueba_11_2 ;;
             3) ejecutar_prueba_11_3 ;;
             4) ejecutar_prueba_11_4 ;;
             0) break ;;
-            *) echo "[-] Opción inválida." ; sleep 2 ;;
         esac
     done
 }
