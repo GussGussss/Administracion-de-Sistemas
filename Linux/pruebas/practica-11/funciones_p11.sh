@@ -1,8 +1,10 @@
 #!/bin/bash
 # funciones_p11.sh
-# Lógica de soporte para la Práctica 11 (Versión Definitiva)
+# Lógica de soporte para la Práctica 11 (Versión Inteligente con Autodetección)
 
 DIRECTORIO_INFRA="/opt/practica11"
+
+# --- Funciones de Utilidad ---
 
 verificar_instalar_paquete() {
     local paquete=$1
@@ -18,8 +20,19 @@ verificar_instalar_paquete() {
     fi
 }
 
+actualizar_resolucion_dns() {
+    local target_ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' servidor_pgadmin 2>/dev/null | head -n 1)
+    if [ -n "$target_ip" ]; then
+        sed -i '/servidor_pgadmin/d' /etc/hosts
+        tail -c1 /etc/hosts | read -r _ || echo >> /etc/hosts
+        echo "$target_ip servidor_pgadmin" >> /etc/hosts
+        restorecon -v /etc/hosts >/dev/null 2>&1 || true
+    fi
+}
+
+# --- Funciones de Menú Principal ---
+
 preparar_entorno() {
-    clear
     echo "=== Preparación del Entorno ==="
     mkdir -p "$DIRECTORIO_INFRA"
     
@@ -39,7 +52,6 @@ preparar_entorno() {
 }
 
 generar_archivos() {
-    clear
     echo "=== Generación de Archivos de Orquestación ==="
     
     cat <<EOF > "$DIRECTORIO_INFRA/.env"
@@ -60,7 +72,6 @@ server {
 }
 EOF
 
-    # Se eliminó "internal: true" de red_datos para permitir enrutamiento del anfitrión
     cat <<EOF > "$DIRECTORIO_INFRA/docker-compose.yml"
 version: '3.8'
 networks:
@@ -117,22 +128,8 @@ EOF
     read -p "Presione ENTER para continuar..."
 }
 
-# Helper crítico: Actualiza DNS preservando el contexto SELinux
-actualizar_resolucion_dns() {
-    local target_ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' servidor_pgadmin 2>/dev/null | head -n 1)
-    if [ -n "$target_ip" ]; then
-        grep -v "servidor_pgadmin" /etc/hosts > /tmp/hosts.tmp
-        echo "$target_ip servidor_pgadmin" >> /tmp/hosts.tmp
-        cat /tmp/hosts.tmp > /etc/hosts
-        rm -f /tmp/hosts.tmp
-        # Restaurar contexto SELinux para que SSHD pueda leerlo
-        restorecon -v /etc/hosts >/dev/null 2>&1 || true
-        export IP_PGADMIN_DETECTADA="$target_ip"
-    fi
-}
-
 desplegar_infraestructura() {
-    clear
+    echo "=== Despliegue de Infraestructura ==="
     cd "$DIRECTORIO_INFRA" || return
     docker compose up -d
     echo "[*] Esperando inicialización (10s)..."
@@ -142,86 +139,89 @@ desplegar_infraestructura() {
     read -p "Presione ENTER para continuar..."
 }
 
+# --- Funciones de Pruebas Dinámicas Automatizadas ---
+
 ejecutar_prueba_11_1() {
-    clear
-    read -p "Ingrese la IP de Oracle Linux: " ip_host
+    echo "--- Prueba 11.1: Validación de Aislamiento de Red ---"
+    DEFAULT_IP=$(ip -4 addr show enp0s3 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -n 1)
+    
+    read -p "Ingrese la IP de Oracle Linux [Enter para usar '$DEFAULT_IP']: " ip_host
+    ip_host=${ip_host:-$DEFAULT_IP}
+    
+    echo "[*] Ejecutando curl hacia el puerto 5432 de $ip_host..."
     curl --connect-timeout 5 -v telnet://"$ip_host":5432
     read -p "Presione ENTER para continuar..."
 }
 
 ejecutar_prueba_11_2() {
-    clear
-    read -p "Ingrese nombre del servicio (ej. db): " target_dns
+    echo "--- Prueba 11.2: Validación de Resolución Interna DNS ---"
+    DEFAULT_SERVICE="db"
+    
+    read -p "Ingrese nombre del servicio a probar [Enter para usar '$DEFAULT_SERVICE']: " target_dns
+    target_dns=${target_dns:-$DEFAULT_SERVICE}
+    
+    echo "[*] Ejecutando ping hacia el servicio '$target_dns' desde el frontend..."
     docker exec nginx_balancer ping -c 4 "$target_dns"
     read -p "Presione ENTER para continuar..."
 }
 
 ejecutar_prueba_11_3() {
-    clear
     echo "--- Prueba 11.3: Validación de Túnel Cifrado de Gestión ---"
+    actualizar_resolucion_dns
     
-    echo "[*] Diagnosticando estado de red del contenedor..."
-    # 1. Extracción ultra-robusta de IP
     IP_PGADMIN=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' servidor_pgadmin 2>/dev/null | head -n 1)
     
     if [ -z "$IP_PGADMIN" ]; then
-        echo "[-] ERROR CRÍTICO: La IP está vacía. El contenedor 'servidor_pgadmin' no está corriendo o falló."
-        echo "Estado actual del contenedor:"
-        docker ps -a -f name=servidor_pgadmin
-        read -p "Presione ENTER para regresar al menú..."
+        echo "[-] ERROR: El contenedor 'servidor_pgadmin' no está activo."
+        read -p "Presione ENTER..."
         return
     fi
 
-    echo "[+] Contenedor detectado. IP interna: $IP_PGADMIN"
-
-    # 2. Inyección segura en /etc/hosts (Mitigación del bug de EOF)
-    echo "[*] Sincronizando tabla de enrutamiento DNS del anfitrión..."
-    sed -i '/servidor_pgadmin/d' /etc/hosts
-    
-    # Truco de Bash: Asegurar que el archivo termina en un salto de línea antes de añadir texto
-    tail -c1 /etc/hosts | read -r _ || echo >> /etc/hosts
-    
-    # Inyectar la variable de forma limpia
-    echo "$IP_PGADMIN servidor_pgadmin" >> /etc/hosts
-    
-    # Imprimir la última línea de /etc/hosts para validar visualmente que no hay corrupción
-    echo "[+] Verificación de inyección en /etc/hosts:"
-    tail -n 1 /etc/hosts
-
-    # 3. Lógica de Autodetección
     DEFAULT_USER=${SUDO_USER:-$USER}
     DEFAULT_IP=$(ip -4 addr show enp0s3 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | head -n 1)
-    DEFAULT_IP=${DEFAULT_IP:-"192.168.1.15"} # Respaldo en caso de fallo de detección
 
-    echo "---------------------------------------------------"
-    read -p "Ingrese su usuario en Oracle Linux [Enter para usar '$DEFAULT_USER']: " usr_ssh
+    read -p "Ingrese su usuario SSH [Enter para '$DEFAULT_USER']: " usr_ssh
     usr_ssh=${usr_ssh:-$DEFAULT_USER}
 
-    read -p "Ingrese la IP (Adaptador enp0s3) [Enter para usar '$DEFAULT_IP']: " ip_ssh
+    read -p "Ingrese la IP del servidor [Enter para '$DEFAULT_IP']: " ip_ssh
     ip_ssh=${ip_ssh:-$DEFAULT_IP}
 
     echo "---------------------------------------------------"
-    echo "PASO 1: Abra la terminal o CMD en su maquina fisica."
-    echo "PASO 2: Ejecute exactamente el siguiente comando:"
-    echo ""
-    echo "    ssh -L 8080:servidor_pgadmin:80 $usr_ssh@$ip_ssh"
-    echo ""
-    echo "PASO 3: Inicie sesion con su contrasena."
-    echo "PASO 4: Abra su navegador en Windows y entre a: http://localhost:8080"
+    echo "EJECUTE EN SU PC FÍSICA:"
+    echo "ssh -L 8080:servidor_pgadmin:80 $usr_ssh@$ip_ssh"
     echo "---------------------------------------------------"
-    echo "Credenciales definidas en su .env: admin@practica11.com / AdminPassword2026"
-    read -p "Presione ENTER una vez que haya validado el acceso en su navegador..."
+    read -p "Presione ENTER tras validar el acceso en http://localhost:8080"
+}
+
+ejecutar_prueba_11_4() {
+    echo "--- Prueba 11.4: Validación de Persistencia y Healthcheck ---"
+    cd "$DIRECTORIO_INFRA" || return
+    echo "[*] Reiniciando infraestructura..."
+    docker compose down
+    docker compose up -d
+    
+    echo "[*] Monitoreando Healthcheck (10s)..."
+    for i in {1..5}; do
+        docker compose ps
+        sleep 2
+    done
+    read -p "Presione ENTER para continuar..."
 }
 
 submodo_pruebas() {
     while true; do
-        clear
+        echo ""
+        echo ""
+        echo "======================================"
+        echo " Protocolo de Pruebas Dinámicas"
+        echo "======================================"
         echo " 1. Prueba 11.1: Aislamiento (curl)"
         echo " 2. Prueba 11.2: DNS interna (ping)"
         echo " 3. Prueba 11.3: Túnel cifrado (ssh -L)"
         echo " 4. Prueba 11.4: Persistencia (down/up)"
-        echo " 0. Salir"
-        read -p "Opción: " opt
+        echo " 0. Regresar"
+        echo "======================================"
+        read -p "Seleccione una opción [0-4]: " opt
         case $opt in
             1) ejecutar_prueba_11_1 ;;
             2) ejecutar_prueba_11_2 ;;
@@ -229,5 +229,7 @@ submodo_pruebas() {
             4) ejecutar_prueba_11_4 ;;
             0) break ;;
         esac
+    echo ""
+    echo ""
     done
 }
