@@ -263,7 +263,6 @@ ejecutar_prueba_11_2() {
 }
 
 ejecutar_prueba_11_3() {
-    clear
     echo "--- Prueba 11.3: Validación de Túnel Cifrado de Gestión ---"
     
     # 1. Sincronización DNS de emergencia
