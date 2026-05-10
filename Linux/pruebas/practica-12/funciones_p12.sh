@@ -439,7 +439,7 @@ auditar_seguridad_logs() {
 }
 
 # ==============================================================================
-# Función 9: Submenú y controladores de Pruebas de Aceptación
+# Función 9: Submenú y controladores de Pruebas de Aceptación Individuales
 # ==============================================================================
 submenu_pruebas() {
     while true; do
@@ -447,21 +447,25 @@ submenu_pruebas() {
         echo "======================================================================"
         echo "                 SUBMENÚ - PRUEBAS DE ACEPTACIÓN                      "
         echo "======================================================================"
-        echo " 1. Pruebas 12.1 y 13.5/13.6 (Manual): Portal Web y Envío"
-        echo " 2. Prueba 12.2 (Automatizada): Auditoría de Registros"
-        echo " 3. Prueba 12.3 (Automatizada): Verificación de Fail2Ban (Fuerza Bruta)"
-        echo " 4. Prueba 13.4 (Híbrida): Integridad de Respaldo y Restauración"
-        echo " 5. Prueba 13.7 (Híbrida): Persistencia de Preferencias Webmail"
+        echo " 1. Prueba 12.1: Envío y recepción local (Cliente de escritorio)"
+        echo " 2. Prueba 12.2: Auditoría de registros (Logging)"
+        echo " 3. Prueba 12.3: Verificación de seguridad Fail2ban"
+        echo " 4. Prueba 13.4: Integridad de respaldo"
+        echo " 5. Prueba 13.5: Inicio de sesión institucional (Webmail)"
+        echo " 6. Prueba 13.6: Envío de adjuntos y seguridad (Webmail)"
+        echo " 7. Prueba 13.7: Persistencia de preferencias (Webmail)"
         echo " 0. Retornar al Menú Principal"
         echo "======================================================================"
-        read -p " Seleccione el escenario de prueba a ejecutar: " op_prueba
+        read -p " Seleccione la prueba a ejecutar: " op_prueba
 
         case $op_prueba in
-            1) prueba_manual_webmail ;;
-            2) prueba_automatizada_auditoria ;;
-            3) prueba_automatizada_fail2ban ;;
-            4) prueba_hibrida_respaldo ;;
-            5) prueba_hibrida_persistencia ;;
+            1) prueba_12_1 ;;
+            2) prueba_12_2 ;;
+            3) prueba_12_3 ;;
+            4) prueba_13_4 ;;
+            5) prueba_13_5 ;;
+            6) prueba_13_6 ;;
+            7) prueba_13_7 ;;
             0)
                 echo "  -> [INFO] Cerrando módulo de pruebas y retornando..."
                 break
@@ -473,46 +477,57 @@ submenu_pruebas() {
     done
 }
 
+# ------------------------------------------------------------------------------
 # Controladores de Pruebas Individuales
+# ------------------------------------------------------------------------------
 
-prueba_manual_webmail() {
+prueba_12_1() {
     echo ""
-    echo "[INSTRUCCIONES DE PRUEBA: ACCESO Y FLUJO DE CORREO]"
-    echo "  Esta prueba no puede automatizarse por script, requiere validación visual."
-    echo "  Paso 1: Abra un navegador en su host físico o red y acceda a:"
-    echo "          http://$DETECTED_IP:8080"
-    echo "  Paso 2: Inicie sesión con la cuenta previamente creada (ej. director)."
-    echo "  Paso 3: Redacte un correo, adjunte un archivo y envíelo a otra cuenta local."
-    echo "  Paso 4: Cierre sesión, inicie con la cuenta destino y verifique la integridad del adjunto."
+    echo "[PRUEBA 12.1: ENVÍO Y RECEPCIÓN LOCAL]"
+    echo "  Acción: Crear dos cuentas de usuario y enviar un correo entre ellas"
+    echo "          usando un cliente como Thunderbird o Mailspring."
+    echo "  Resultado esperado: El correo llega instantáneamente y se puede leer"
+    echo "                      sin errores de cifrado."
+    echo "----------------------------------------------------------------------"
+    echo "  [EJECUCIÓN MANUAL REQUERIDA]"
+    echo "  1. Asegúrese de haber creado las cuentas en la Opción 4 del menú principal."
+    echo "  2. Abra Thunderbird en su equipo físico o máquina virtual cliente."
+    echo "  3. Configure la cuenta usando la IP $DETECTED_IP (Puertos: IMAP 143 / SMTP 587)."
+    echo "  4. Envíe un correo de prueba a la segunda cuenta y verifique la bandeja."
     echo ""
-    read -p "  Presione ENTER para marcar esta prueba como comprendida y continuar..."
+    read -p "  Presione ENTER una vez validada la prueba..."
 }
 
-prueba_automatizada_auditoria() {
+prueba_12_2() {
     echo ""
-    echo "[PROCESO] Ejecutando Prueba 12.2: Auditoría de Registros"
-    echo "  -> Inyectando un correo de prueba automatizado directamente en el MTA..."
-    
-    # Inyectar correo usando sendmail interno
+    echo "[PRUEBA 12.2: AUDITORÍA DE REGISTROS (LOGGING)]"
+    echo "  Acción: Realizar un envío y luego consultar los archivos de registro en /var/log/mail.log."
+    echo "  Resultado esperado: El registro debe mostrar el flujo completo: conexión, autenticación"
+    echo "                      exitosa, transferencia del mensaje y desconexión."
+    echo "----------------------------------------------------------------------"
+    echo "  [EJECUCIÓN AUTOMATIZADA]"
+    echo "  -> Inyectando un correo de prueba interno..."
     docker exec -it mta_dovecot_reprobados sh -c "echo -e 'Subject: Auditoria Automatica\n\nPrueba de logs exitosa.' | sendmail admin@$DOMAIN" 2>/dev/null
-    
-    echo "  -> [INFO] Correo inyectado. Esperando 2 segundos para procesamiento..."
     sleep 2
-    
-    echo "  -> [RESULTADO] Extrayendo flujo transaccional de mail.log:"
-    echo "----------------------------------------------------------------------"
-    # Filtrar solo las líneas relevantes de postfix o dovecot de las últimas entradas
-    tail -n 15 "$BASE_DIR/mail_logs/mail.log" | grep -iE "postfix/|dovecot:"
-    echo "----------------------------------------------------------------------"
-    echo "  El log debe mostrar la conexión, transferencia del mensaje y encolado."
+    echo "  -> Extrayendo flujo transaccional reciente del log:"
+    echo "......................................................................"
+    tail -n 12 "$BASE_DIR/mail_logs/mail.log" | grep -iE "postfix/|dovecot:" || echo "  [!] No se encontraron registros recientes."
+    echo "......................................................................"
+    echo "  Verifique visualmente la conexión y transferencia en la salida superior."
+    echo ""
+    read -p "  Presione ENTER para continuar..."
 }
 
-prueba_automatizada_fail2ban() {
+prueba_12_3() {
     echo ""
-    echo "[PROCESO] Ejecutando Prueba 12.3: Validación del Firewall IDS (Fail2Ban)"
-    echo "  -> Simulando ataque de fuerza bruta IMAP (5 intentos fallidos) usando sockets Bash..."
-    
-    # Bucle para simular login fallido contra el puerto 143 del servidor
+    echo "[PRUEBA 12.3: VERIFICACIÓN DE SEGURIDAD FAIL2BAN]"
+    echo "  Acción: Intentar iniciar sesión con una contraseña incorrecta 5 veces seguidas"
+    echo "          desde una terminal remota."
+    echo "  Resultado esperado: La dirección IP del atacante debe ser bloqueada por el firewall"
+    echo "                      del servidor automáticamente."
+    echo "----------------------------------------------------------------------"
+    echo "  [EJECUCIÓN AUTOMATIZADA]"
+    echo "  -> Simulando ataque de fuerza bruta contra el puerto IMAP (143)..."
     for i in {1..6}; do
         exec 3<>/dev/tcp/$DETECTED_IP/143 2>/dev/null
         if [[ $? -eq 0 ]]; then
@@ -520,55 +535,104 @@ prueba_automatizada_fail2ban() {
             exec 3<&-
             exec 3>&-
         fi
-        sleep 1 # Retardo para evitar saturación de buffer
+        sleep 1
     done
-    
-    echo "  -> [INFO] Ataque concluido. Solicitando estado de la celda de bloqueo (Jail: dovecot)..."
-    echo "----------------------------------------------------------------------"
+    echo "  -> Consultando estado de la celda 'dovecot' en Fail2ban:"
+    echo "......................................................................"
     docker exec -it mta_dovecot_reprobados fail2ban-client status dovecot
-    echo "----------------------------------------------------------------------"
-    echo "  El reporte debe indicar 'Currently banned: 1' y mostrar la IP $DETECTED_IP en la lista negra."
+    echo "......................................................................"
+    echo "  Verifique que 'Currently banned' sea mayor a 0 y que la IP $DETECTED_IP"
+    echo "  aparezca en la 'Banned IP list'."
+    echo ""
+    read -p "  Presione ENTER para continuar..."
 }
 
-prueba_hibrida_respaldo() {
+prueba_13_4() {
     echo ""
-    echo "[PROCESO] Ejecutando Prueba 13.4: Integridad de Respaldo y Recuperación"
-    echo "  -> Fase 1: Creando punto de restauración (Backup)..."
+    echo "[PRUEBA 13.4: INTEGRIDAD DE RESPALDO]"
+    echo "  Acción: Borrar un correo, detener el contenedor, restaurar el último respaldo"
+    echo "          y verificar la reaparición del correo."
+    echo "  Resultado esperado: Recuperación total de la información sin pérdida de metadatos."
+    echo "----------------------------------------------------------------------"
+    echo "  [EJECUCIÓN HÍBRIDA]"
+    echo "  -> Fase 1: Creando respaldo de seguridad actual..."
     bash "$BASE_DIR/backup_diario.sh"
     local ultimo_respaldo=$(ls -t "$BASE_DIR/backups" | head -n 1)
-    echo "     [ÉXITO] Backup generado: $ultimo_respaldo"
+    echo "     Respaldo generado: $ultimo_respaldo"
     
-    echo ""
-    echo "  -> Fase 2: Acción manual requerida"
-    echo "     Vaya al portal Webmail (http://$DETECTED_IP:8080) y ELIMINE un correo de su bandeja."
+    echo "  -> Fase 2: Acción manual"
+    echo "     Acceda al correo y ELIMINE un mensaje existente."
     read -p "     Presione ENTER estrictamente DESPUÉS de haber eliminado el correo..."
     
-    echo "  -> Fase 3: Deteniendo infraestructura y simulando desastre..."
+    echo "  -> Fase 3: Deteniendo infraestructura de correo..."
     docker compose -f "$BASE_DIR/docker-compose.yml" stop mailserver
     
-    echo "  -> Fase 4: Restaurando volumen de correos desde el archivo comprimido..."
-    # Se extrae con la ruta original para sobreescribir el estado alterado
+    echo "  -> Fase 4: Restaurando el volumen desde el archivo comprimido..."
     tar -xzf "$BASE_DIR/backups/$ultimo_respaldo" -C "$BASE_DIR" mail_data
     
     echo "  -> Fase 5: Reiniciando infraestructura..."
     docker compose -f "$BASE_DIR/docker-compose.yml" start mailserver
     
-    echo "  -> [ÉXITO] Restauración completada."
-    echo "     Vuelva a su portal Webmail, actualice la página y confirme que el correo reapareció."
+    echo "  [!] Restauración completada. Vaya a su cliente de correo, actualice"
+    echo "      la bandeja y confirme visualmente la reaparición del mensaje."
+    echo ""
+    read -p "  Presione ENTER para continuar..."
 }
 
-prueba_hibrida_persistencia() {
+prueba_13_5() {
     echo ""
-    echo "[PROCESO] Ejecutando Prueba 13.7: Persistencia de Preferencias (Base de Datos)"
-    echo "  -> Fase 1: Acción manual requerida"
-    echo "     Vaya al Webmail, diríjase a Configuración -> Interfaz de Usuario."
-    echo "     Cambie el idioma o el tema y guarde los cambios."
+    echo "[PRUEBA 13.5: INICIO DE SESIÓN INSTITUCIONAL]"
+    echo "  Acción: Acceder a la URL del servidor desde un navegador e iniciar sesión"
+    echo "          con las credenciales creadas en la sección anterior."
+    echo "  Resultado esperado: El portal carga la bandeja de entrada correctamente"
+    echo "                      y muestra los correos existentes."
+    echo "----------------------------------------------------------------------"
+    echo "  [EJECUCIÓN MANUAL REQUERIDA]"
+    echo "  1. Abra un navegador y navegue hacia: http://$DETECTED_IP:8080"
+    echo "  2. Inicie sesión (ej. usuario: director, contraseña: la asignada)."
+    echo "  3. Verifique que la interfaz de Roundcube cargue sin errores."
+    echo ""
+    read -p "  Presione ENTER una vez validada la prueba..."
+}
+
+prueba_13_6() {
+    echo ""
+    echo "[PRUEBA 13.6: ENVÍO DE ADJUNTOS Y SEGURIDAD]"
+    echo "  Acción: Redactar un correo desde el portal web con un archivo adjunto"
+    echo "          y enviarlo a otra cuenta local."
+    echo "  Resultado esperado: El correo se envía exitosamente y el archivo adjunto"
+    echo "                      mantiene su integridad (verificable al descargarlo)."
+    echo "----------------------------------------------------------------------"
+    echo "  [EJECUCIÓN MANUAL REQUERIDA]"
+    echo "  1. Dentro de Roundcube (http://$DETECTED_IP:8080), haga clic en 'Redactar'."
+    echo "  2. Adjunte una imagen o documento de prueba."
+    echo "  3. Envíe el correo a otra cuenta local (ej. admin)."
+    echo "  4. Inicie sesión con la cuenta receptora y descargue el adjunto."
+    echo "  5. Abra el archivo en su equipo para verificar que no esté corrupto."
+    echo ""
+    read -p "  Presione ENTER una vez validada la prueba..."
+}
+
+prueba_13_7() {
+    echo ""
+    echo "[PRUEBA 13.7: PERSISTENCIA DE PREFERENCIAS]"
+    echo "  Acción: Cambiar el idioma de la interfaz o añadir un contacto a la libreta,"
+    echo "          reiniciar el contenedor de webmail y volver a entrar."
+    echo "  Resultado esperado: Los cambios deben persistir gracias al volumen"
+    echo "                      de la base de datos del portal."
+    echo "----------------------------------------------------------------------"
+    echo "  [EJECUCIÓN HÍBRIDA]"
+    echo "  -> Fase 1: Acción manual"
+    echo "     Dentro de Roundcube, vaya a Configuración -> Interfaz de Usuario."
+    echo "     Modifique el idioma o añada un contacto, y guarde los cambios."
     read -p "     Presione ENTER estrictamente DESPUÉS de guardar sus preferencias..."
     
-    echo "  -> Fase 2: Destruyendo instancia en memoria del portal (Reinicio abrupto)..."
+    echo "  -> Fase 2: Reiniciando el contenedor de webmail..."
     docker compose -f "$BASE_DIR/docker-compose.yml" restart webmail
     
-    echo "  -> [ÉXITO] Contenedor Webmail reiniciado."
-    echo "     Si la arquitectura de volúmenes es correcta, al recargar su navegador"
-    echo "     sus configuraciones de interfaz se mantendrán intactas."
+    echo "  [!] Contenedor reiniciado exitosamente."
+    echo "      Recargue la página de su navegador, inicie sesión nuevamente"
+    echo "      y valide que sus configuraciones o contactos sigan allí."
+    echo ""
+    read -p "  Presione ENTER para continuar..."
 }
