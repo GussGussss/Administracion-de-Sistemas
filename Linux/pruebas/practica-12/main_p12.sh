@@ -46,6 +46,8 @@ while true; do
     echo " 4. Gestión de Cuentas de Correo (Crear/Listar)"
     echo " 5. Generar Claves Criptográficas (OpenDKIM)"
     echo " 6. Configurar Automatización de Respaldos (Cron)"
+    echo " 7. Personalización Institucional (Webmail)"
+    echo " 8. Panel de Auditoría y Seguridad (Logs/Fail2Ban)"
     echo " 0. Salir del sistema"
     echo "======================================================================"
     read -p " Seleccione una opción de ejecución: " opcion
@@ -57,6 +59,8 @@ while true; do
         4) gestionar_cuentas_correo ;;
         5) generar_claves_dkim ;;
         6) configurar_respaldo_cron ;;
+        7) personalizar_webmail ;;
+        8) auditar_seguridad_logs ;;
         0)
             echo "[INFO] Finalizando ejecución y cerrando descriptores."
             exit 0
