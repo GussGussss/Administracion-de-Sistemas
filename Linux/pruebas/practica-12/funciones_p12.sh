@@ -17,14 +17,8 @@ preparar_entorno_base() {
         mkdir -p "$BASE_DIR"
     fi
 
-    # Definición de estructura de volúmenes para persistencia de datos
     local directorios=(
-        "mail_data"     # Volúmen para buzones
-        "mail_state"    # Estado de fail2ban y rspamd
-        "mail_logs"     # Auditoría y registros
-        "mail_config"   # Configuraciones de Postfix/Dovecot
-        "webmail_html"  # Archivos estáticos de Roundcube
-        "webmail_db"    # Base de datos local (MariaDB/SQLite)
+        "mail_data" "mail_state" "mail_logs" "mail_config" "webmail_html" "webmail_db"
     )
 
     for dir in "${directorios[@]}"; do
@@ -36,10 +30,22 @@ preparar_entorno_base() {
         fi
     done
 
-    # Ajuste de permisos para evitar problemas de montajes en Docker
     echo "[PROCESO] Ajustando propiedad de los directorios a $DETECTED_USER..."
     chown -R "$DETECTED_USER:$DETECTED_USER" "$BASE_DIR"
     chmod -R 755 "$BASE_DIR"
+
+    # Automatización estricta de Firewall
+    echo "[PROCESO] Configurando reglas de Firewall (firewalld)..."
+    if systemctl is-active --quiet firewalld; then
+        local puertos=(25/tcp 143/tcp 587/tcp 993/tcp 465/tcp 8080/tcp)
+        for p in "${puertos[@]}"; do
+            firewall-cmd --permanent --add-port="$p" >/dev/null 2>&1
+        done
+        firewall-cmd --reload >/dev/null 2>&1
+        echo "  -> [ÉXITO] Puertos expuestos en el firewall nativo."
+    else
+        echo "  -> [INFO] Firewalld no está activo. Omitiendo configuración de puertos."
+    fi
 
     echo "[ÉXITO] Infraestructura de directorios preparada y securizada."
 }
@@ -133,7 +139,8 @@ services:
       - "25:25"     # SMTP entrante
       - "143:143"   # IMAP
       - "587:587"   # Submission
-      - "993:993"   # IMAPS
+      - "993:993"   # IMAPS (SSL/TLS)
+      - "465:465"   # SMTPS (SSL/TLS)
     volumes:
       - ./mail_data:/var/mail
       - ./mail_state:/var/mail-state
@@ -147,18 +154,19 @@ services:
       - ENABLE_FAIL2BAN=1
       - ONE_DIR=1
       - OVERRIDE_HOSTNAME=mail.reprobados.com
+      - SSL_TYPE=self-signed # Fuerza la generación de certificados internos
     cap_add:
-      - NET_ADMIN # Privilegio requerido por fail2ban para manipular iptables
+      - NET_ADMIN
     restart: unless-stopped
 
   webmail:
     image: roundcube/roundcubemail:latest
     container_name: webmail_reprobados
     ports:
-      - "8080:80" # Expuesto al host en puerto 8080 para validación
+      - "8080:80" 
     environment:
-      - ROUNDCUBEMAIL_DEFAULT_HOST=mail.reprobados.com
-      - ROUNDCUBEMAIL_SMTP_SERVER=mail.reprobados.com
+      - ROUNDCUBEMAIL_DEFAULT_HOST=tls://mail.reprobados.com
+      - ROUNDCUBEMAIL_SMTP_SERVER=tls://mail.reprobados.com
     volumes:
       - ./webmail_html:/var/www/html
       - ./webmail_db:/var/roundcube/db
