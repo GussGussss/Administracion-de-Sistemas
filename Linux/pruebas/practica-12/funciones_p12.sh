@@ -437,3 +437,138 @@ auditar_seguridad_logs() {
         echo "  -> [ERROR] Opción inválida."
     fi
 }
+
+# ==============================================================================
+# Función 9: Submenú y controladores de Pruebas de Aceptación
+# ==============================================================================
+submenu_pruebas() {
+    while true; do
+        echo ""
+        echo "======================================================================"
+        echo "                 SUBMENÚ - PRUEBAS DE ACEPTACIÓN                      "
+        echo "======================================================================"
+        echo " 1. Pruebas 12.1 y 13.5/13.6 (Manual): Portal Web y Envío"
+        echo " 2. Prueba 12.2 (Automatizada): Auditoría de Registros"
+        echo " 3. Prueba 12.3 (Automatizada): Verificación de Fail2Ban (Fuerza Bruta)"
+        echo " 4. Prueba 13.4 (Híbrida): Integridad de Respaldo y Restauración"
+        echo " 5. Prueba 13.7 (Híbrida): Persistencia de Preferencias Webmail"
+        echo " 0. Retornar al Menú Principal"
+        echo "======================================================================"
+        read -p " Seleccione el escenario de prueba a ejecutar: " op_prueba
+
+        case $op_prueba in
+            1) prueba_manual_webmail ;;
+            2) prueba_automatizada_auditoria ;;
+            3) prueba_automatizada_fail2ban ;;
+            4) prueba_hibrida_respaldo ;;
+            5) prueba_hibrida_persistencia ;;
+            0)
+                echo "  -> [INFO] Cerrando módulo de pruebas y retornando..."
+                break
+                ;;
+            *)
+                echo "  -> [ERROR] Opción no válida."
+                ;;
+        esac
+    done
+}
+
+# Controladores de Pruebas Individuales
+
+prueba_manual_webmail() {
+    echo ""
+    echo "[INSTRUCCIONES DE PRUEBA: ACCESO Y FLUJO DE CORREO]"
+    echo "  Esta prueba no puede automatizarse por script, requiere validación visual."
+    echo "  Paso 1: Abra un navegador en su host físico o red y acceda a:"
+    echo "          http://$DETECTED_IP:8080"
+    echo "  Paso 2: Inicie sesión con la cuenta previamente creada (ej. director)."
+    echo "  Paso 3: Redacte un correo, adjunte un archivo y envíelo a otra cuenta local."
+    echo "  Paso 4: Cierre sesión, inicie con la cuenta destino y verifique la integridad del adjunto."
+    echo ""
+    read -p "  Presione ENTER para marcar esta prueba como comprendida y continuar..."
+}
+
+prueba_automatizada_auditoria() {
+    echo ""
+    echo "[PROCESO] Ejecutando Prueba 12.2: Auditoría de Registros"
+    echo "  -> Inyectando un correo de prueba automatizado directamente en el MTA..."
+    
+    # Inyectar correo usando sendmail interno
+    docker exec -it mta_dovecot_reprobados sh -c "echo -e 'Subject: Auditoria Automatica\n\nPrueba de logs exitosa.' | sendmail admin@$DOMAIN" 2>/dev/null
+    
+    echo "  -> [INFO] Correo inyectado. Esperando 2 segundos para procesamiento..."
+    sleep 2
+    
+    echo "  -> [RESULTADO] Extrayendo flujo transaccional de mail.log:"
+    echo "----------------------------------------------------------------------"
+    # Filtrar solo las líneas relevantes de postfix o dovecot de las últimas entradas
+    tail -n 15 "$BASE_DIR/mail_logs/mail.log" | grep -iE "postfix/|dovecot:"
+    echo "----------------------------------------------------------------------"
+    echo "  El log debe mostrar la conexión, transferencia del mensaje y encolado."
+}
+
+prueba_automatizada_fail2ban() {
+    echo ""
+    echo "[PROCESO] Ejecutando Prueba 12.3: Validación del Firewall IDS (Fail2Ban)"
+    echo "  -> Simulando ataque de fuerza bruta IMAP (5 intentos fallidos) usando sockets Bash..."
+    
+    # Bucle para simular login fallido contra el puerto 143 del servidor
+    for i in {1..6}; do
+        exec 3<>/dev/tcp/$DETECTED_IP/143 2>/dev/null
+        if [[ $? -eq 0 ]]; then
+            echo -e "a1 LOGIN atacante password_falsa\r\n" >&3
+            exec 3<&-
+            exec 3>&-
+        fi
+        sleep 1 # Retardo para evitar saturación de buffer
+    done
+    
+    echo "  -> [INFO] Ataque concluido. Solicitando estado de la celda de bloqueo (Jail: dovecot)..."
+    echo "----------------------------------------------------------------------"
+    docker exec -it mta_dovecot_reprobados fail2ban-client status dovecot
+    echo "----------------------------------------------------------------------"
+    echo "  El reporte debe indicar 'Currently banned: 1' y mostrar la IP $DETECTED_IP en la lista negra."
+}
+
+prueba_hibrida_respaldo() {
+    echo ""
+    echo "[PROCESO] Ejecutando Prueba 13.4: Integridad de Respaldo y Recuperación"
+    echo "  -> Fase 1: Creando punto de restauración (Backup)..."
+    bash "$BASE_DIR/backup_diario.sh"
+    local ultimo_respaldo=$(ls -t "$BASE_DIR/backups" | head -n 1)
+    echo "     [ÉXITO] Backup generado: $ultimo_respaldo"
+    
+    echo ""
+    echo "  -> Fase 2: Acción manual requerida"
+    echo "     Vaya al portal Webmail (http://$DETECTED_IP:8080) y ELIMINE un correo de su bandeja."
+    read -p "     Presione ENTER estrictamente DESPUÉS de haber eliminado el correo..."
+    
+    echo "  -> Fase 3: Deteniendo infraestructura y simulando desastre..."
+    docker compose -f "$BASE_DIR/docker-compose.yml" stop mailserver
+    
+    echo "  -> Fase 4: Restaurando volumen de correos desde el archivo comprimido..."
+    # Se extrae con la ruta original para sobreescribir el estado alterado
+    tar -xzf "$BASE_DIR/backups/$ultimo_respaldo" -C "$BASE_DIR" mail_data
+    
+    echo "  -> Fase 5: Reiniciando infraestructura..."
+    docker compose -f "$BASE_DIR/docker-compose.yml" start mailserver
+    
+    echo "  -> [ÉXITO] Restauración completada."
+    echo "     Vuelva a su portal Webmail, actualice la página y confirme que el correo reapareció."
+}
+
+prueba_hibrida_persistencia() {
+    echo ""
+    echo "[PROCESO] Ejecutando Prueba 13.7: Persistencia de Preferencias (Base de Datos)"
+    echo "  -> Fase 1: Acción manual requerida"
+    echo "     Vaya al Webmail, diríjase a Configuración -> Interfaz de Usuario."
+    echo "     Cambie el idioma o el tema y guarde los cambios."
+    read -p "     Presione ENTER estrictamente DESPUÉS de guardar sus preferencias..."
+    
+    echo "  -> Fase 2: Destruyendo instancia en memoria del portal (Reinicio abrupto)..."
+    docker compose -f "$BASE_DIR/docker-compose.yml" restart webmail
+    
+    echo "  -> [ÉXITO] Contenedor Webmail reiniciado."
+    echo "     Si la arquitectura de volúmenes es correcta, al recargar su navegador"
+    echo "     sus configuraciones de interfaz se mantendrán intactas."
+}
