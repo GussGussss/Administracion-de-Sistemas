@@ -44,23 +44,19 @@ while true; do
     echo " 2. Generar Stack Docker (Compose y Verificación de Imágenes)"
     echo " 3. Levantar Infraestructura y Sincronizar DNS Local"
     echo " 4. Gestión de Cuentas de Correo (Crear/Listar)"
+    echo " 5. Generar Claves Criptográficas (OpenDKIM)"
+    echo " 6. Configurar Automatización de Respaldos (Cron)"
     echo " 0. Salir del sistema"
     echo "======================================================================"
     read -p " Seleccione una opción de ejecución: " opcion
 
     case $opcion in
-        1)
-            preparar_entorno_base
-            ;;
-        2)
-            generar_stack_docker
-            ;;
-        3)
-            levantar_servicios_y_dns
-            ;;
-        4)
-            gestionar_cuentas_correo
-            ;;
+        1) preparar_entorno_base ;;
+        2) generar_stack_docker ;;
+        3) levantar_servicios_y_dns ;;
+        4) gestionar_cuentas_correo ;;
+        5) generar_claves_dkim ;;
+        6) configurar_respaldo_cron ;;
         0)
             echo "[INFO] Finalizando ejecución y cerrando descriptores."
             exit 0
