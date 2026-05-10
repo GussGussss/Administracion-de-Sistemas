@@ -363,3 +363,77 @@ EOF
         echo "  -> [ÉXITO] Tarea programada inyectada. Los respaldos se ejecutarán diariamente a las 02:00 AM."
     fi
 }
+
+# ==============================================================================
+# Función 7: Inyección de parámetros corporativos en Roundcube
+# ==============================================================================
+personalizar_webmail() {
+    echo ""
+    echo "[PROCESO] Aplicando personalización institucional a Roundcube..."
+    
+    local config_file="$BASE_DIR/webmail_html/config/config.inc.php"
+    local logo_file="$BASE_DIR/webmail_html/logo_institucional.svg"
+
+    # 1. Generar logotipo vectorial offline
+    cat << 'EOF' > "$logo_file"
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="50">
+  <rect width="200" height="50" fill="#1c2833" rx="5"/>
+  <text x="20" y="32" font-family="monospace" font-weight="bold" font-size="18" fill="#f1c40f">REPROBADOS</text>
+  <text x="135" y="32" font-family="monospace" font-size="18" fill="#ecf0f1">.COM</text>
+</svg>
+EOF
+    # Ajustar permisos para que el servidor web interno (www-data) pueda leerlo
+    chmod 644 "$logo_file"
+    echo "  -> [ÉXITO] Logotipo corporativo generado estáticamente en el volumen."
+
+    # 2. Modificar el archivo de configuración si el contenedor ya lo aprovisionó
+    if [[ -f "$config_file" ]]; then
+        cp "$config_file" "${config_file}.bak_practica12"
+        
+        # Inyectar el dominio predeterminado
+        if grep -q "username_domain" "$config_file"; then
+            sed -i "s/\$config\['username_domain'\].*/\$config\['username_domain'\] = '$DOMAIN';/g" "$config_file"
+        else
+            echo "\$config['username_domain'] = '$DOMAIN';" >> "$config_file"
+        fi
+        
+        # Inyectar el logotipo
+        if grep -q "skin_logo" "$config_file"; then
+            sed -i "s|\$config\['skin_logo'\].*|\$config\['skin_logo'\] = 'logo_institucional.svg';|g" "$config_file"
+        else
+            echo "\$config['skin_logo'] = 'logo_institucional.svg';" >> "$config_file"
+        fi
+        
+        echo "  -> [ÉXITO] Parámetros de Webmail actualizados (Dominio base y Logo)."
+        echo "  -> [INFO] Puede acceder desde su navegador anfitrión en: http://192.168.1.15:8080"
+    else
+        echo "  -> [ADVERTENCIA] No se encontró config.inc.php."
+        echo "     Asegúrese de que el contenedor de webmail haya inicializado correctamente."
+    fi
+}
+
+# ==============================================================================
+# Función 8: Panel de auditoría para pruebas de aceptación
+# ==============================================================================
+auditar_seguridad_logs() {
+    echo ""
+    echo "[PROCESO] Subsistema de Auditoría y Detección de Intrusos"
+    echo "  a) Consultar estado del Firewall (Fail2Ban)"
+    echo "  b) Extraer últimos registros de transferencia (mail.log)"
+    read -p "  Seleccione una acción (a/b): " sub_opcion
+    
+    if [[ "$sub_opcion" == "a" || "$sub_opcion" == "A" ]]; then
+        echo "  -> [SEGURIDAD] Consultando estado global de Fail2Ban..."
+        docker exec -it mta_dovecot_reprobados fail2ban-client status
+        echo ""
+        echo "  -> [SEGURIDAD] Consultando celda específica de Dovecot (IMAP/POP3)..."
+        docker exec -it mta_dovecot_reprobados fail2ban-client status dovecot
+    elif [[ "$sub_opcion" == "b" || "$sub_opcion" == "B" ]]; then
+        echo "  -> [AUDITORÍA] Últimas 15 transacciones registradas:"
+        echo "----------------------------------------------------------------------"
+        tail -n 15 "$BASE_DIR/mail_logs/mail.log" 2>/dev/null || echo "  [ERROR] Registro no disponible."
+        echo "----------------------------------------------------------------------"
+    else
+        echo "  -> [ERROR] Opción inválida."
+    fi
+}
