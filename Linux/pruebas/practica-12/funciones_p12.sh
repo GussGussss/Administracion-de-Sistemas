@@ -275,3 +275,91 @@ gestionar_cuentas_correo() {
         echo "  -> [ERROR] Opción inválida."
     fi
 }
+
+# ==============================================================================
+# Función 5: Generación de claves DKIM para autenticación de origen
+# ==============================================================================
+generar_claves_dkim() {
+    echo ""
+    echo "[PROCESO] Generando pares de claves criptográficas DKIM..."
+
+    if ! docker ps | grep -q "mta_dovecot_reprobados"; then
+        echo "  -> [ERROR] El contenedor principal de correo no está en ejecución."
+        return 1
+    fi
+
+    # Verificar si las claves ya existen para evitar sobreescritura (Ahorro de recursos)
+    if docker exec -it mta_dovecot_reprobados ls /tmp/docker-mailserver/opendkim/keys/$DOMAIN/mail.private &> /dev/null; then
+        echo "  -> [INFO] Las claves DKIM para $DOMAIN ya existen."
+    else
+        echo "  -> [PROCESO] Ejecutando utilidad de generación interna (setup config dkim)..."
+        docker exec -it mta_dovecot_reprobados setup config dkim
+        if [[ $? -eq 0 ]]; then
+            echo "  -> [ÉXITO] Claves generadas exitosamente."
+        else
+            echo "  -> [ERROR] Falló la generación de las claves DKIM."
+            return 1
+        fi
+    fi
+
+    echo "  -> [ACCIÓN REQUERIDA] Para validar la práctica, el registro TXT generado se encuentra en:"
+    echo "     $BASE_DIR/mail_config/opendkim/keys/$DOMAIN/mail.txt"
+    echo "     Contenido de la clave pública para el DNS:"
+    echo "----------------------------------------------------------------------"
+    cat "$BASE_DIR/mail_config/opendkim/keys/$DOMAIN/mail.txt" 2>/dev/null || echo "     [ADVERTENCIA] No se pudo leer el archivo txt localmente."
+    echo "----------------------------------------------------------------------"
+}
+
+# ==============================================================================
+# Función 6: Sistema de recuperación ante desastres (Respaldos automatizados)
+# ==============================================================================
+configurar_respaldo_cron() {
+    echo ""
+    echo "[PROCESO] Configurando política de respaldos automatizados..."
+
+    local backup_dir="$BASE_DIR/backups"
+    local script_path="$BASE_DIR/backup_diario.sh"
+
+    # Crear directorio de respaldos si no existe
+    if [[ ! -d "$backup_dir" ]]; then
+        mkdir -p "$backup_dir"
+        chown "$DETECTED_USER:$DETECTED_USER" "$backup_dir"
+        echo "  -> Creado directorio de respaldos en: $backup_dir"
+    fi
+
+    # Crear el script de respaldo que ejecutará cron
+    cat << EOF > "$script_path"
+#!/bin/bash
+# Script de respaldo automatizado para la Práctica 12
+# Ejecución programada vía cron
+
+FECHA=\$(date +"%Y%m%d_%H%M%S")
+ARCHIVO_RESPALDO="$backup_dir/mail_backup_\$FECHA.tar.gz"
+
+echo "[INFO] Iniciando respaldo de /var/mail a las \$(date)" >> "$backup_dir/backup.log"
+tar -czf "\$ARCHIVO_RESPALDO" -C "$BASE_DIR" mail_data >> "$backup_dir/backup.log" 2>&1
+
+if [[ \$? -eq 0 ]]; then
+    echo "[ÉXITO] Respaldo creado: \$ARCHIVO_RESPALDO" >> "$backup_dir/backup.log"
+else
+    echo "[ERROR] Falló la creación del respaldo." >> "$backup_dir/backup.log"
+fi
+
+# Eliminar respaldos mayores a 7 días para ahorrar espacio
+find "$backup_dir" -name "mail_backup_*.tar.gz" -type f -mtime +7 -exec rm {} \;
+EOF
+
+    chmod +x "$script_path"
+    echo "  -> Script de respaldo generado en: $script_path"
+
+    # Integración con el crontab del sistema (verificando existencia previa)
+    local cron_job="0 2 * * * root $script_path"
+    
+    if grep -q "$script_path" /etc/crontab; then
+        echo "  -> [INFO] La tarea programada ya existe en /etc/crontab. Omitiendo inyección."
+    else
+        echo "$cron_job" >> /etc/crontab
+        systemctl reload crond 2>/dev/null || systemctl restart cron 2>/dev/null
+        echo "  -> [ÉXITO] Tarea programada inyectada. Los respaldos se ejecutarán diariamente a las 02:00 AM."
+    fi
+}
