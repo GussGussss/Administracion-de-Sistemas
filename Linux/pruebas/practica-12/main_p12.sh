@@ -48,6 +48,7 @@ while true; do
     echo " 6. Configurar Automatización de Respaldos (Cron)"
     echo " 7. Personalización Institucional (Webmail)"
     echo " 8. Panel de Auditoría y Seguridad (Logs/Fail2Ban)"
+    echo " 9. Ejecución de Pruebas de Aceptación (Submenú)"
     echo " 0. Salir del sistema"
     echo "======================================================================"
     read -p " Seleccione una opción de ejecución: " opcion
@@ -61,6 +62,7 @@ while true; do
         6) configurar_respaldo_cron ;;
         7) personalizar_webmail ;;
         8) auditar_seguridad_logs ;;
+        9) submenu_pruebas ;;
         0)
             echo "[INFO] Finalizando ejecución y cerrando descriptores."
             exit 0
