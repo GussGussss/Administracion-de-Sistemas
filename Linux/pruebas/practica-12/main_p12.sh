@@ -40,29 +40,31 @@ while true; do
     echo " [INFO] IP enp0s3:    $DETECTED_IP"
     echo " [INFO] Ruta externa: $BASE_DIR"
     echo "======================================================================"
-    echo " 1. Preparar Entorno Base (Directorios y Permisos)"
-    echo " 2. Generar Stack Docker (Compose y Verificación de Imágenes)"
-    echo " 3. Levantar Infraestructura y Sincronizar DNS Local"
-    echo " 4. Gestión de Cuentas de Correo (Crear/Listar)"
-    echo " 5. Generar Claves Criptográficas (OpenDKIM)"
-    echo " 6. Configurar Automatización de Respaldos (Cron)"
-    echo " 7. Personalización Institucional (Webmail)"
-    echo " 8. Panel de Auditoría y Seguridad (Logs/Fail2Ban)"
-    echo " 9. Ejecución de Pruebas de Aceptación (Submenú)"
-    echo " 0. Salir del sistema"
+    echo " 1.  Preparar Entorno Base (Directorios y Permisos)"
+    echo " 2.  Generar Stack Docker (Compose y Verificación de Imágenes)"
+    echo " 3.  Levantar Infraestructura y Sincronizar DNS Local"
+    echo " 4.  Gestión de Cuentas de Correo (Crear/Listar)"
+    echo " 5.  Generar Claves Criptográficas (OpenDKIM)"
+    echo " 6.  Configurar Automatización de Respaldos (Cron)"
+    echo " 7.  Personalización Institucional (Webmail)"
+    echo " 8.  Panel de Auditoría y Seguridad (Logs/Fail2Ban)"
+    echo " 9.  Ejecución de Pruebas de Aceptación (Submenú)"
+    echo " 10. Exportar Certificado SSL para Thunderbird"
+    echo " 0.  Salir del sistema"
     echo "======================================================================"
     read -p " Seleccione una opción de ejecución: " opcion
 
     case $opcion in
-        1) preparar_entorno_base ;;
-        2) generar_stack_docker ;;
-        3) levantar_servicios_y_dns ;;
-        4) gestionar_cuentas_correo ;;
-        5) generar_claves_dkim ;;
-        6) configurar_respaldo_cron ;;
-        7) personalizar_webmail ;;
-        8) auditar_seguridad_logs ;;
-        9) submenu_pruebas ;;
+        1)  preparar_entorno_base ;;
+        2)  generar_stack_docker ;;
+        3)  levantar_servicios_y_dns ;;
+        4)  gestionar_cuentas_correo ;;
+        5)  generar_claves_dkim ;;
+        6)  configurar_respaldo_cron ;;
+        7)  personalizar_webmail ;;
+        8)  auditar_seguridad_logs ;;
+        9)  submenu_pruebas ;;
+        10) exportar_certificado_ssl ;;
         0)
             echo "[INFO] Finalizando ejecución y cerrando descriptores."
             exit 0
@@ -71,7 +73,7 @@ while true; do
             echo "[ERROR] Entrada no reconocida. Seleccione una opción válida."
             ;;
     esac
-    
+
     echo ""
     read -p "Presione ENTER para retornar al menú principal..."
 done
