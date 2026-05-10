@@ -486,11 +486,12 @@ exportar_certificado_ssl() {
     else
         echo "  -> [ERROR] No se encontró el certificado en $cert_origen"
         echo "     Genérelo con:"
-        echo "     sudo openssl req -new -x509 -days 3650 -nodes \"
-        echo "       -subj '/CN=mail.reprobados.com' \"
-        echo "       -keyout $BASE_DIR/mail_config/ssl/mail.reprobados.com-key.pem \"
-        echo "       -out    $BASE_DIR/mail_config/ssl/mail.reprobados.com-cert.pem"
-        return 1
+        echo "     sudo mkdir -p /opt/practica12/mail_config/ssl"
+        echo "     sudo openssl req -new -x509 -days 3650 -nodes"
+        echo "       -subj /CN=mail.reprobados.com"
+        echo "       -keyout /opt/practica12/mail_config/ssl/mail.reprobados.com-key.pem"
+        echo "       -out /opt/practica12/mail_config/ssl/mail.reprobados.com-cert.pem"
+                return 1
     fi
 
     if [[ -s "$cert_dir/reprobados_mail.crt" ]]; then
