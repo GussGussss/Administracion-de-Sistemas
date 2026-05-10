@@ -65,13 +65,58 @@ generar_stack_docker() {
         crear_archivo_compose "$compose_file"
     fi
 
-    # Lógica Offline/Ahorro de Datos: Verificar imágenes antes de pull
-    echo ""
-    echo "[PROCESO] Verificando caché local de imágenes Docker..."
-    verificar_imagen "mailserver/docker-mailserver:latest"
-    verificar_imagen "roundcube/roundcubemail:latest"
+    # Lógica Offline: Validar la existencia del motor Docker antes de operar con imágenes
+    verificar_motor_docker
     
-    echo "[ÉXITO] Generación de stack finalizada."
+    # Si Docker se instaló o ya estaba activo, procedemos con las imágenes
+    if command -v docker &> /dev/null; then
+        echo ""
+        echo "[PROCESO] Verificando caché local de imágenes Docker..."
+        verificar_imagen "mailserver/docker-mailserver:latest"
+        verificar_imagen "roundcube/roundcubemail:latest"
+        echo "[ÉXITO] Generación de stack finalizada."
+    else
+        echo "[ERROR] El motor Docker no está disponible. Abortando verificación de imágenes."
+    fi
+}
+
+# Sub-función: Validación e instalación offline de dependencias (Docker CE)
+verificar_motor_docker() {
+    echo ""
+    echo "[PROCESO] Verificando dependencias del sistema (Motor Docker)..."
+    if ! command -v docker &> /dev/null; then
+        echo "  -> [FALTANTE] El comando 'docker' no se encontró en Oracle Linux."
+        read -p "     ¿Desea configurar el repositorio y descargar Docker CE vía dnf ahora? (s/N): " instalar_dkr
+        if [[ "$instalar_dkr" == "s" || "$instalar_dkr" == "S" ]]; then
+            echo "     [PROCESO] Instalando utilidades core de dnf..."
+            dnf install -y dnf-plugins-core > /dev/null 2>&1
+            
+            # Verificación offline del repositorio
+            local repo_file="/etc/yum.repos.d/docker-ce.repo"
+            if [[ ! -f "$repo_file" ]]; then
+                echo "     [PROCESO] Descargando repositorio oficial de Docker..."
+                dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo > /dev/null 2>&1
+            else
+                echo "     [CACHÉ] El repositorio docker-ce.repo ya existe localmente. Omitiendo descarga."
+            fi
+            
+            echo "     [PROCESO] Ejecutando instalación de paquetes (docker-ce, cli, containerd, compose)..."
+            dnf install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin > /dev/null 2>&1
+            
+            echo "     [PROCESO] Iniciando y habilitando el daemon de Docker..."
+            systemctl enable --now docker
+            echo "  -> [ÉXITO] Motor Docker instalado y operando correctamente."
+        else
+            echo "     [ADVERTENCIA] Instalación omitida. No se podrán gestionar los contenedores."
+        fi
+    else
+        echo "  -> [OK] Motor Docker detectado en el sistema."
+        # Garantizar que el demonio no esté apagado (ahorro de recursos manual)
+        if ! systemctl is-active --quiet docker; then
+            echo "     [PROCESO] El servicio Docker estaba inactivo. Levantando daemon..."
+            systemctl start docker
+        fi
+    fi
 }
 
 # Sub-función: Escritura del YAML (Heredoc)
