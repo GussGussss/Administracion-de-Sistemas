@@ -32,6 +32,7 @@ fi
 
 # 4. Menú Interactivo (Bucle de control)
 while true; do
+    echo ""
     echo "======================================================================"
     echo "       SISTEMA DE DESPLIEGUE - PRÁCTICA 12 (CORREO & WEBMAIL)         "
     echo "======================================================================"
@@ -41,6 +42,8 @@ while true; do
     echo "======================================================================"
     echo " 1. Preparar Entorno Base (Directorios y Permisos)"
     echo " 2. Generar Stack Docker (Compose y Verificación de Imágenes)"
+    echo " 3. Levantar Infraestructura y Sincronizar DNS Local"
+    echo " 4. Gestión de Cuentas de Correo (Crear/Listar)"
     echo " 0. Salir del sistema"
     echo "======================================================================"
     read -p " Seleccione una opción de ejecución: " opcion
@@ -51,6 +54,12 @@ while true; do
             ;;
         2)
             generar_stack_docker
+            ;;
+        3)
+            levantar_servicios_y_dns
+            ;;
+        4)
+            gestionar_cuentas_correo
             ;;
         0)
             echo "[INFO] Finalizando ejecución y cerrando descriptores."
