@@ -40,6 +40,7 @@ while true; do
     echo " [INFO] Ruta externa: $BASE_DIR"
     echo "======================================================================"
     echo " 1. Preparar Entorno Base (Directorios y Permisos)"
+    echo " 2. Generar Stack Docker (Compose y Verificación de Imágenes)"
     echo " 0. Salir del sistema"
     echo "======================================================================"
     read -p " Seleccione una opción de ejecución: " opcion
@@ -47,6 +48,9 @@ while true; do
     case $opcion in
         1)
             preparar_entorno_base
+            ;;
+        2)
+            generar_stack_docker
             ;;
         0)
             echo "[INFO] Finalizando ejecución y cerrando descriptores."
