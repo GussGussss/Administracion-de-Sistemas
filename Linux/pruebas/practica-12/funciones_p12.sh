@@ -502,7 +502,7 @@ exportar_certificado_ssl() {
         echo "----------------------------------------------------------------------"
         openssl x509 -in "$cert_dir/reprobados_mail.crt" -noout \
             -subject -issuer -dates 2>/dev/null \
-            || echo "     (openssl no disponible para mostrar detalles)"
+            || echo "     openssl no disponible para mostrar detalles"
         echo "----------------------------------------------------------------------"
 
         echo ""
