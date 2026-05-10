@@ -43,3 +43,101 @@ preparar_entorno_base() {
 
     echo "[ÉXITO] Infraestructura de directorios preparada y securizada."
 }
+
+# ==============================================================================
+# Función 2: Generación del stack y validación de imágenes offline
+# ==============================================================================
+generar_stack_docker() {
+    echo ""
+    echo "[PROCESO] Generando archivo de orquestación docker-compose.yml..."
+    
+    local compose_file="$BASE_DIR/docker-compose.yml"
+    
+    # Validar si el archivo ya existe para no sobreescribir configuraciones manuales
+    if [[ -f "$compose_file" ]]; then
+        read -p "[ADVERTENCIA] El archivo docker-compose.yml ya existe. ¿Desea sobrescribirlo? (s/N): " sobreescribir
+        if [[ "$sobreescribir" != "s" && "$sobreescribir" != "S" ]]; then
+            echo "[INFO] Operación cancelada. Conservando el archivo existente."
+        else
+            crear_archivo_compose "$compose_file"
+        fi
+    else
+        crear_archivo_compose "$compose_file"
+    fi
+
+    # Lógica Offline/Ahorro de Datos: Verificar imágenes antes de pull
+    echo ""
+    echo "[PROCESO] Verificando caché local de imágenes Docker..."
+    verificar_imagen "mailserver/docker-mailserver:latest"
+    verificar_imagen "roundcube/roundcubemail:latest"
+    
+    echo "[ÉXITO] Generación de stack finalizada."
+}
+
+# Sub-función: Escritura del YAML (Heredoc)
+crear_archivo_compose() {
+    local archivo=$1
+    cat << 'EOF' > "$archivo"
+services:
+  mailserver:
+    image: mailserver/docker-mailserver:latest
+    container_name: mta_dovecot_reprobados
+    hostname: mail.reprobados.com
+    domainname: reprobados.com
+    ports:
+      - "25:25"     # SMTP entrante
+      - "143:143"   # IMAP
+      - "587:587"   # Submission
+      - "993:993"   # IMAPS
+    volumes:
+      - ./mail_data:/var/mail
+      - ./mail_state:/var/mail-state
+      - ./mail_logs:/var/log/mail
+      - ./mail_config:/tmp/docker-mailserver
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - ENABLE_SPAMASSASSIN=0
+      - ENABLE_RSPAMD=1
+      - ENABLE_CLAMAV=0
+      - ENABLE_FAIL2BAN=1
+      - ONE_DIR=1
+      - OVERRIDE_HOSTNAME=mail.reprobados.com
+    cap_add:
+      - NET_ADMIN # Privilegio requerido por fail2ban para manipular iptables
+    restart: unless-stopped
+
+  webmail:
+    image: roundcube/roundcubemail:latest
+    container_name: webmail_reprobados
+    ports:
+      - "8080:80" # Expuesto al host en puerto 8080 para validación
+    environment:
+      - ROUNDCUBEMAIL_DEFAULT_HOST=mail.reprobados.com
+      - ROUNDCUBEMAIL_SMTP_SERVER=mail.reprobados.com
+    volumes:
+      - ./webmail_html:/var/www/html
+      - ./webmail_db:/var/roundcube/db
+    depends_on:
+      - mailserver
+    restart: unless-stopped
+EOF
+    echo "  -> Archivo escrito correctamente en: $archivo"
+}
+
+# Sub-función: Control de descargas offline
+verificar_imagen() {
+    local imagen=$1
+    # Verifica si la imagen existe evaluando la salida de docker images
+    if docker images -q "$imagen" | grep -q .; then
+        echo "  -> [CACHÉ] La imagen '$imagen' ya existe localmente. Omitiendo descarga de red."
+    else
+        echo "  -> [FALTANTE] La imagen '$imagen' no se encuentra en el repositorio local."
+        read -p "     ¿Desea consumir ancho de banda y descargarla desde Docker Hub ahora? (s/N): " descargar
+        if [[ "$descargar" == "s" || "$descargar" == "S" ]]; then
+            echo "     [PROCESO] Ejecutando docker pull para $imagen..."
+            docker pull "$imagen"
+        else
+            echo "     [ADVERTENCIA] Descarga omitida por el usuario."
+        fi
+    fi
+}
