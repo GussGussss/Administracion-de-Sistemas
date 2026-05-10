@@ -2,14 +2,16 @@
 # ==============================================================================
 # Script: funciones_p12.sh
 # Descripción: Módulo de procesamiento y funciones para main_p12.sh.
+# Cuentas configuradas: gustavo@reprobados.com | edna@reprobados.com
 # ==============================================================================
 
+# ==============================================================================
 # Función 1: Preparación de la infraestructura externa
+# ==============================================================================
 preparar_entorno_base() {
     echo ""
     echo "[PROCESO] Iniciando construcción de infraestructura en $BASE_DIR..."
 
-    # Validación de estado previo
     if [[ -d "$BASE_DIR" ]]; then
         echo "[INFO] El directorio raíz ya existe. Verificando subdirectorios..."
     else
@@ -18,7 +20,7 @@ preparar_entorno_base() {
     fi
 
     local directorios=(
-        "mail_data" "mail_state" "mail_logs" "mail_config" "webmail_html" "webmail_db"
+        "mail_data" "mail_state" "mail_logs" "mail_config" "webmail_html" "webmail_db" "ssl_export"
     )
 
     for dir in "${directorios[@]}"; do
@@ -34,7 +36,6 @@ preparar_entorno_base() {
     chown -R "$DETECTED_USER:$DETECTED_USER" "$BASE_DIR"
     chmod -R 755 "$BASE_DIR"
 
-    # Automatización estricta de Firewall
     echo "[PROCESO] Configurando reglas de Firewall (firewalld)..."
     if systemctl is-active --quiet firewalld; then
         local puertos=(25/tcp 143/tcp 587/tcp 993/tcp 465/tcp 8080/tcp)
@@ -56,10 +57,9 @@ preparar_entorno_base() {
 generar_stack_docker() {
     echo ""
     echo "[PROCESO] Generando archivo de orquestación docker-compose.yml..."
-    
+
     local compose_file="$BASE_DIR/docker-compose.yml"
-    
-    # Validar si el archivo ya existe para no sobreescribir configuraciones manuales
+
     if [[ -f "$compose_file" ]]; then
         read -p "[ADVERTENCIA] El archivo docker-compose.yml ya existe. ¿Desea sobrescribirlo? (s/N): " sobreescribir
         if [[ "$sobreescribir" != "s" && "$sobreescribir" != "S" ]]; then
@@ -71,10 +71,8 @@ generar_stack_docker() {
         crear_archivo_compose "$compose_file"
     fi
 
-    # Lógica Offline: Validar la existencia del motor Docker antes de operar con imágenes
     verificar_motor_docker
-    
-    # Si Docker se instaló o ya estaba activo, procedemos con las imágenes
+
     if command -v docker &> /dev/null; then
         echo ""
         echo "[PROCESO] Verificando caché local de imágenes Docker..."
@@ -86,7 +84,9 @@ generar_stack_docker() {
     fi
 }
 
-# Sub-función: Validación e instalación offline de dependencias (Docker CE)
+# ------------------------------------------------------------------------------
+# Sub-función: Validación e instalación de Docker CE
+# ------------------------------------------------------------------------------
 verificar_motor_docker() {
     echo ""
     echo "[PROCESO] Verificando dependencias del sistema (Motor Docker)..."
@@ -94,30 +94,21 @@ verificar_motor_docker() {
         echo "  -> [FALTANTE] El comando 'docker' no se encontró en Oracle Linux."
         read -p "     ¿Desea configurar el repositorio y descargar Docker CE vía dnf ahora? (s/N): " instalar_dkr
         if [[ "$instalar_dkr" == "s" || "$instalar_dkr" == "S" ]]; then
-            echo "     [PROCESO] Instalando utilidades core de dnf..."
             dnf install -y dnf-plugins-core > /dev/null 2>&1
-            
-            # Verificación offline del repositorio
             local repo_file="/etc/yum.repos.d/docker-ce.repo"
             if [[ ! -f "$repo_file" ]]; then
-                echo "     [PROCESO] Descargando repositorio oficial de Docker..."
                 dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo > /dev/null 2>&1
             else
-                echo "     [CACHÉ] El repositorio docker-ce.repo ya existe localmente. Omitiendo descarga."
+                echo "     [CACHÉ] Repositorio docker-ce.repo ya existe. Omitiendo descarga."
             fi
-            
-            echo "     [PROCESO] Ejecutando instalación de paquetes (docker-ce, cli, containerd, compose)..."
             dnf install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin > /dev/null 2>&1
-            
-            echo "     [PROCESO] Iniciando y habilitando el daemon de Docker..."
             systemctl enable --now docker
             echo "  -> [ÉXITO] Motor Docker instalado y operando correctamente."
         else
-            echo "     [ADVERTENCIA] Instalación omitida. No se podrán gestionar los contenedores."
+            echo "     [ADVERTENCIA] Instalación omitida."
         fi
     else
         echo "  -> [OK] Motor Docker detectado en el sistema."
-        # Garantizar que el demonio no esté apagado (ahorro de recursos manual)
         if ! systemctl is-active --quiet docker; then
             echo "     [PROCESO] El servicio Docker estaba inactivo. Levantando daemon..."
             systemctl start docker
@@ -125,22 +116,33 @@ verificar_motor_docker() {
     fi
 }
 
-# Sub-función: Escritura del YAML (Heredoc)
+# ------------------------------------------------------------------------------
+# Sub-función: Escritura del YAML con red Docker explícita (FIX CRÍTICO)
+# Sin red nombrada, el contenedor 'webmail' no puede resolver 'mailserver'
+# por nombre dentro de Docker. También se añade ROUNDCUBEMAIL_SMTP_PORT y
+# ROUNDCUBEMAIL_DEFAULT_PORT para que no queden en los defaults incorrectos.
+# ------------------------------------------------------------------------------
 crear_archivo_compose() {
     local archivo=$1
     cat << 'EOF' > "$archivo"
+networks:
+  mail_network:
+    driver: bridge
+
 services:
   mailserver:
     image: mailserver/docker-mailserver:latest
     container_name: mta_dovecot_reprobados
     hostname: mail.reprobados.com
     domainname: reprobados.com
+    networks:
+      - mail_network
     ports:
-      - "25:25"     # SMTP entrante
-      - "143:143"   # IMAP
-      - "587:587"   # Submission
-      - "993:993"   # IMAPS (SSL/TLS)
-      - "465:465"   # SMTPS (SSL/TLS)
+      - "25:25"
+      - "143:143"
+      - "587:587"
+      - "993:993"
+      - "465:465"
     volumes:
       - ./mail_data:/var/mail
       - ./mail_state:/var/mail-state
@@ -154,7 +156,7 @@ services:
       - ENABLE_FAIL2BAN=1
       - ONE_DIR=1
       - OVERRIDE_HOSTNAME=mail.reprobados.com
-      - SSL_TYPE=self-signed # Fuerza la generación de certificados internos
+      - SSL_TYPE=self-signed
     cap_add:
       - NET_ADMIN
     restart: unless-stopped
@@ -162,13 +164,23 @@ services:
   webmail:
     image: roundcube/roundcubemail:latest
     container_name: webmail_reprobados
+    networks:
+      - mail_network
     ports:
-      - "8080:80" 
+      - "8080:80"
     environment:
-      - ROUNDCUBEMAIL_DEFAULT_HOST=ssl://mailserver  # Usa el nombre del servicio Docker
+      # Se usa el nombre del servicio Docker 'mailserver' para resolución interna
+      # ssl:// fuerza IMAPS puerto 993 internamente entre contenedores
+      - ROUNDCUBEMAIL_DEFAULT_HOST=ssl://mailserver
+      - ROUNDCUBEMAIL_DEFAULT_PORT=993
       - ROUNDCUBEMAIL_SMTP_SERVER=tls://mailserver
+      - ROUNDCUBEMAIL_SMTP_PORT=587
+      # Dominio predeterminado en el login (el usuario escribe solo "gustavo")
+      - ROUNDCUBEMAIL_USERNAME_DOMAIN=reprobados.com
+      # Tiempo de expiración de sesión: 30 minutos de inactividad
+      - ROUNDCUBEMAIL_SESSION_LIFETIME=30
     volumes:
-      - ./webmail_html:/var/www/html
+      - ./webmail_html:/var/www/html/custom
       - ./webmail_db:/var/roundcube/db
     depends_on:
       - mailserver
@@ -177,17 +189,17 @@ EOF
     echo "  -> Archivo escrito correctamente en: $archivo"
 }
 
+# ------------------------------------------------------------------------------
 # Sub-función: Control de descargas offline
+# ------------------------------------------------------------------------------
 verificar_imagen() {
     local imagen=$1
-    # Verifica si la imagen existe evaluando la salida de docker images
     if docker images -q "$imagen" | grep -q .; then
-        echo "  -> [CACHÉ] La imagen '$imagen' ya existe localmente. Omitiendo descarga de red."
+        echo "  -> [CACHÉ] La imagen '$imagen' ya existe localmente. Omitiendo descarga."
     else
-        echo "  -> [FALTANTE] La imagen '$imagen' no se encuentra en el repositorio local."
-        read -p "     ¿Desea consumir ancho de banda y descargarla desde Docker Hub ahora? (s/N): " descargar
+        echo "  -> [FALTANTE] La imagen '$imagen' no está en el repositorio local."
+        read -p "     ¿Desea descargarla desde Docker Hub ahora? (s/N): " descargar
         if [[ "$descargar" == "s" || "$descargar" == "S" ]]; then
-            echo "     [PROCESO] Ejecutando docker pull para $imagen..."
             docker pull "$imagen"
         else
             echo "     [ADVERTENCIA] Descarga omitida por el usuario."
@@ -195,21 +207,21 @@ verificar_imagen() {
     fi
 }
 
-
 # ==============================================================================
 # Función 3: Despliegue de contenedores y sincronización DNS en /etc/hosts
 # ==============================================================================
 levantar_servicios_y_dns() {
     echo ""
     echo "[PROCESO] Iniciando orquestación de contenedores..."
-    
+
     cd "$BASE_DIR" || return
-    
-    # Levantar los contenedores en modo detached (segundo plano)
+
     docker compose up -d
 
     if [[ $? -eq 0 ]]; then
         echo "  -> [ÉXITO] Contenedores inicializados correctamente."
+        echo "  -> [INFO] Esperando 15 segundos para que docker-mailserver termine de inicializar..."
+        sleep 15
     else
         echo "  -> [ERROR] Falló la inicialización de contenedores. Revise los logs de docker."
         return 1
@@ -217,38 +229,41 @@ levantar_servicios_y_dns() {
 
     echo ""
     echo "[PROCESO] Sincronizando DNS dinámico en /etc/hosts..."
-    
+
     local host_entry="$DETECTED_IP mail.$DOMAIN $DOMAIN"
-    
-    # Crear respaldo del archivo hosts original por seguridad
+
     cp /etc/hosts /etc/hosts.bak_practica12
     echo "  -> Respaldo de seguridad creado en /etc/hosts.bak_practica12"
 
-    # Verificar si el dominio ya existe en el archivo
     if grep -q "$DOMAIN" /etc/hosts; then
-        echo "  -> [INFO] Se detectó una entrada previa para $DOMAIN. Actualizando..."
-        # Eliminar las líneas viejas que contengan el dominio y añadir la nueva asegurando salto de línea
+        echo "  -> [INFO] Entrada previa para $DOMAIN detectada. Actualizando..."
         sed -i "/$DOMAIN/d" /etc/hosts
         echo -e "\n$host_entry" >> /etc/hosts
     else
-        # Inyectar la entrada asegurando que empiece en una línea nueva
         echo -e "\n$host_entry" >> /etc/hosts
     fi
-    
-    # Eliminar posibles líneas en blanco duplicadas generadas por el echo -e
+
     sed -i '/^$/N;/^\n$/D' /etc/hosts
 
-    echo "  -> [ÉXITO] DNS Local configurado. El tráfico hacia mail.$DOMAIN se enrutará a $DETECTED_IP."
+    echo "  -> [ÉXITO] DNS configurado. Tráfico hacia mail.$DOMAIN -> $DETECTED_IP"
+    echo ""
+    echo "  ================================================================"
+    echo "  IMPORTANTE: En su PC física (Windows), agregue esta línea al"
+    echo "  archivo C:\\Windows\\System32\\drivers\\etc\\hosts (como Administrador):"
+    echo ""
+    echo "  $DETECTED_IP    mail.$DOMAIN $DOMAIN"
+    echo ""
+    echo "  Esto permite que Thunderbird resuelva el hostname del certificado."
+    echo "  ================================================================"
 }
 
 # ==============================================================================
-# Función 4: Interfaz de gestión de cuentas (Integración con setup.sh)
+# Función 4: Interfaz de gestión de cuentas
 # ==============================================================================
 gestionar_cuentas_correo() {
     echo ""
     echo "[PROCESO] Módulo de Gestión de Identidades (Dovecot)"
-    
-    # Validar que el contenedor esté corriendo antes de inyectar comandos
+
     if ! docker ps | grep -q "mta_dovecot_reprobados"; then
         echo "  -> [ERROR] El contenedor principal de correo no está en ejecución."
         echo "  -> Ejecute la opción 3 primero."
@@ -261,21 +276,15 @@ gestionar_cuentas_correo() {
     read -p "  Seleccione una acción (a/b): " sub_opcion
 
     if [[ "$sub_opcion" == "a" || "$sub_opcion" == "A" ]]; then
-        read -p "  Ingrese la dirección de correo (ej. director@$DOMAIN): " nueva_cuenta
-        
-        # Ocultar la contraseña en la terminal
+        read -p "  Ingrese la dirección de correo (ej. gustavo@$DOMAIN): " nueva_cuenta
         read -s -p "  Ingrese la contraseña para $nueva_cuenta: " password
         echo ""
-
-        # Ejecutar el comando dentro del contenedor para añadir la cuenta
         docker exec -it mta_dovecot_reprobados setup email add "$nueva_cuenta" "$password"
-        
         if [[ $? -eq 0 ]]; then
             echo "  -> [ÉXITO] Cuenta $nueva_cuenta aprovisionada en la base de datos de Dovecot."
         else
             echo "  -> [ERROR] No se pudo crear la cuenta."
         fi
-
     elif [[ "$sub_opcion" == "b" || "$sub_opcion" == "B" ]]; then
         echo "  -> Listado de cuentas activas:"
         docker exec -it mta_dovecot_reprobados setup email list
@@ -285,7 +294,7 @@ gestionar_cuentas_correo() {
 }
 
 # ==============================================================================
-# Función 5: Generación de claves DKIM para autenticación de origen
+# Función 5: Generación de claves DKIM
 # ==============================================================================
 generar_claves_dkim() {
     echo ""
@@ -296,30 +305,28 @@ generar_claves_dkim() {
         return 1
     fi
 
-    # Verificar si las claves ya existen para evitar sobreescritura (Ahorro de recursos)
-    if docker exec -it mta_dovecot_reprobados ls /tmp/docker-mailserver/opendkim/keys/$DOMAIN/mail.private &> /dev/null; then
-        echo "  -> [INFO] Las claves DKIM para $DOMAIN ya existen."
+    if docker exec mta_dovecot_reprobados ls /tmp/docker-mailserver/opendkim/keys/$DOMAIN/mail.private &>/dev/null; then
+        echo "  -> [INFO] Las claves DKIM para $DOMAIN ya existen. No se sobreescribirán."
     else
-        echo "  -> [PROCESO] Ejecutando utilidad de generación interna (setup config dkim)..."
-        docker exec -it mta_dovecot_reprobados setup config dkim
+        echo "  -> [PROCESO] Ejecutando generación interna (setup config dkim)..."
+        docker exec mta_dovecot_reprobados setup config dkim
         if [[ $? -eq 0 ]]; then
-            echo "  -> [ÉXITO] Claves generadas exitosamente."
+            echo "  -> [ÉXITO] Claves DKIM generadas exitosamente."
         else
             echo "  -> [ERROR] Falló la generación de las claves DKIM."
             return 1
         fi
     fi
 
-    echo "  -> [ACCIÓN REQUERIDA] Para validar la práctica, el registro TXT generado se encuentra en:"
-    echo "     $BASE_DIR/mail_config/opendkim/keys/$DOMAIN/mail.txt"
-    echo "     Contenido de la clave pública para el DNS:"
+    echo "  -> Registro TXT para DNS (clave pública):"
     echo "----------------------------------------------------------------------"
-    cat "$BASE_DIR/mail_config/opendkim/keys/$DOMAIN/mail.txt" 2>/dev/null || echo "     [ADVERTENCIA] No se pudo leer el archivo txt localmente."
+    cat "$BASE_DIR/mail_config/opendkim/keys/$DOMAIN/mail.txt" 2>/dev/null \
+        || echo "     [ADVERTENCIA] No se pudo leer el archivo localmente."
     echo "----------------------------------------------------------------------"
 }
 
 # ==============================================================================
-# Función 6: Sistema de recuperación ante desastres (Respaldos automatizados)
+# Función 6: Respaldos automatizados con cron
 # ==============================================================================
 configurar_respaldo_cron() {
     echo ""
@@ -328,23 +335,20 @@ configurar_respaldo_cron() {
     local backup_dir="$BASE_DIR/backups"
     local script_path="$BASE_DIR/backup_diario.sh"
 
-    # Crear directorio de respaldos si no existe
     if [[ ! -d "$backup_dir" ]]; then
         mkdir -p "$backup_dir"
         chown "$DETECTED_USER:$DETECTED_USER" "$backup_dir"
         echo "  -> Creado directorio de respaldos en: $backup_dir"
     fi
 
-    # Crear el script de respaldo que ejecutará cron
     cat << EOF > "$script_path"
 #!/bin/bash
-# Script de respaldo automatizado para la Práctica 12
-# Ejecución programada vía cron
+# Script de respaldo automatizado - Práctica 12
 
 FECHA=\$(date +"%Y%m%d_%H%M%S")
 ARCHIVO_RESPALDO="$backup_dir/mail_backup_\$FECHA.tar.gz"
 
-echo "[INFO] Iniciando respaldo de /var/mail a las \$(date)" >> "$backup_dir/backup.log"
+echo "[INFO] Iniciando respaldo a las \$(date)" >> "$backup_dir/backup.log"
 tar -czf "\$ARCHIVO_RESPALDO" -C "$BASE_DIR" mail_data >> "$backup_dir/backup.log" 2>&1
 
 if [[ \$? -eq 0 ]]; then
@@ -353,36 +357,38 @@ else
     echo "[ERROR] Falló la creación del respaldo." >> "$backup_dir/backup.log"
 fi
 
-# Eliminar respaldos mayores a 7 días para ahorrar espacio
+# Eliminar respaldos mayores a 7 días
 find "$backup_dir" -name "mail_backup_*.tar.gz" -type f -mtime +7 -exec rm {} \;
 EOF
 
     chmod +x "$script_path"
     echo "  -> Script de respaldo generado en: $script_path"
 
-    # Integración con el crontab del sistema (verificando existencia previa)
     local cron_job="0 2 * * * root $script_path"
-    
     if grep -q "$script_path" /etc/crontab; then
-        echo "  -> [INFO] La tarea programada ya existe en /etc/crontab. Omitiendo inyección."
+        echo "  -> [INFO] La tarea ya existe en /etc/crontab. Omitiendo inyección."
     else
         echo "$cron_job" >> /etc/crontab
         systemctl reload crond 2>/dev/null || systemctl restart cron 2>/dev/null
-        echo "  -> [ÉXITO] Tarea programada inyectada. Los respaldos se ejecutarán diariamente a las 02:00 AM."
+        echo "  -> [ÉXITO] Tarea programada: respaldos diarios a las 02:00 AM."
     fi
 }
 
 # ==============================================================================
-# Función 7: Inyección de parámetros corporativos en Roundcube
+# Función 7: Personalización institucional de Roundcube
 # ==============================================================================
 personalizar_webmail() {
     echo ""
     echo "[PROCESO] Aplicando personalización institucional a Roundcube..."
-    
-    local config_file="$BASE_DIR/webmail_html/config/config.inc.php"
-    local logo_file="$BASE_DIR/webmail_html/logo_institucional.svg"
 
-    # 1. Generar logotipo vectorial offline
+    # El volumen mapea ./webmail_html -> /var/www/html/custom dentro del contenedor
+    # El config real de roundcube está en /var/roundcube/config/ dentro del contenedor
+    local logo_dir="$BASE_DIR/webmail_html"
+    local logo_file="$logo_dir/logo_institucional.svg"
+
+    mkdir -p "$logo_dir"
+
+    # 1. Generar logotipo vectorial
     cat << 'EOF' > "$logo_file"
 <svg xmlns="http://www.w3.org/2000/svg" width="200" height="50">
   <rect width="200" height="50" fill="#1c2833" rx="5"/>
@@ -390,38 +396,38 @@ personalizar_webmail() {
   <text x="135" y="32" font-family="monospace" font-size="18" fill="#ecf0f1">.COM</text>
 </svg>
 EOF
-    # Ajustar permisos para que el servidor web interno (www-data) pueda leerlo
     chmod 644 "$logo_file"
-    echo "  -> [ÉXITO] Logotipo corporativo generado estáticamente en el volumen."
+    echo "  -> [ÉXITO] Logotipo corporativo generado en el volumen."
 
-    # 2. Modificar el archivo de configuración si el contenedor ya lo aprovisionó
-    if [[ -f "$config_file" ]]; then
-        cp "$config_file" "${config_file}.bak_practica12"
-        
-        # Inyectar el dominio predeterminado
-        if grep -q "username_domain" "$config_file"; then
-            sed -i "s/\$config\['username_domain'\].*/\$config\['username_domain'\] = '$DOMAIN';/g" "$config_file"
-        else
-            echo "\$config['username_domain'] = '$DOMAIN';" >> "$config_file"
-        fi
-        
-        # Inyectar el logotipo
-        if grep -q "skin_logo" "$config_file"; then
-            sed -i "s|\$config\['skin_logo'\].*|\$config\['skin_logo'\] = 'logo_institucional.svg';|g" "$config_file"
-        else
-            echo "\$config['skin_logo'] = 'logo_institucional.svg';" >> "$config_file"
-        fi
-        
-        echo "  -> [ÉXITO] Parámetros de Webmail actualizados (Dominio base y Logo)."
-        echo "  -> [INFO] Puede acceder desde su navegador anfitrión en: http://192.168.1.15:8080"
+    # 2. Aplicar configuración adicional vía exec dentro del contenedor
+    if docker ps | grep -q "webmail_reprobados"; then
+        echo "  -> [PROCESO] Inyectando configuración adicional en el contenedor Roundcube..."
+        docker exec webmail_reprobados sh -c "
+            CONFIG_FILE='/var/roundcube/config/config.inc.php'
+            if [ -f \"\$CONFIG_FILE\" ]; then
+                # Dominio predeterminado
+                grep -q 'username_domain' \"\$CONFIG_FILE\" || \
+                    echo \"\\\$config['username_domain'] = 'reprobados.com';\" >> \"\$CONFIG_FILE\"
+                # Timeout de sesión (30 min)
+                grep -q 'session_lifetime' \"\$CONFIG_FILE\" || \
+                    echo \"\\\$config['session_lifetime'] = 30;\" >> \"\$CONFIG_FILE\"
+                echo 'Config aplicada exitosamente.'
+            else
+                echo 'ADVERTENCIA: config.inc.php no encontrado aún.'
+            fi
+        " 2>/dev/null && echo "  -> [ÉXITO] Parámetros de sesión y dominio aplicados." \
+                       || echo "  -> [ADVERTENCIA] No se pudo inyectar config. El contenedor puede estar inicializando."
     else
-        echo "  -> [ADVERTENCIA] No se encontró config.inc.php."
-        echo "     Asegúrese de que el contenedor de webmail haya inicializado correctamente."
+        echo "  -> [ADVERTENCIA] El contenedor webmail_reprobados no está corriendo."
+        echo "     Ejecute la opción 3 primero y luego regrese aquí."
     fi
+
+    echo "  -> [INFO] Acceso desde su PC física: http://$DETECTED_IP:8080"
+    echo "  -> [INFO] Usuario de prueba: gustavo (sin @$DOMAIN si DOMAIN está configurado)"
 }
 
 # ==============================================================================
-# Función 8: Panel de auditoría para pruebas de aceptación
+# Función 8: Panel de auditoría
 # ==============================================================================
 auditar_seguridad_logs() {
     echo ""
@@ -429,17 +435,18 @@ auditar_seguridad_logs() {
     echo "  a) Consultar estado del Firewall (Fail2Ban)"
     echo "  b) Extraer últimos registros de transferencia (mail.log)"
     read -p "  Seleccione una acción (a/b): " sub_opcion
-    
+
     if [[ "$sub_opcion" == "a" || "$sub_opcion" == "A" ]]; then
-        echo "  -> [SEGURIDAD] Consultando estado global de Fail2Ban..."
+        echo "  -> [SEGURIDAD] Estado global de Fail2Ban:"
         docker exec -it mta_dovecot_reprobados fail2ban-client status
         echo ""
-        echo "  -> [SEGURIDAD] Consultando celda específica de Dovecot (IMAP/POP3)..."
+        echo "  -> [SEGURIDAD] Celda específica de Dovecot:"
         docker exec -it mta_dovecot_reprobados fail2ban-client status dovecot
     elif [[ "$sub_opcion" == "b" || "$sub_opcion" == "B" ]]; then
-        echo "  -> [AUDITORÍA] Últimas 15 transacciones registradas:"
+        echo "  -> [AUDITORÍA] Últimas 20 transacciones registradas:"
         echo "----------------------------------------------------------------------"
-        tail -n 15 "$BASE_DIR/mail_logs/mail.log" 2>/dev/null || echo "  [ERROR] Registro no disponible."
+        tail -n 20 "$BASE_DIR/mail_logs/mail.log" 2>/dev/null \
+            || docker logs mta_dovecot_reprobados 2>&1 | tail -n 20
         echo "----------------------------------------------------------------------"
     else
         echo "  -> [ERROR] Opción inválida."
@@ -447,7 +454,142 @@ auditar_seguridad_logs() {
 }
 
 # ==============================================================================
-# Función 9: Submenú y controladores de Pruebas de Aceptación Individuales
+# Función 10: Exportar certificado SSL e instrucciones para Thunderbird en Windows
+# FIX CRÍTICO: Thunderbird en Windows necesita el .crt físico para importarlo
+# como CA de confianza ANTES de configurar la cuenta con SSL/TLS estricto.
+# ==============================================================================
+exportar_certificado_ssl() {
+    echo ""
+    echo "[PROCESO] Exportando certificado SSL autofirmado del contenedor..."
+
+    if ! docker ps | grep -q "mta_dovecot_reprobados"; then
+        echo "  -> [ERROR] El contenedor no está corriendo. Ejecute la opción 3 primero."
+        return 1
+    fi
+
+    local cert_dir="$BASE_DIR/ssl_export"
+    mkdir -p "$cert_dir"
+
+    # Esperar hasta 60 segundos a que docker-mailserver genere el certificado
+    echo "  -> Esperando que docker-mailserver genere el certificado (hasta 60s)..."
+    local intentos=0
+    local cert_encontrado=0
+    while [[ $intentos -lt 12 ]]; do
+        if docker exec mta_dovecot_reprobados test -f /etc/ssl/docker-mailserver/cert.pem 2>/dev/null; then
+            cert_encontrado=1
+            break
+        fi
+        sleep 5
+        intentos=$((intentos + 1))
+        echo "     Intento $intentos/12..."
+    done
+
+    if [[ $cert_encontrado -eq 0 ]]; then
+        echo "  -> [ERROR] El certificado no se generó en 60 segundos."
+        echo "     Posibles causas:"
+        echo "     - El contenedor aún está inicializando (espere 2 minutos y reintente)"
+        echo "     - Revise: docker logs mta_dovecot_reprobados | tail -30"
+        return 1
+    fi
+
+    # Copiar el certificado al host
+    docker cp mta_dovecot_reprobados:/etc/ssl/docker-mailserver/cert.pem \
+        "$cert_dir/reprobados_mail.crt" 2>/dev/null
+
+    # Verificar que el archivo tenga contenido real
+    if [[ ! -s "$cert_dir/reprobados_mail.crt" ]]; then
+        echo "  -> [FALLBACK] Intentando extracción alternativa con docker exec..."
+        docker exec mta_dovecot_reprobados cat /etc/ssl/docker-mailserver/cert.pem \
+            > "$cert_dir/reprobados_mail.crt" 2>/dev/null
+    fi
+
+    if [[ -s "$cert_dir/reprobados_mail.crt" ]]; then
+        # Mostrar info del certificado
+        echo ""
+        echo "  -> [ÉXITO] Certificado exportado en: $cert_dir/reprobados_mail.crt"
+        echo "  -> Información del certificado:"
+        echo "----------------------------------------------------------------------"
+        openssl x509 -in "$cert_dir/reprobados_mail.crt" -noout \
+            -subject -issuer -dates 2>/dev/null \
+            || echo "     (openssl no disponible para mostrar detalles)"
+        echo "----------------------------------------------------------------------"
+
+        echo ""
+        echo "  ================================================================"
+        echo "  PASO 1: COPIAR EL CERTIFICADO A SU PC WINDOWS"
+        echo "  ================================================================"
+        echo "  El archivo está en el servidor Oracle Linux en:"
+        echo "  $cert_dir/reprobados_mail.crt"
+        echo ""
+        echo "  Cópielo a su PC Windows con SCP (desde PowerShell o CMD):"
+        echo "  scp $DETECTED_USER@$DETECTED_IP:$cert_dir/reprobados_mail.crt C:\\Users\\%USERNAME%\\Desktop\\"
+        echo ""
+        echo "  O si usa una VM con carpeta compartida, cópielo desde ahí."
+        echo ""
+        echo "  ================================================================"
+        echo "  PASO 2: AGREGAR HOSTNAME AL ARCHIVO HOSTS DE WINDOWS"
+        echo "  ================================================================"
+        echo "  Abra NOTEPAD como Administrador y edite:"
+        echo "  C:\\Windows\\System32\\drivers\\etc\\hosts"
+        echo ""
+        echo "  Agregue esta línea al final:"
+        echo "  $DETECTED_IP    mail.reprobados.com reprobados.com"
+        echo ""
+        echo "  Esto es OBLIGATORIO para que el CN del certificado coincida."
+        echo ""
+        echo "  ================================================================"
+        echo "  PASO 3: IMPORTAR EL CERTIFICADO EN THUNDERBIRD (WINDOWS)"
+        echo "  ================================================================"
+        echo "  1. Abra Thunderbird"
+        echo "  2. Menú hamburguesa (≡) -> Herramientas -> Opciones"
+        echo "  3. Panel izquierdo: 'Privacidad y seguridad'"
+        echo "  4. Baje hasta la sección 'Certificados'"
+        echo "  5. Clic en 'Administrar certificados...'"
+        echo "  6. Pestaña 'Autoridades' -> clic en 'Importar...'"
+        echo "  7. Seleccione: reprobados_mail.crt del escritorio"
+        echo "  8. Marque AMBAS casillas:"
+        echo "     [x] Confiar en esta CA para identificar sitios web"
+        echo "     [x] Confiar en esta CA para identificar usuarios de correo"
+        echo "  9. Clic en OK y cierre el administrador de certificados"
+        echo ""
+        echo "  ================================================================"
+        echo "  PASO 4: CONFIGURAR LA CUENTA EN THUNDERBIRD"
+        echo "  ================================================================"
+        echo "  Menú (≡) -> Nueva cuenta -> Correo electrónico existente"
+        echo ""
+        echo "  Nombre:    Gustavo (o el que prefiera mostrar)"
+        echo "  Email:     gustavo@reprobados.com"
+        echo "  Contraseña: (la que asignó en la opción 4)"
+        echo ""
+        echo "  -> Clic en 'Configurar manualmente' y use ESTOS valores exactos:"
+        echo ""
+        echo "  ENTRANTE (IMAP):"
+        echo "    Servidor:   mail.reprobados.com   <- NO use la IP aquí"
+        echo "    Puerto:     993"
+        echo "    Seguridad:  SSL/TLS"
+        echo "    Autent.:    Contraseña normal"
+        echo "    Usuario:    gustavo@reprobados.com"
+        echo ""
+        echo "  SALIENTE (SMTP):"
+        echo "    Servidor:   mail.reprobados.com   <- NO use la IP aquí"
+        echo "    Puerto:     465"
+        echo "    Seguridad:  SSL/TLS"
+        echo "    Autent.:    Contraseña normal"
+        echo "    Usuario:    gustavo@reprobados.com"
+        echo ""
+        echo "  IMPORTANTE: Debe usar 'mail.reprobados.com' (no la IP) porque"
+        echo "  el certificado fue emitido para ese hostname. Si usa la IP"
+        echo "  directa, el certificado no coincidirá y Thunderbird rechazará."
+        echo "  ================================================================"
+    else
+        echo "  -> [ERROR] No se pudo extraer el certificado."
+        echo "     Ejecute: docker logs mta_dovecot_reprobados | tail -30"
+        echo "     para ver si hay errores de inicialización."
+    fi
+}
+
+# ==============================================================================
+# Función 9: Submenú de Pruebas de Aceptación
 # ==============================================================================
 submenu_pruebas() {
     while true; do
@@ -455,7 +597,7 @@ submenu_pruebas() {
         echo "======================================================================"
         echo "                 SUBMENÚ - PRUEBAS DE ACEPTACIÓN                      "
         echo "======================================================================"
-        echo " 1. Prueba 12.1: Envío y recepción local (Cliente de escritorio)"
+        echo " 1. Prueba 12.1: Envío y recepción local (Thunderbird)"
         echo " 2. Prueba 12.2: Auditoría de registros (Logging)"
         echo " 3. Prueba 12.3: Verificación de seguridad Fail2ban"
         echo " 4. Prueba 13.4: Integridad de respaldo"
@@ -485,23 +627,36 @@ submenu_pruebas() {
     done
 }
 
-# ------------------------------------------------------------------------------
+# ==============================================================================
 # Controladores de Pruebas Individuales
-# ------------------------------------------------------------------------------
+# ==============================================================================
 
 prueba_12_1() {
     echo ""
     echo "[PRUEBA 12.1: ENVÍO Y RECEPCIÓN LOCAL]"
-    echo "  Acción: Crear dos cuentas de usuario y enviar un correo entre ellas"
-    echo "          usando un cliente como Thunderbird o Mailspring."
-    echo "  Resultado esperado: El correo llega instantáneamente y se puede leer"
-    echo "                      sin errores de cifrado."
     echo "----------------------------------------------------------------------"
-    echo "  [EJECUCIÓN MANUAL REQUERIDA]"
-    echo "  1. Asegúrese de haber creado las cuentas en la Opción 4 del menú principal."
-    echo "  2. Abra Thunderbird en su equipo físico o máquina virtual cliente."
-    echo "  3. Configure la cuenta usando la IP $DETECTED_IP (Puertos: IMAP 143 / SMTP 587)."
-    echo "  4. Envíe un correo de prueba a la segunda cuenta y verifique la bandeja."
+    echo "  Resultado esperado: Correo entre gustavo@ y edna@ sin errores de cifrado."
+    echo ""
+    echo "  PRE-REQUISITOS (verifique antes de continuar):"
+    echo "  [ ] Ha ejecutado la Opción 10 y exportado el certificado"
+    echo "  [ ] Ha importado el certificado .crt en Thunderbird (Paso 3 de opción 10)"
+    echo "  [ ] Ha agregado '$DETECTED_IP mail.reprobados.com' al hosts de Windows"
+    echo "  [ ] Ha configurado AMBAS cuentas en Thunderbird (gustavo y edna)"
+    echo ""
+    echo "  PROCEDIMIENTO:"
+    echo "  1. En Thunderbird, seleccione la cuenta gustavo@$DOMAIN"
+    echo "  2. Clic en 'Redactar nuevo mensaje'"
+    echo "  3. Para: edna@$DOMAIN"
+    echo "  4. Asunto: Prueba 12.1 - Verificacion SSL"
+    echo "  5. Cuerpo: 'Correo de prueba con SSL/TLS nativo activado.'"
+    echo "  6. Clic en Enviar"
+    echo "  7. Cambie a la cuenta edna@$DOMAIN"
+    echo "  8. Clic en 'Obtener mensajes' y verifique que el correo llega"
+    echo "  9. El candado en la barra de estado de Thunderbird debe estar CERRADO"
+    echo "     (indica que la conexión es cifrada con SSL/TLS)"
+    echo ""
+    echo "  VERIFICACIÓN EXTRA desde el servidor:"
+    echo "  Puede ver la entrega en tiempo real ejecutando la Opción 8 -> b"
     echo ""
     read -p "  Presione ENTER una vez validada la prueba..."
 }
@@ -509,19 +664,68 @@ prueba_12_1() {
 prueba_12_2() {
     echo ""
     echo "[PRUEBA 12.2: AUDITORÍA DE REGISTROS (LOGGING)]"
-    echo "  Acción: Realizar un envío y luego consultar los archivos de registro en /var/log/mail.log."
-    echo "  Resultado esperado: El registro debe mostrar el flujo completo: conexión, autenticación"
-    echo "                      exitosa, transferencia del mensaje y desconexión."
     echo "----------------------------------------------------------------------"
     echo "  [EJECUCIÓN AUTOMATIZADA]"
-    echo "  -> Inyectando un correo de prueba interno..."
-    docker exec -it mta_dovecot_reprobados sh -c "echo -e 'Subject: Auditoria Automatica\n\nPrueba de logs exitosa.' | sendmail admin@$DOMAIN" 2>/dev/null
-    sleep 2
-    echo "  -> Extrayendo flujo transaccional reciente del log:"
-    echo "......................................................................"
-    tail -n 12 "$BASE_DIR/mail_logs/mail.log" | grep -iE "postfix/|dovecot:" || echo "  [!] No se encontraron registros recientes."
-    echo "......................................................................"
-    echo "  Verifique visualmente la conexión y transferencia en la salida superior."
+
+    # Obtener cuentas y construir menú numerado
+    echo "  -> Obteniendo cuentas disponibles en el servidor..."
+    local cuentas_raw
+    cuentas_raw=$(docker exec mta_dovecot_reprobados setup email list 2>/dev/null)
+
+    if [[ -z "$cuentas_raw" ]]; then
+        echo "  -> [ERROR] No hay cuentas creadas. Ejecute la Opción 4 primero."
+        read -p "  Presione ENTER para continuar..."
+        return 1
+    fi
+
+    echo ""
+    echo "  Cuentas registradas en el servidor:"
+    echo "----------------------------------------------------------------------"
+    local i=1
+    local -a lista_cuentas
+    while IFS= read -r linea; do
+        if [[ -n "$linea" ]]; then
+            echo "  $i) $linea"
+            lista_cuentas+=("$linea")
+            i=$((i + 1))
+        fi
+    done <<< "$cuentas_raw"
+    echo "----------------------------------------------------------------------"
+
+    local cuenta_destino=""
+    while [[ -z "$cuenta_destino" ]]; do
+        read -p "  Seleccione el NÚMERO de la cuenta DESTINO del correo de prueba: " seleccion
+        if [[ "$seleccion" =~ ^[0-9]+$ ]] && \
+           [[ "$seleccion" -ge 1 ]] && \
+           [[ "$seleccion" -le "${#lista_cuentas[@]}" ]]; then
+            cuenta_destino="${lista_cuentas[$((seleccion - 1))]}"
+        else
+            echo "  -> [ERROR] Número inválido. Elija entre 1 y ${#lista_cuentas[@]}."
+        fi
+    done
+
+    echo "  -> Destino seleccionado: $cuenta_destino"
+    echo "  -> Inyectando correo de prueba hacia $cuenta_destino ..."
+    docker exec mta_dovecot_reprobados sh -c \
+        "echo -e 'Subject: Prueba Auditoria Log\nFrom: sistema@$DOMAIN\nTo: $cuenta_destino\n\nVerificacion de trazabilidad completa.' | sendmail $cuenta_destino" 2>/dev/null
+    sleep 3
+
+    echo "  -> Extrayendo flujo transaccional del log (últimas 20 líneas):"
+    echo "----------------------------------------------------------------------"
+    # Intentar primero el archivo mapeado al host
+    if [[ -f "$BASE_DIR/mail_logs/mail.log" ]]; then
+        tail -n 20 "$BASE_DIR/mail_logs/mail.log"
+    else
+        # Fallback: leer desde docker logs
+        docker logs mta_dovecot_reprobados 2>&1 | tail -n 20
+    fi
+    echo "----------------------------------------------------------------------"
+    echo ""
+    echo "  ¿Qué buscar en los logs para aprobar esta prueba?"
+    echo "  - Líneas con 'postfix/smtp' o 'postfix/local' indican ENTREGA del mensaje"
+    echo "  - Líneas con 'status=sent' indican ÉXITO en la transferencia"
+    echo "  - Líneas con 'dovecot' indican actividad del protocolo IMAP"
+    echo "  - Líneas con 'login:' indican autenticación de usuario"
     echo ""
     read -p "  Presione ENTER para continuar..."
 }
@@ -529,27 +733,50 @@ prueba_12_2() {
 prueba_12_3() {
     echo ""
     echo "[PRUEBA 12.3: VERIFICACIÓN DE SEGURIDAD FAIL2BAN]"
-    echo "  Acción: Intentar iniciar sesión con una contraseña incorrecta 5 veces seguidas"
-    echo "          desde una terminal remota."
-    echo "  Resultado esperado: La dirección IP del atacante debe ser bloqueada por el firewall"
-    echo "                      del servidor automáticamente."
     echo "----------------------------------------------------------------------"
     echo "  [EJECUCIÓN AUTOMATIZADA]"
-    echo "  -> Simulando ataque de fuerza bruta contra el puerto IMAP (143)..."
-    echo "  -> Simulando 6 intentos de login fallidos via openssl..."
+    echo "  -> Simulando 6 intentos de login fallidos contra IMAP SSL (puerto 993)..."
+    echo ""
+    echo "  NOTA: Los intentos se realizan desde dentro del contenedor hacia sí"
+    echo "  mismo usando una IP de loopback interna. Fail2Ban detectará el patrón"
+    echo "  de fallos en los logs de Dovecot y bloqueará la IP de origen."
+    echo ""
+
+    # FIX CRÍTICO: El ataque debe hacerse contra el puerto IMAP plano (143) internamente
+    # porque Fail2Ban en docker-mailserver monitorea los logs de auth de Dovecot.
+    # Usamos 'nc' (netcat) que viene incluido en la imagen docker-mailserver.
+    # El protocolo IMAP es texto plano, enviamos LOGIN inválido y cerramos.
     for i in {1..6}; do
-        echo "     Intento $i/6..."
-        timeout 3 docker exec mta_dovecot_reprobados sh -c \
-            "echo -e 'a LOGIN atacante_test wrong_password_$i\r\nа LOGOUT\r\n' | \
-            openssl s_client -connect 127.0.0.1:993 -quiet 2>/dev/null" 2>/dev/null || true
+        echo "     Intento de login fallido $i/6..."
+        # Intentar autenticación IMAP fallida directo al puerto 143 interno
+        docker exec mta_dovecot_reprobados sh -c \
+            "echo -e 'a$i LOGIN atacante_brute password_incorrecta_$i\r\na$i LOGOUT\r\n' \
+            | timeout 3 nc -q 1 127.0.0.1 143 2>/dev/null || true" 2>/dev/null
         sleep 2
     done
-    echo "  -> Consultando estado de la celda 'dovecot' en Fail2ban:"
-    echo "......................................................................"
-    docker exec -it mta_dovecot_reprobados fail2ban-client status dovecot
-    echo "......................................................................"
-    echo "  Verifique que 'Currently banned' sea mayor a 0 y que la IP $DETECTED_IP"
-    echo "  aparezca en la 'Banned IP list'."
+
+    echo ""
+    echo "  -> Esperando 5 segundos para que Fail2Ban procese los logs..."
+    sleep 5
+
+    echo "  -> Consultando estado de Fail2Ban:"
+    echo "----------------------------------------------------------------------"
+    docker exec mta_dovecot_reprobados fail2ban-client status 2>/dev/null \
+        || echo "  [INFO] Fail2Ban puede estar inicializando. Intente la Opción 8 -> a"
+    echo ""
+    docker exec mta_dovecot_reprobados fail2ban-client status dovecot 2>/dev/null \
+        || echo "  [INFO] La celda 'dovecot' puede no estar activa aún."
+    echo "----------------------------------------------------------------------"
+    echo ""
+    echo "  ¿Qué buscar para aprobar esta prueba?"
+    echo "  - 'Currently banned: 1' o mayor en la sección de la celda dovecot"
+    echo "  - Si no aparece bloqueada aún, espere 30 segundos y ejecute la Opción 8 -> a"
+    echo ""
+    echo "  ALTERNATIVA MANUAL (desde su PC Windows para un resultado más claro):"
+    echo "  Abra PowerShell y ejecute 6 veces seguidas:"
+    echo "  telnet $DETECTED_IP 143"
+    echo "  Luego escriba: a1 LOGIN usuario password_incorrecta"
+    echo "  La IP de su PC ($DETECTED_IP física) quedará bloqueada."
     echo ""
     read -p "  Presione ENTER para continuar..."
 }
@@ -557,149 +784,177 @@ prueba_12_3() {
 prueba_13_4() {
     echo ""
     echo "[PRUEBA 13.4: INTEGRIDAD DE RESPALDO]"
-    echo "  Acción: Borrar un correo, detener el contenedor, restaurar el último respaldo"
-    echo "          y verificar la reaparición del correo."
-    echo "  Resultado esperado: Recuperación total de la información sin pérdida de metadatos."
     echo "----------------------------------------------------------------------"
     echo "  [EJECUCIÓN HÍBRIDA]"
-    echo "  -> Fase 1: Creando respaldo de seguridad actual..."
+
+    # Verificar que el script de backup existe
+    if [[ ! -f "$BASE_DIR/backup_diario.sh" ]]; then
+        echo "  -> [ERROR] No existe el script de respaldo. Ejecute la Opción 6 primero."
+        read -p "  Presione ENTER para continuar..."
+        return 1
+    fi
+
+    echo "  -> Fase 1: Creando respaldo del estado ACTUAL de los buzones..."
     bash "$BASE_DIR/backup_diario.sh"
-    local ultimo_respaldo=$(ls -t "$BASE_DIR/backups" | head -n 1)
-    echo "     Respaldo generado: $ultimo_respaldo"
-    
-    echo "  -> Fase 2: Acción manual"
-    echo "     Acceda al correo y ELIMINE un mensaje existente."
-    read -p "     Presione ENTER estrictamente DESPUÉS de haber eliminado el correo..."
-    
-    echo "  -> Fase 3: Deteniendo infraestructura de correo..."
-    docker compose -f "$BASE_DIR/docker-compose.yml" stop mailserver
-    
-    echo "  -> Fase 4: Restaurando el volumen desde el archivo comprimido..."
-    tar -xzf "$BASE_DIR/backups/$ultimo_respaldo" -C "$BASE_DIR" mail_data
-    
-    echo "  -> Fase 5: Reiniciando infraestructura..."
-    docker compose -f "$BASE_DIR/docker-compose.yml" start mailserver
-    
-    echo "  [!] Restauración completada. Vaya a su cliente de correo, actualice"
-    echo "      la bandeja y confirme visualmente la reaparición del mensaje."
+
+    local ultimo_respaldo
+    ultimo_respaldo=$(ls -t "$BASE_DIR/backups/"mail_backup_*.tar.gz 2>/dev/null | head -n 1)
+
+    if [[ -z "$ultimo_respaldo" ]]; then
+        echo "  -> [ERROR] No se encontró ningún respaldo. Verifique el script de backup."
+        read -p "  Presione ENTER para continuar..."
+        return 1
+    fi
+
+    echo "  -> Respaldo generado: $(basename "$ultimo_respaldo")"
+    echo "  -> Tamaño: $(du -sh "$ultimo_respaldo" | cut -f1)"
     echo ""
-    read -p "  Presione ENTER para continuar..."
+    echo "  -> Fase 2: ACCIÓN MANUAL REQUERIDA"
+    echo "     1. Vaya a Thunderbird o Roundcube"
+    echo "     2. ELIMINE permanentemente un correo existente (Shift+Supr en Thunderbird)"
+    echo "     3. Confirme la eliminación"
+    read -p "     Presione ENTER DESPUÉS de haber eliminado el correo..."
+
+    echo ""
+    echo "  -> Fase 3: Deteniendo el contenedor de correo..."
+    docker compose -f "$BASE_DIR/docker-compose.yml" stop mailserver
+    sleep 3
+
+    echo "  -> Fase 4: Restaurando volumen desde el respaldo comprimido..."
+    # Eliminar datos actuales y restaurar desde backup
+    rm -rf "$BASE_DIR/mail_data"
+    tar -xzf "$ultimo_respaldo" -C "$BASE_DIR"
+
+    if [[ $? -eq 0 ]]; then
+        echo "  -> [ÉXITO] Volumen restaurado desde: $(basename "$ultimo_respaldo")"
+    else
+        echo "  -> [ERROR] Falló la restauración del volumen."
+        read -p "  Presione ENTER para continuar..."
+        return 1
+    fi
+
+    echo "  -> Fase 5: Reiniciando el contenedor de correo..."
+    docker compose -f "$BASE_DIR/docker-compose.yml" start mailserver
+    echo "  -> Esperando 10 segundos para que Dovecot reinicialice..."
+    sleep 10
+
+    echo ""
+    echo "  ================================================================"
+    echo "  VERIFICACIÓN:"
+    echo "  1. Vaya a Thunderbird -> haga clic en 'Obtener mensajes'"
+    echo "  2. El correo que eliminó debería haber reaparecido"
+    echo "  3. Abra el correo y verifique que el contenido y metadatos"
+    echo "     (fecha, remitente, asunto) estén intactos"
+    echo "  ================================================================"
+    echo ""
+    read -p "  Presione ENTER una vez confirmada la restauración..."
 }
 
 prueba_13_5() {
     echo ""
-    echo "[PRUEBA 13.5: INICIO DE SESIÓN INSTITUCIONAL]"
-    echo "  Acción: Acceder a la URL del servidor desde un navegador e iniciar sesión"
-    echo "          con las credenciales creadas en la sección anterior."
-    echo "  Resultado esperado: El portal carga la bandeja de entrada correctamente"
-    echo "                      y muestra los correos existentes."
+    echo "[PRUEBA 13.5: INICIO DE SESIÓN INSTITUCIONAL (WEBMAIL)]"
     echo "----------------------------------------------------------------------"
-    echo "  [EJECUCIÓN MANUAL REQUERIDA]"
-    echo "  1. Abra un navegador y navegue hacia: http://$DETECTED_IP:8080"
-    echo "  2. Inicie sesión (ej. usuario: director, contraseña: la asignada)."
-    echo "  3. Verifique que la interfaz de Roundcube cargue sin errores."
+    echo "  [VERIFICACIÓN AUTOMATIZADA DEL SERVICIO]"
+
+    # Verificar que el puerto 8080 responde
+    echo "  -> Comprobando disponibilidad del portal Roundcube..."
+    if curl -s -o /dev/null -w "%{http_code}" "http://localhost:8080" 2>/dev/null | grep -q "200\|302"; then
+        echo "  -> [ÉXITO] El portal Roundcube responde correctamente en el puerto 8080."
+    else
+        echo "  -> [ADVERTENCIA] El portal no respondió. Verificando estado del contenedor..."
+        docker ps | grep webmail_reprobados
+    fi
+
     echo ""
-    read -p "  Presione ENTER una vez validada la prueba..."
+    echo "  [EJECUCIÓN MANUAL DESDE SU PC WINDOWS]"
+    echo "  1. Abra Chrome o Firefox"
+    echo "  2. Navegue a: http://$DETECTED_IP:8080"
+    echo "  3. Aparecerá la pantalla de login de Roundcube"
+    echo "  4. Usuario:    gustavo  (solo el nombre, sin @$DOMAIN si el dominio está preconfigurado)"
+    echo "     O bien:    gustavo@$DOMAIN  (con dominio completo, siempre funciona)"
+    echo "  5. Contraseña: la que asignó en la Opción 4"
+    echo "  6. Clic en 'Entrar'"
+    echo "  7. Debe ver la bandeja de entrada con los correos existentes"
+    echo ""
+    echo "  Si Roundcube da error de conexión al servidor IMAP:"
+    echo "  - Espere 2 minutos más (docker-mailserver tarda en estabilizarse)"
+    echo "  - Ejecute: docker logs mta_dovecot_reprobados | tail -20"
+    echo ""
+    read -p "  Presione ENTER una vez validado el inicio de sesión..."
 }
 
 prueba_13_6() {
     echo ""
-    echo "[PRUEBA 13.6: ENVÍO DE ADJUNTOS Y SEGURIDAD]"
-    echo "  Acción: Redactar un correo desde el portal web con un archivo adjunto"
-    echo "          y enviarlo a otra cuenta local."
-    echo "  Resultado esperado: El correo se envía exitosamente y el archivo adjunto"
-    echo "                      mantiene su integridad (verificable al descargarlo)."
+    echo "[PRUEBA 13.6: ENVÍO DE ADJUNTOS Y SEGURIDAD (WEBMAIL)]"
     echo "----------------------------------------------------------------------"
     echo "  [EJECUCIÓN MANUAL REQUERIDA]"
-    echo "  1. Dentro de Roundcube (http://$DETECTED_IP:8080), haga clic en 'Redactar'."
-    echo "  2. Adjunte una imagen o documento de prueba."
-    echo "  3. Envíe el correo a otra cuenta local (ej. admin)."
-    echo "  4. Inicie sesión con la cuenta receptora y descargue el adjunto."
-    echo "  5. Abra el archivo en su equipo para verificar que no esté corrupto."
+    echo ""
+    echo "  PROCEDIMIENTO:"
+    echo "  1. En Roundcube (http://$DETECTED_IP:8080), inicie sesión como gustavo"
+    echo "  2. Clic en el botón 'Redactar' (ícono de lápiz o botón superior)"
+    echo "  3. Complete el formulario:"
+    echo "     Para:    edna@$DOMAIN"
+    echo "     Asunto:  Prueba 13.6 - Adjunto con integridad verificada"
+    echo "     Cuerpo:  'Verificación de integridad de archivo adjunto.'"
+    echo "  4. Clic en el clip/adjunto e incluya un archivo (imagen PNG, PDF, etc.)"
+    echo "     Sugerencia: use una imagen de menos de 1MB para mayor velocidad"
+    echo "  5. Clic en 'Enviar'"
+    echo ""
+    echo "  VERIFICACIÓN DE INTEGRIDAD:"
+    echo "  6. Cierre sesión y entre como edna@$DOMAIN"
+    echo "  7. Abra el correo recibido de gustavo"
+    echo "  8. Descargue el adjunto haciendo clic en él"
+    echo "  9. Abra el archivo descargado en su PC"
+    echo "  10. Confirme que el archivo se abre sin errores y tiene el contenido correcto"
+    echo ""
+    echo "  VERIFICACIÓN AVANZADA (hash MD5):"
+    echo "  Si quiere demostrar integridad matemática:"
+    echo "  - Antes de enviar, en PowerShell: Get-FileHash archivo.png -Algorithm MD5"
+    echo "  - Después de descargar: Get-FileHash descargado.png -Algorithm MD5"
+    echo "  - Ambos hashes deben ser IDÉNTICOS"
     echo ""
     read -p "  Presione ENTER una vez validada la prueba..."
 }
 
 prueba_13_7() {
     echo ""
-    echo "[PRUEBA 13.7: PERSISTENCIA DE PREFERENCIAS]"
-    echo "  Acción: Cambiar el idioma de la interfaz o añadir un contacto a la libreta,"
-    echo "          reiniciar el contenedor de webmail y volver a entrar."
-    echo "  Resultado esperado: Los cambios deben persistir gracias al volumen"
-    echo "                      de la base de datos del portal."
+    echo "[PRUEBA 13.7: PERSISTENCIA DE PREFERENCIAS (WEBMAIL)]"
     echo "----------------------------------------------------------------------"
     echo "  [EJECUCIÓN HÍBRIDA]"
-    echo "  -> Fase 1: Acción manual"
-    echo "     Dentro de Roundcube, vaya a Configuración -> Interfaz de Usuario."
-    echo "     Modifique el idioma o añada un contacto, y guarde los cambios."
-    read -p "     Presione ENTER estrictamente DESPUÉS de guardar sus preferencias..."
-    
+    echo ""
+    echo "  -> Fase 1: ACCIÓN MANUAL"
+    echo "     En Roundcube (http://$DETECTED_IP:8080):"
+    echo "     OPCIÓN A - Cambiar idioma:"
+    echo "       Configuración (ícono engranaje) -> Preferencias -> Interfaz de usuario"
+    echo "       Cambiar 'Idioma' a 'English (US)' o cualquier otro"
+    echo "       Clic en 'Guardar'"
+    echo "     OPCIÓN B - Agregar contacto:"
+    echo "       Contactos (ícono personas) -> Nueva tarjeta de contacto"
+    echo "       Nombre: Prueba Persistencia"
+    echo "       Email:  test@$DOMAIN"
+    echo "       Guardar"
+    read -p "     Presione ENTER DESPUÉS de guardar su preferencia en Roundcube..."
+
+    echo ""
     echo "  -> Fase 2: Reiniciando el contenedor de webmail..."
     docker compose -f "$BASE_DIR/docker-compose.yml" restart webmail
-    
-    echo "  [!] Contenedor reiniciado exitosamente."
-    echo "      Recargue la página de su navegador, inicie sesión nuevamente"
-    echo "      y valide que sus configuraciones o contactos sigan allí."
+
+    echo "  -> Esperando que Roundcube reinicialice (15 segundos)..."
+    sleep 15
+
+    echo "  -> [ÉXITO] Contenedor reiniciado."
     echo ""
-    read -p "  Presione ENTER para continuar..."
-}
-
-exportar_certificado_ssl() {
+    echo "  -> Fase 3: VERIFICACIÓN MANUAL"
+    echo "     1. Recargue http://$DETECTED_IP:8080 en su navegador"
+    echo "     2. Inicie sesión nuevamente"
+    echo "     3. Verifique que su cambio persiste:"
+    echo "        - Si cambió idioma: debe aparecer en el idioma nuevo"
+    echo "        - Si agregó contacto: debe aparecer en la libreta de direcciones"
     echo ""
-    echo "[PROCESO] Exportando certificado SSL autofirmado del contenedor..."
-
-    if ! docker ps | grep -q "mta_dovecot_reprobados"; then
-        echo "  -> [ERROR] El contenedor no está corriendo. Ejecute la opción 3 primero."
-        return 1
-    fi
-
-    local cert_dir="$BASE_DIR/ssl_export"
-    mkdir -p "$cert_dir"
-
-    # Esperar a que el certificado se genere (puede tardar en el primer arranque)
-    echo "  -> Esperando que docker-mailserver genere el certificado (hasta 30s)..."
-    local intentos=0
-    while [[ $intentos -lt 6 ]]; do
-        if docker exec mta_dovecot_reprobados ls /etc/ssl/docker-mailserver/cert.pem &>/dev/null; then
-            break
-        fi
-        sleep 5
-        intentos=$((intentos + 1))
-        echo "     Intento $intentos/6..."
-    done
-
-    # Extraer el certificado
-    docker cp mta_dovecot_reprobados:/etc/ssl/docker-mailserver/cert.pem \
-        "$cert_dir/reprobados_mail.crt" 2>/dev/null
-
-    if [[ $? -ne 0 ]]; then
-        # Ruta alternativa según versión de docker-mailserver
-        docker exec mta_dovecot_reprobados cat /etc/ssl/docker-mailserver/cert.pem \
-            > "$cert_dir/reprobados_mail.crt" 2>/dev/null
-    fi
-
-    if [[ -s "$cert_dir/reprobados_mail.crt" ]]; then
-        echo "  -> [ÉXITO] Certificado exportado en: $cert_dir/reprobados_mail.crt"
-        echo ""
-        echo "  ================================================================"
-        echo "  INSTRUCCIONES PARA IMPORTAR EN THUNDERBIRD:"
-        echo "  ================================================================"
-        echo "  1. En Thunderbird: Herramientas -> Opciones -> Privacidad y Seguridad"
-        echo "  2. Baja hasta 'Certificados' -> clic en 'Administrar certificados...'"
-        echo "  3. Pestaña 'Autoridades' -> clic en 'Importar...'"
-        echo "  4. Navega a: $cert_dir/reprobados_mail.crt"
-        echo "  5. Marca AMBAS casillas: 'Confiar para sitios web' y 'Confiar para correo'"
-        echo "  6. Acepta y cierra. LUEGO configura la cuenta con SSL/TLS."
-        echo "  ================================================================"
-        echo ""
-        echo "  CONFIGURACIÓN DE CUENTA EN THUNDERBIRD:"
-        echo "  - Servidor entrante:  $DETECTED_IP  Puerto: 993  SSL/TLS"
-        echo "  - Servidor saliente:  $DETECTED_IP  Puerto: 465  SSL/TLS"
-        echo "  - Usuario: nombre completo (ej: director@$DOMAIN)"
-        echo "  ================================================================"
-    else
-        echo "  -> [ERROR] No se pudo extraer el certificado."
-        echo "     El contenedor puede no haber terminado de inicializar."
-        echo "     Espere 2 minutos y reintente."
-    fi
+    echo "  Si los cambios NO persisten:"
+    echo "  -> El volumen ./webmail_db no está funcionando correctamente"
+    echo "  -> Ejecute: docker inspect webmail_reprobados | grep -A5 Mounts"
+    echo "  -> Verifique que /var/roundcube/db esté mapeado a $BASE_DIR/webmail_db"
+    echo ""
+    read -p "  Presione ENTER una vez confirmada la persistencia..."
 }
