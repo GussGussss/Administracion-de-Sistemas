@@ -156,7 +156,9 @@ services:
       - ENABLE_FAIL2BAN=1
       - ONE_DIR=1
       - OVERRIDE_HOSTNAME=mail.reprobados.com
-      - SSL_TYPE=self-signed
+      - SSL_TYPE=manual
+      - SSL_CERT_PATH=/tmp/docker-mailserver/ssl/mail.reprobados.com-cert.pem
+      - SSL_KEY_PATH=/tmp/docker-mailserver/ssl/mail.reprobados.com-key.pem
     cap_add:
       - NET_ADMIN
     restart: unless-stopped
