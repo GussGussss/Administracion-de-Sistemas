@@ -186,3 +186,92 @@ verificar_imagen() {
         fi
     fi
 }
+
+
+# ==============================================================================
+# Función 3: Despliegue de contenedores y sincronización DNS en /etc/hosts
+# ==============================================================================
+levantar_servicios_y_dns() {
+    echo ""
+    echo "[PROCESO] Iniciando orquestación de contenedores..."
+    
+    cd "$BASE_DIR" || return
+    
+    # Levantar los contenedores en modo detached (segundo plano)
+    docker compose up -d
+
+    if [[ $? -eq 0 ]]; then
+        echo "  -> [ÉXITO] Contenedores inicializados correctamente."
+    else
+        echo "  -> [ERROR] Falló la inicialización de contenedores. Revise los logs de docker."
+        return 1
+    fi
+
+    echo ""
+    echo "[PROCESO] Sincronizando DNS dinámico en /etc/hosts..."
+    
+    local host_entry="$DETECTED_IP mail.$DOMAIN $DOMAIN"
+    
+    # Crear respaldo del archivo hosts original por seguridad
+    cp /etc/hosts /etc/hosts.bak_practica12
+    echo "  -> Respaldo de seguridad creado en /etc/hosts.bak_practica12"
+
+    # Verificar si el dominio ya existe en el archivo
+    if grep -q "$DOMAIN" /etc/hosts; then
+        echo "  -> [INFO] Se detectó una entrada previa para $DOMAIN. Actualizando..."
+        # Eliminar las líneas viejas que contengan el dominio y añadir la nueva asegurando salto de línea
+        sed -i "/$DOMAIN/d" /etc/hosts
+        echo -e "\n$host_entry" >> /etc/hosts
+    else
+        # Inyectar la entrada asegurando que empiece en una línea nueva
+        echo -e "\n$host_entry" >> /etc/hosts
+    fi
+    
+    # Eliminar posibles líneas en blanco duplicadas generadas por el echo -e
+    sed -i '/^$/N;/^\n$/D' /etc/hosts
+
+    echo "  -> [ÉXITO] DNS Local configurado. El tráfico hacia mail.$DOMAIN se enrutará a $DETECTED_IP."
+}
+
+# ==============================================================================
+# Función 4: Interfaz de gestión de cuentas (Integración con setup.sh)
+# ==============================================================================
+gestionar_cuentas_correo() {
+    echo ""
+    echo "[PROCESO] Módulo de Gestión de Identidades (Dovecot)"
+    
+    # Validar que el contenedor esté corriendo antes de inyectar comandos
+    if ! docker ps | grep -q "mta_dovecot_reprobados"; then
+        echo "  -> [ERROR] El contenedor principal de correo no está en ejecución."
+        echo "  -> Ejecute la opción 3 primero."
+        return 1
+    fi
+
+    echo "  Opciones de Identidad:"
+    echo "  a) Crear nueva cuenta de correo"
+    echo "  b) Listar cuentas existentes"
+    read -p "  Seleccione una acción (a/b): " sub_opcion
+
+    if [[ "$sub_opcion" == "a" || "$sub_opcion" == "A" ]]; then
+        read -p "  Ingrese la dirección de correo (ej. director@$DOMAIN): " nueva_cuenta
+        
+        # Ocultar la contraseña en la terminal
+        read -s -p "  Ingrese la contraseña para $nueva_cuenta: " password
+        echo ""
+
+        # Ejecutar el comando dentro del contenedor para añadir la cuenta
+        docker exec -it mta_dovecot_reprobados setup email add "$nueva_cuenta" "$password"
+        
+        if [[ $? -eq 0 ]]; then
+            echo "  -> [ÉXITO] Cuenta $nueva_cuenta aprovisionada en la base de datos de Dovecot."
+        else
+            echo "  -> [ERROR] No se pudo crear la cuenta."
+        fi
+
+    elif [[ "$sub_opcion" == "b" || "$sub_opcion" == "B" ]]; then
+        echo "  -> Listado de cuentas activas:"
+        docker exec -it mta_dovecot_reprobados setup email list
+    else
+        echo "  -> [ERROR] Opción inválida."
+    fi
+}
