@@ -165,8 +165,8 @@ services:
     ports:
       - "8080:80" 
     environment:
-      - ROUNDCUBEMAIL_DEFAULT_HOST=tls://mail.reprobados.com
-      - ROUNDCUBEMAIL_SMTP_SERVER=tls://mail.reprobados.com
+      - ROUNDCUBEMAIL_DEFAULT_HOST=ssl://mailserver  # Usa el nombre del servicio Docker
+      - ROUNDCUBEMAIL_SMTP_SERVER=tls://mailserver
     volumes:
       - ./webmail_html:/var/www/html
       - ./webmail_db:/var/roundcube/db
@@ -536,14 +536,13 @@ prueba_12_3() {
     echo "----------------------------------------------------------------------"
     echo "  [EJECUCIÓN AUTOMATIZADA]"
     echo "  -> Simulando ataque de fuerza bruta contra el puerto IMAP (143)..."
+    echo "  -> Simulando 6 intentos de login fallidos via openssl..."
     for i in {1..6}; do
-        exec 3<>/dev/tcp/$DETECTED_IP/143 2>/dev/null
-        if [[ $? -eq 0 ]]; then
-            echo -e "a1 LOGIN atacante password_falsa\r\n" >&3
-            exec 3<&-
-            exec 3>&-
-        fi
-        sleep 1
+        echo "     Intento $i/6..."
+        timeout 3 docker exec mta_dovecot_reprobados sh -c \
+            "echo -e 'a LOGIN atacante_test wrong_password_$i\r\nа LOGOUT\r\n' | \
+            openssl s_client -connect 127.0.0.1:993 -quiet 2>/dev/null" 2>/dev/null || true
+        sleep 2
     done
     echo "  -> Consultando estado de la celda 'dovecot' en Fail2ban:"
     echo "......................................................................"
@@ -643,4 +642,64 @@ prueba_13_7() {
     echo "      y valide que sus configuraciones o contactos sigan allí."
     echo ""
     read -p "  Presione ENTER para continuar..."
+}
+
+exportar_certificado_ssl() {
+    echo ""
+    echo "[PROCESO] Exportando certificado SSL autofirmado del contenedor..."
+
+    if ! docker ps | grep -q "mta_dovecot_reprobados"; then
+        echo "  -> [ERROR] El contenedor no está corriendo. Ejecute la opción 3 primero."
+        return 1
+    fi
+
+    local cert_dir="$BASE_DIR/ssl_export"
+    mkdir -p "$cert_dir"
+
+    # Esperar a que el certificado se genere (puede tardar en el primer arranque)
+    echo "  -> Esperando que docker-mailserver genere el certificado (hasta 30s)..."
+    local intentos=0
+    while [[ $intentos -lt 6 ]]; do
+        if docker exec mta_dovecot_reprobados ls /etc/ssl/docker-mailserver/cert.pem &>/dev/null; then
+            break
+        fi
+        sleep 5
+        intentos=$((intentos + 1))
+        echo "     Intento $intentos/6..."
+    done
+
+    # Extraer el certificado
+    docker cp mta_dovecot_reprobados:/etc/ssl/docker-mailserver/cert.pem \
+        "$cert_dir/reprobados_mail.crt" 2>/dev/null
+
+    if [[ $? -ne 0 ]]; then
+        # Ruta alternativa según versión de docker-mailserver
+        docker exec mta_dovecot_reprobados cat /etc/ssl/docker-mailserver/cert.pem \
+            > "$cert_dir/reprobados_mail.crt" 2>/dev/null
+    fi
+
+    if [[ -s "$cert_dir/reprobados_mail.crt" ]]; then
+        echo "  -> [ÉXITO] Certificado exportado en: $cert_dir/reprobados_mail.crt"
+        echo ""
+        echo "  ================================================================"
+        echo "  INSTRUCCIONES PARA IMPORTAR EN THUNDERBIRD:"
+        echo "  ================================================================"
+        echo "  1. En Thunderbird: Herramientas -> Opciones -> Privacidad y Seguridad"
+        echo "  2. Baja hasta 'Certificados' -> clic en 'Administrar certificados...'"
+        echo "  3. Pestaña 'Autoridades' -> clic en 'Importar...'"
+        echo "  4. Navega a: $cert_dir/reprobados_mail.crt"
+        echo "  5. Marca AMBAS casillas: 'Confiar para sitios web' y 'Confiar para correo'"
+        echo "  6. Acepta y cierra. LUEGO configura la cuenta con SSL/TLS."
+        echo "  ================================================================"
+        echo ""
+        echo "  CONFIGURACIÓN DE CUENTA EN THUNDERBIRD:"
+        echo "  - Servidor entrante:  $DETECTED_IP  Puerto: 993  SSL/TLS"
+        echo "  - Servidor saliente:  $DETECTED_IP  Puerto: 465  SSL/TLS"
+        echo "  - Usuario: nombre completo (ej: director@$DOMAIN)"
+        echo "  ================================================================"
+    else
+        echo "  -> [ERROR] No se pudo extraer el certificado."
+        echo "     El contenedor puede no haber terminado de inicializar."
+        echo "     Espere 2 minutos y reintente."
+    fi
 }
