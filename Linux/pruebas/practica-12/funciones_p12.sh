@@ -475,34 +475,22 @@ exportar_certificado_ssl() {
     # Esperar hasta 60 segundos a que docker-mailserver genere el certificado
     echo "  -> Esperando que docker-mailserver genere el certificado (hasta 60s)..."
     local intentos=0
-    local cert_encontrado=0
-    while [[ $intentos -lt 12 ]]; do
-        if docker exec mta_dovecot_reprobados test -f /etc/ssl/docker-mailserver/cert.pem 2>/dev/null; then
-            cert_encontrado=1
-            break
-        fi
-        sleep 5
-        intentos=$((intentos + 1))
-        echo "     Intento $intentos/12..."
-    done
+    # Con SSL_TYPE=manual el certificado vive en el volumen del host.
+    # No hay que buscarlo dentro del contenedor: ya está en mail_config/ssl/
+    local cert_origen="$BASE_DIR/mail_config/ssl/mail.reprobados.com-cert.pem"
 
-    if [[ $cert_encontrado -eq 0 ]]; then
-        echo "  -> [ERROR] El certificado no se generó en 60 segundos."
-        echo "     Posibles causas:"
-        echo "     - El contenedor aún está inicializando (espere 2 minutos y reintente)"
-        echo "     - Revise: docker logs mta_dovecot_reprobados | tail -30"
+    echo "  -> Buscando certificado en el volumen del host ($cert_origen)..."
+    if [[ -f "$cert_origen" ]]; then
+        echo "  -> [ÉXITO] Certificado encontrado en el volumen."
+        cp "$cert_origen" "$cert_dir/reprobados_mail.crt"
+    else
+        echo "  -> [ERROR] No se encontró el certificado en $cert_origen"
+        echo "     Genérelo con:"
+        echo "     sudo openssl req -new -x509 -days 3650 -nodes \"
+        echo "       -subj '/CN=mail.reprobados.com' \"
+        echo "       -keyout $BASE_DIR/mail_config/ssl/mail.reprobados.com-key.pem \"
+        echo "       -out    $BASE_DIR/mail_config/ssl/mail.reprobados.com-cert.pem"
         return 1
-    fi
-
-    # Copiar el certificado al host
-    docker cp mta_dovecot_reprobados:/etc/ssl/docker-mailserver/cert.pem \
-        "$cert_dir/reprobados_mail.crt" 2>/dev/null
-
-    # Verificar que el archivo tenga contenido real
-    if [[ ! -s "$cert_dir/reprobados_mail.crt" ]]; then
-        echo "  -> [FALLBACK] Intentando extracción alternativa con docker exec..."
-        docker exec mta_dovecot_reprobados cat /etc/ssl/docker-mailserver/cert.pem \
-            > "$cert_dir/reprobados_mail.crt" 2>/dev/null
     fi
 
     if [[ -s "$cert_dir/reprobados_mail.crt" ]]; then
