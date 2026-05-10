@@ -32,7 +32,6 @@ fi
 
 # 4. Menú Interactivo (Bucle de control)
 while true; do
-    clear
     echo "======================================================================"
     echo "       SISTEMA DE DESPLIEGUE - PRÁCTICA 12 (CORREO & WEBMAIL)         "
     echo "======================================================================"
