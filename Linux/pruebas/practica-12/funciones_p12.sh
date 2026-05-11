@@ -450,14 +450,15 @@ EOF
 }
 
 # ==============================================================================
-# Función 8: Panel de auditoría
+# Función 8: Panel de auditoría y gestión de bloqueos
 # ==============================================================================
 auditar_seguridad_logs() {
     echo ""
     echo "[PROCESO] Subsistema de Auditoría y Detección de Intrusos"
-    echo "  a Consultar estado del Firewall Fail2Ban"
-    echo "  b Extraer últimos registros de transferencia mail.log"
-    read -p "  Seleccione una acción (a/b): " sub_opcion
+    echo "  a) Consultar estado del Firewall (Fail2Ban)"
+    echo "  b) Extraer últimos registros de transferencia (mail.log)"
+    echo "  c) Liberar TODAS las IPs bloqueadas (Unban All)"
+    read -p "  Seleccione una acción (a/b/c): " sub_opcion
 
     if [[ "$sub_opcion" == "a" || "$sub_opcion" == "A" ]]; then
         echo "  -> [SEGURIDAD] Estado global de Fail2Ban:"
@@ -465,12 +466,28 @@ auditar_seguridad_logs() {
         echo ""
         echo "  -> [SEGURIDAD] Celda específica de Dovecot:"
         docker exec -it mta_dovecot_reprobados fail2ban-client status dovecot
+        
     elif [[ "$sub_opcion" == "b" || "$sub_opcion" == "B" ]]; then
         echo "  -> [AUDITORÍA] Últimas 20 transacciones registradas:"
         echo "----------------------------------------------------------------------"
         tail -n 20 "$BASE_DIR/mail_logs/mail.log" 2>/dev/null \
             || docker logs mta_dovecot_reprobados 2>&1 | tail -n 20
         echo "----------------------------------------------------------------------"
+        
+    elif [[ "$sub_opcion" == "c" || "$sub_opcion" == "C" ]]; then
+        echo "  -> [SEGURIDAD] Ejecutando liberación masiva de IPs..."
+        local ips_liberadas=$(docker exec -it mta_dovecot_reprobados fail2ban-client unban --all 2>/dev/null)
+        
+        # Filtrar la salida para que sea amigable a la vista
+        ips_liberadas=$(echo "$ips_liberadas" | tr -d '\r')
+        if [[ "$ips_liberadas" == "0" ]]; then
+            echo "  -> [INFO] No había ninguna IP bloqueada en este momento."
+        elif [[ "$ips_liberadas" =~ ^[0-9]+$ ]]; then
+            echo "  -> [ÉXITO] Se han desbloqueado y perdonado $ips_liberadas direcciones IP."
+        else
+            echo "  -> [ÉXITO] Limpieza ejecutada. (Salida del sistema: $ips_liberadas)"
+        fi
+        
     else
         echo "  -> [ERROR] Opción inválida."
     fi
