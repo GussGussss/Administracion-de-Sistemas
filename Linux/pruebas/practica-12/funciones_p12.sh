@@ -192,15 +192,12 @@ services:
     ports:
       - "8080:80"
     environment:
-      # Se usa el nombre del servicio Docker 'mailserver' para resolución interna
-      # ssl:// fuerza IMAPS puerto 993 internamente entre contenedores
-      - ROUNDCUBEMAIL_DEFAULT_HOST=ssl://mailserver
-      - ROUNDCUBEMAIL_DEFAULT_PORT=993
+      # FIX: Comunicación interna cifrada por STARTTLS para evitar rechazo de Dovecot
+      - ROUNDCUBEMAIL_DEFAULT_HOST=tls://mailserver
+      - ROUNDCUBEMAIL_DEFAULT_PORT=143
       - ROUNDCUBEMAIL_SMTP_SERVER=tls://mailserver
       - ROUNDCUBEMAIL_SMTP_PORT=587
-      # Dominio predeterminado en el login (el usuario escribe solo "gustavo")
       - ROUNDCUBEMAIL_USERNAME_DOMAIN=reprobados.com
-      # Tiempo de expiración de sesión: 30 minutos de inactividad
       - ROUNDCUBEMAIL_SESSION_LIFETIME=30
     volumes:
       - ./webmail_html:/var/www/html/custom
@@ -398,14 +395,12 @@ EOF
 }
 
 # ==============================================================================
-# Función 7: Personalización institucional de Roundcube
+# Función 7: Personalización institucional y Configuración SSL Webmail
 # ==============================================================================
 personalizar_webmail() {
     echo ""
-    echo "[PROCESO] Aplicando personalización institucional a Roundcube..."
+    echo "[PROCESO] Aplicando personalización y configuraciones de seguridad a Roundcube..."
 
-    # El volumen mapea ./webmail_html -> /var/www/html/custom dentro del contenedor
-    # El config real de roundcube está en /var/roundcube/config/ dentro del contenedor
     local logo_dir="$BASE_DIR/webmail_html"
     local logo_file="$logo_dir/logo_institucional.svg"
 
@@ -422,31 +417,34 @@ EOF
     chmod 644 "$logo_file"
     echo "  -> [ÉXITO] Logotipo corporativo generado en el volumen."
 
-    # 2. Aplicar configuración adicional vía exec dentro del contenedor
+    # 2. Inyección dinámica en PHP
     if docker ps | grep -q "webmail_reprobados"; then
-        echo "  -> [PROCESO] Inyectando configuración adicional en el contenedor Roundcube..."
+        echo "  -> [PROCESO] Inyectando parámetros de sesión y excepciones SSL..."
         docker exec webmail_reprobados sh -c "
-            CONFIG_FILE='/var/roundcube/config/config.inc.php'
+            CONFIG_FILE='/var/www/html/config/config.inc.php'
             if [ -f \"\$CONFIG_FILE\" ]; then
-                # Dominio predeterminado
-                grep -q 'username_domain' \"\$CONFIG_FILE\" || \
-                    echo \"\\\$config['username_domain'] = 'reprobados.com';\" >> \"\$CONFIG_FILE\"
-                # Timeout de sesión (30 min)
-                grep -q 'session_lifetime' \"\$CONFIG_FILE\" || \
-                    echo \"\\\$config['session_lifetime'] = 30;\" >> \"\$CONFIG_FILE\"
+                # Dominio y Timeout
+                grep -q 'username_domain' \"\$CONFIG_FILE\" || echo \"\\\$config['username_domain'] = 'reprobados.com';\" >> \"\$CONFIG_FILE\"
+                grep -q 'session_lifetime' \"\$CONFIG_FILE\" || echo \"\\\$config['session_lifetime'] = 30;\" >> \"\$CONFIG_FILE\"
+                
+                # FIX CRÍTICO: Excepción para el certificado autofirmado interno
+                grep -q 'imap_conn_options' \"\$CONFIG_FILE\" || echo \"\\\$config['imap_conn_options'] = array('ssl' => array('verify_peer' => false, 'verify_peer_name' => false, 'allow_self_signed' => true));\" >> \"\$CONFIG_FILE\"
+                grep -q 'smtp_conn_options' \"\$CONFIG_FILE\" || echo \"\\\$config['smtp_conn_options'] = array('ssl' => array('verify_peer' => false, 'verify_peer_name' => false, 'allow_self_signed' => true));\" >> \"\$CONFIG_FILE\"
+                
                 echo 'Config aplicada exitosamente.'
             else
                 echo 'ADVERTENCIA: config.inc.php no encontrado aún.'
             fi
-        " 2>/dev/null && echo "  -> [ÉXITO] Parámetros de sesión y dominio aplicados." \
-                       || echo "  -> [ADVERTENCIA] No se pudo inyectar config. El contenedor puede estar inicializando."
+        " 2>/dev/null && echo "  -> [ÉXITO] Base de código Roundcube parchada." \
+                       || echo "  -> [ADVERTENCIA] Fallo al inyectar código PHP."
+                       
+        # Reiniciar para obligar a Apache/PHP a leer los cambios
+        docker restart webmail_reprobados >/dev/null
     else
         echo "  -> [ADVERTENCIA] El contenedor webmail_reprobados no está corriendo."
-        echo "     Ejecute la opción 3 primero y luego regrese aquí."
     fi
 
     echo "  -> [INFO] Acceso desde su PC física: http://$DETECTED_IP:8080"
-    echo "  -> [INFO] Usuario de prueba: gustavo sin @$DOMAIN si DOMAIN está configurado"
 }
 
 # ==============================================================================
