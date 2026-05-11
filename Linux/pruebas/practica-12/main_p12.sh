@@ -50,6 +50,7 @@ while true; do
     echo " 8.  Panel de Auditoría y Seguridad (Logs/Fail2Ban)"
     echo " 9.  Ejecución de Pruebas de Aceptación (Submenú)"
     echo " 10. Exportar Certificado SSL para Thunderbird"
+    echo " 11. Guía definitiva configuración Thunderbird (sin ciclo de error)"
     echo " 0.  Salir del sistema"
     echo "======================================================================"
     read -p " Seleccione una opción de ejecución: " opcion
@@ -65,6 +66,7 @@ while true; do
         8)  auditar_seguridad_logs ;;
         9)  submenu_pruebas ;;
         10) exportar_certificado_ssl ;;
+        11) configurar_thunderbird_windows ;;
         0)
             echo "[INFO] Finalizando ejecución y cerrando descriptores."
             exit 0
