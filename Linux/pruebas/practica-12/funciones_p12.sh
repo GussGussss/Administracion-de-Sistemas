@@ -28,7 +28,7 @@ preparar_entorno_base() {
             mkdir -p "$BASE_DIR/$dir"
             echo "  -> Creado: $BASE_DIR/$dir"
         else
-            echo "  -> Omitido (ya existe): $BASE_DIR/$dir"
+            echo "  -> Omitido ya existe: $BASE_DIR/$dir"
         fi
     done
 
@@ -36,7 +36,7 @@ preparar_entorno_base() {
     chown -R "$DETECTED_USER:$DETECTED_USER" "$BASE_DIR"
     chmod -R 755 "$BASE_DIR"
 
-    echo "[PROCESO] Configurando reglas de Firewall (firewalld)..."
+    echo "[PROCESO] Configurando reglas de Firewall firewalld..."
     if systemctl is-active --quiet firewalld; then
         local puertos=(25/tcp 143/tcp 587/tcp 993/tcp 465/tcp 8080/tcp)
         for p in "${puertos[@]}"; do
@@ -46,6 +46,27 @@ preparar_entorno_base() {
         echo "  -> [ÉXITO] Puertos expuestos en el firewall nativo."
     else
         echo "  -> [INFO] Firewalld no está activo. Omitiendo configuración de puertos."
+    fi
+
+    # Generar certificado SSL automáticamente si no existe
+    echo "[PROCESO] Verificando certificado SSL..."
+    local ssl_dir="$BASE_DIR/mail_config/ssl"
+    local cert="$ssl_dir/mail.reprobados.com-cert.pem"
+    local key="$ssl_dir/mail.reprobados.com-key.pem"
+
+    mkdir -p "$ssl_dir"
+
+    if [[ -f "$cert" && -f "$key" ]]; then
+        echo "  -> [INFO] Certificado SSL ya existe. Omitiendo generación."
+    else
+        echo "  -> Generando certificado SSL autofirmado con CA propia..."
+        openssl req -new -x509 -days 3650 -nodes             -subj "/C=MX/ST=Sinaloa/L=LosMochis/O=Reprobados CA/CN=Reprobados Root CA"             -addext "basicConstraints=critical,CA:TRUE"             -addext "keyUsage=critical,keyCertSign,cRLSign"             -addext "subjectAltName=DNS:mail.reprobados.com,DNS:reprobados.com,IP:$DETECTED_IP"             -keyout "$key"             -out "$cert" 2>/dev/null
+        chmod 600 "$key"
+        chmod 644 "$cert"
+        # Copiar también al directorio de exportación
+        mkdir -p "$BASE_DIR/ssl_export"
+        cp "$cert" "$BASE_DIR/ssl_export/reprobados_mail.crt"
+        echo "  -> [ÉXITO] Certificado generado y listo para exportar."
     fi
 
     echo "[ÉXITO] Infraestructura de directorios preparada y securizada."
@@ -89,7 +110,7 @@ generar_stack_docker() {
 # ------------------------------------------------------------------------------
 verificar_motor_docker() {
     echo ""
-    echo "[PROCESO] Verificando dependencias del sistema (Motor Docker)..."
+    echo "[PROCESO] Verificando dependencias del sistema Motor Docker..."
     if ! command -v docker &> /dev/null; then
         echo "  -> [FALTANTE] El comando 'docker' no se encontró en Oracle Linux."
         read -p "     ¿Desea configurar el repositorio y descargar Docker CE vía dnf ahora? (s/N): " instalar_dkr
@@ -250,8 +271,8 @@ levantar_servicios_y_dns() {
     echo "  -> [ÉXITO] DNS configurado. Tráfico hacia mail.$DOMAIN -> $DETECTED_IP"
     echo ""
     echo "  ================================================================"
-    echo "  IMPORTANTE: En su PC física (Windows), agregue esta línea al"
-    echo "  archivo C:\\Windows\\System32\\drivers\\etc\\hosts (como Administrador):"
+    echo "  IMPORTANTE: En su PC física Windows, agregue esta línea al"
+    echo "  archivo C:\\Windows\\System32\\drivers\\etc\\hosts como Administrador:"
     echo ""
     echo "  $DETECTED_IP    mail.$DOMAIN $DOMAIN"
     echo ""
@@ -264,7 +285,7 @@ levantar_servicios_y_dns() {
 # ==============================================================================
 gestionar_cuentas_correo() {
     echo ""
-    echo "[PROCESO] Módulo de Gestión de Identidades (Dovecot)"
+    echo "[PROCESO] Módulo de Gestión de Identidades Dovecot"
 
     if ! docker ps | grep -q "mta_dovecot_reprobados"; then
         echo "  -> [ERROR] El contenedor principal de correo no está en ejecución."
@@ -273,8 +294,8 @@ gestionar_cuentas_correo() {
     fi
 
     echo "  Opciones de Identidad:"
-    echo "  a) Crear nueva cuenta de correo"
-    echo "  b) Listar cuentas existentes"
+    echo "  a Crear nueva cuenta de correo"
+    echo "  b Listar cuentas existentes"
     read -p "  Seleccione una acción (a/b): " sub_opcion
 
     if [[ "$sub_opcion" == "a" || "$sub_opcion" == "A" ]]; then
@@ -310,7 +331,7 @@ generar_claves_dkim() {
     if docker exec mta_dovecot_reprobados ls /tmp/docker-mailserver/opendkim/keys/$DOMAIN/mail.private &>/dev/null; then
         echo "  -> [INFO] Las claves DKIM para $DOMAIN ya existen. No se sobreescribirán."
     else
-        echo "  -> [PROCESO] Ejecutando generación interna (setup config dkim)..."
+        echo "  -> [PROCESO] Ejecutando generación interna setup config dkim..."
         docker exec mta_dovecot_reprobados setup config dkim
         if [[ $? -eq 0 ]]; then
             echo "  -> [ÉXITO] Claves DKIM generadas exitosamente."
@@ -320,7 +341,7 @@ generar_claves_dkim() {
         fi
     fi
 
-    echo "  -> Registro TXT para DNS (clave pública):"
+    echo "  -> Registro TXT para DNS clave pública:"
     echo "----------------------------------------------------------------------"
     cat "$BASE_DIR/mail_config/opendkim/keys/$DOMAIN/mail.txt" 2>/dev/null \
         || echo "     [ADVERTENCIA] No se pudo leer el archivo localmente."
@@ -350,7 +371,7 @@ configurar_respaldo_cron() {
 FECHA=\$(date +"%Y%m%d_%H%M%S")
 ARCHIVO_RESPALDO="$backup_dir/mail_backup_\$FECHA.tar.gz"
 
-echo "[INFO] Iniciando respaldo a las \$(date)" >> "$backup_dir/backup.log"
+echo "[INFO] Iniciando respaldo a las \$date" >> "$backup_dir/backup.log"
 tar -czf "\$ARCHIVO_RESPALDO" -C "$BASE_DIR" mail_data >> "$backup_dir/backup.log" 2>&1
 
 if [[ \$? -eq 0 ]]; then
@@ -425,7 +446,7 @@ EOF
     fi
 
     echo "  -> [INFO] Acceso desde su PC física: http://$DETECTED_IP:8080"
-    echo "  -> [INFO] Usuario de prueba: gustavo (sin @$DOMAIN si DOMAIN está configurado)"
+    echo "  -> [INFO] Usuario de prueba: gustavo sin @$DOMAIN si DOMAIN está configurado"
 }
 
 # ==============================================================================
@@ -434,8 +455,8 @@ EOF
 auditar_seguridad_logs() {
     echo ""
     echo "[PROCESO] Subsistema de Auditoría y Detección de Intrusos"
-    echo "  a) Consultar estado del Firewall (Fail2Ban)"
-    echo "  b) Extraer últimos registros de transferencia (mail.log)"
+    echo "  a Consultar estado del Firewall Fail2Ban"
+    echo "  b Extraer últimos registros de transferencia mail.log"
     read -p "  Seleccione una acción (a/b): " sub_opcion
 
     if [[ "$sub_opcion" == "a" || "$sub_opcion" == "A" ]]; then
@@ -473,13 +494,13 @@ exportar_certificado_ssl() {
     mkdir -p "$cert_dir"
 
     # Esperar hasta 60 segundos a que docker-mailserver genere el certificado
-    echo "  -> Esperando que docker-mailserver genere el certificado (hasta 60s)..."
+    echo "  -> Esperando que docker-mailserver genere el certificado hasta 60s..."
     local intentos=0
     # Con SSL_TYPE=manual el certificado vive en el volumen del host.
     # No hay que buscarlo dentro del contenedor: ya está en mail_config/ssl/
     local cert_origen="$BASE_DIR/mail_config/ssl/mail.reprobados.com-cert.pem"
 
-    echo "  -> Buscando certificado en el volumen del host ($cert_origen)..."
+    echo "  -> Buscando certificado en el volumen del host $cert_origen..."
     if [[ -f "$cert_origen" ]]; then
         echo "  -> [ÉXITO] Certificado encontrado en el volumen."
         cp "$cert_origen" "$cert_dir/reprobados_mail.crt"
@@ -512,7 +533,7 @@ exportar_certificado_ssl() {
         echo "  El archivo está en el servidor Oracle Linux en:"
         echo "  $cert_dir/reprobados_mail.crt"
         echo ""
-        echo "  Cópielo a su PC Windows con SCP (desde PowerShell o CMD):"
+        echo "  Cópielo a su PC Windows con SCP desde PowerShell o CMD:"
         echo "  scp $DETECTED_USER@$DETECTED_IP:$cert_dir/reprobados_mail.crt C:\\Users\\%USERNAME%\\Desktop\\"
         echo ""
         echo "  O si usa una VM con carpeta compartida, cópielo desde ahí."
@@ -529,10 +550,10 @@ exportar_certificado_ssl() {
         echo "  Esto es OBLIGATORIO para que el CN del certificado coincida."
         echo ""
         echo "  ================================================================"
-        echo "  PASO 3: IMPORTAR EL CERTIFICADO EN THUNDERBIRD (WINDOWS)"
+        echo "  PASO 3: IMPORTAR EL CERTIFICADO EN THUNDERBIRD WINDOWS"
         echo "  ================================================================"
         echo "  1. Abra Thunderbird"
-        echo "  2. Menú hamburguesa (≡) -> Herramientas -> Opciones"
+        echo "  2. Menú hamburguesa ≡ -> Herramientas -> Opciones"
         echo "  3. Panel izquierdo: 'Privacidad y seguridad'"
         echo "  4. Baje hasta la sección 'Certificados'"
         echo "  5. Clic en 'Administrar certificados...'"
@@ -546,29 +567,29 @@ exportar_certificado_ssl() {
         echo "  ================================================================"
         echo "  PASO 4: CONFIGURAR LA CUENTA EN THUNDERBIRD"
         echo "  ================================================================"
-        echo "  Menú (≡) -> Nueva cuenta -> Correo electrónico existente"
+        echo "  Menú ≡ -> Nueva cuenta -> Correo electrónico existente"
         echo ""
-        echo "  Nombre:    Gustavo (o el que prefiera mostrar)"
+        echo "  Nombre:    Gustavo o el que prefiera mostrar"
         echo "  Email:     gustavo@reprobados.com"
-        echo "  Contraseña: (la que asignó en la opción 4)"
+        echo "  Contraseña: la que asignó en la opción 4"
         echo ""
         echo "  -> Clic en 'Configurar manualmente' y use ESTOS valores exactos:"
         echo ""
-        echo "  ENTRANTE (IMAP):"
+        echo "  ENTRANTE IMAP:"
         echo "    Servidor:   mail.reprobados.com   <- NO use la IP aquí"
         echo "    Puerto:     993"
         echo "    Seguridad:  SSL/TLS"
         echo "    Autent.:    Contraseña normal"
         echo "    Usuario:    gustavo@reprobados.com"
         echo ""
-        echo "  SALIENTE (SMTP):"
+        echo "  SALIENTE SMTP:"
         echo "    Servidor:   mail.reprobados.com   <- NO use la IP aquí"
         echo "    Puerto:     465"
         echo "    Seguridad:  SSL/TLS"
         echo "    Autent.:    Contraseña normal"
         echo "    Usuario:    gustavo@reprobados.com"
         echo ""
-        echo "  IMPORTANTE: Debe usar 'mail.reprobados.com' (no la IP) porque"
+        echo "  IMPORTANTE: Debe usar 'mail.reprobados.com' no la IP porque"
         echo "  el certificado fue emitido para ese hostname. Si usa la IP"
         echo "  directa, el certificado no coincidirá y Thunderbird rechazará."
         echo "  ================================================================"
@@ -580,6 +601,60 @@ exportar_certificado_ssl() {
 }
 
 # ==============================================================================
+# Función 11: Instrucciones definitivas para Thunderbird sin ciclo de error
+# El problema del ciclo ocurre porque Thunderbird verifica SSL en tiempo real.
+# La solución es importar el cert en Windows Certificate Store (no solo Thunderbird)
+# ==============================================================================
+configurar_thunderbird_windows() {
+    echo ""
+    echo "[PROCESO] Guía definitiva para configurar Thunderbird sin errores de SSL"
+    echo ""
+    local cert_path="$BASE_DIR/ssl_export/reprobados_mail.crt"
+
+    if [[ ! -f "$cert_path" ]]; then
+        cp "$BASE_DIR/mail_config/ssl/mail.reprobados.com-cert.pem" "$cert_path" 2>/dev/null
+    fi
+
+    echo "  ================================================================"
+    echo "  SOLUCIÓN AL CICLO DE ERROR EN THUNDERBIRD"
+    echo "  ================================================================"
+    echo "  El ciclo ocurre porque Thunderbird verifica el certificado"
+    echo "  en tiempo real al hacer 'Probar'. La solución es instalar"
+    echo "  el certificado en Windows ANTES de abrir Thunderbird."
+    echo ""
+    echo "  PASO 1: Copiar el certificado a Windows"
+    echo "  En PowerShell de Windows como Administrador:"
+    echo "  scp \$DETECTED_USER@\$DETECTED_IP:\$cert_path  ->  Escritorio de Windows"
+    echo ""
+    echo "  PASO 2: Instalar en el almacen de Windows, no solo en Thunderbird"
+    echo "  En PowerShell como Administrador ejecute:"
+    echo '  Import-Certificate -FilePath "$env:USERPROFILE\Desktop\reprobados_mail.crt" -CertStoreLocation Cert:\LocalMachine\Root'
+    echo ""
+    echo "  PASO 3: Importar también en Thunderbird"
+    echo "  Herramientas -> Opciones -> Privacidad -> Administrar certificados"
+    echo "  -> Autoridades -> Importar -> seleccionar reprobados_mail.crt"
+    echo "  -> Marcar AMBAS casillas -> Aceptar"
+    echo ""
+    echo "  PASO 4: Configurar cuenta en Thunderbird SIN usar el boton Probar"
+    echo "  - Nueva cuenta -> Correo electrónico existente"
+    echo "  - Email: gustavo@reprobados.com  Contraseña: la que asigno en la opcion 4"
+    echo "  - Clic en 'Configuración manual'"
+    echo "  - IMAP: mail.reprobados.com  Puerto: 993  SSL/TLS  gustavo@reprobados.com"
+    echo "  - SMTP: mail.reprobados.com  Puerto: 465  SSL/TLS  gustavo@reprobados.com"
+    echo "  - Clic en 'Continuar', no en Probar"
+    echo "  - Si pide contraseña: ingresarla y marcar 'Recordar'"
+    echo "  - La cuenta se creará y conectará correctamente"
+    echo ""
+    echo "  IMPORTANTE: El boton Probar falla con certificados autofirmados"
+    echo "  incluso cuando el certificado está instalado. Usar 'Continuar'"
+    echo "  directamente es el flujo correcto para servidores locales."
+    echo "  ================================================================"
+    echo ""
+    echo "  Certificado disponible en: $cert_path"
+    echo "  SCP desde Windows: scp $DETECTED_USER@$DETECTED_IP:$cert_path ."
+}
+
+# ==============================================================================
 # Función 9: Submenú de Pruebas de Aceptación
 # ==============================================================================
 submenu_pruebas() {
@@ -588,13 +663,13 @@ submenu_pruebas() {
         echo "======================================================================"
         echo "                 SUBMENÚ - PRUEBAS DE ACEPTACIÓN                      "
         echo "======================================================================"
-        echo " 1. Prueba 12.1: Envío y recepción local (Thunderbird)"
-        echo " 2. Prueba 12.2: Auditoría de registros (Logging)"
+        echo " 1. Prueba 12.1: Envío y recepción local Thunderbird"
+        echo " 2. Prueba 12.2: Auditoría de registros Logging"
         echo " 3. Prueba 12.3: Verificación de seguridad Fail2ban"
         echo " 4. Prueba 13.4: Integridad de respaldo"
-        echo " 5. Prueba 13.5: Inicio de sesión institucional (Webmail)"
-        echo " 6. Prueba 13.6: Envío de adjuntos y seguridad (Webmail)"
-        echo " 7. Prueba 13.7: Persistencia de preferencias (Webmail)"
+        echo " 5. Prueba 13.5: Inicio de sesión institucional Webmail"
+        echo " 6. Prueba 13.6: Envío de adjuntos y seguridad Webmail"
+        echo " 7. Prueba 13.7: Persistencia de preferencias Webmail"
         echo " 0. Retornar al Menú Principal"
         echo "======================================================================"
         read -p " Seleccione la prueba a ejecutar: " op_prueba
@@ -628,11 +703,11 @@ prueba_12_1() {
     echo "----------------------------------------------------------------------"
     echo "  Resultado esperado: Correo entre gustavo@ y edna@ sin errores de cifrado."
     echo ""
-    echo "  PRE-REQUISITOS (verifique antes de continuar):"
+    echo "  PRE-REQUISITOS verifique antes de continuar:"
     echo "  [ ] Ha ejecutado la Opción 10 y exportado el certificado"
-    echo "  [ ] Ha importado el certificado .crt en Thunderbird (Paso 3 de opción 10)"
+    echo "  [ ] Ha importado el certificado .crt en Thunderbird Paso 3 de opción 10"
     echo "  [ ] Ha agregado '$DETECTED_IP mail.reprobados.com' al hosts de Windows"
-    echo "  [ ] Ha configurado AMBAS cuentas en Thunderbird (gustavo y edna)"
+    echo "  [ ] Ha configurado AMBAS cuentas en Thunderbird gustavo y edna"
     echo ""
     echo "  PROCEDIMIENTO:"
     echo "  1. En Thunderbird, seleccione la cuenta gustavo@$DOMAIN"
@@ -644,7 +719,7 @@ prueba_12_1() {
     echo "  7. Cambie a la cuenta edna@$DOMAIN"
     echo "  8. Clic en 'Obtener mensajes' y verifique que el correo llega"
     echo "  9. El candado en la barra de estado de Thunderbird debe estar CERRADO"
-    echo "     (indica que la conexión es cifrada con SSL/TLS)"
+    echo "     indica que la conexión es cifrada con SSL/TLS"
     echo ""
     echo "  VERIFICACIÓN EXTRA desde el servidor:"
     echo "  Puede ver la entrega en tiempo real ejecutando la Opción 8 -> b"
@@ -654,7 +729,7 @@ prueba_12_1() {
 
 prueba_12_2() {
     echo ""
-    echo "[PRUEBA 12.2: AUDITORÍA DE REGISTROS (LOGGING)]"
+    echo "[PRUEBA 12.2: AUDITORÍA DE REGISTROS LOGGING]"
     echo "----------------------------------------------------------------------"
     echo "  [EJECUCIÓN AUTOMATIZADA]"
 
@@ -676,7 +751,7 @@ prueba_12_2() {
     local -a lista_cuentas
     while IFS= read -r linea; do
         if [[ -n "$linea" ]]; then
-            echo "  $i) $linea"
+            echo "  $i $linea"
             lista_cuentas+=("$linea")
             i=$((i + 1))
         fi
@@ -701,7 +776,7 @@ prueba_12_2() {
         "echo -e 'Subject: Prueba Auditoria Log\nFrom: sistema@$DOMAIN\nTo: $cuenta_destino\n\nVerificacion de trazabilidad completa.' | sendmail $cuenta_destino" 2>/dev/null
     sleep 3
 
-    echo "  -> Extrayendo flujo transaccional del log (últimas 20 líneas):"
+    echo "  -> Extrayendo flujo transaccional del log últimas 20 líneas:"
     echo "----------------------------------------------------------------------"
     # Intentar primero el archivo mapeado al host
     if [[ -f "$BASE_DIR/mail_logs/mail.log" ]]; then
@@ -726,7 +801,7 @@ prueba_12_3() {
     echo "[PRUEBA 12.3: VERIFICACIÓN DE SEGURIDAD FAIL2BAN]"
     echo "----------------------------------------------------------------------"
     echo "  [EJECUCIÓN AUTOMATIZADA]"
-    echo "  -> Simulando 6 intentos de login fallidos contra IMAP SSL (puerto 993)..."
+    echo "  -> Simulando 6 intentos de login fallidos contra IMAP SSL puerto 993..."
     echo ""
     echo "  NOTA: Los intentos se realizan desde dentro del contenedor hacia sí"
     echo "  mismo usando una IP de loopback interna. Fail2Ban detectará el patrón"
@@ -763,11 +838,11 @@ prueba_12_3() {
     echo "  - 'Currently banned: 1' o mayor en la sección de la celda dovecot"
     echo "  - Si no aparece bloqueada aún, espere 30 segundos y ejecute la Opción 8 -> a"
     echo ""
-    echo "  ALTERNATIVA MANUAL (desde su PC Windows para un resultado más claro):"
+    echo "  ALTERNATIVA MANUAL desde su PC Windows para un resultado más claro:"
     echo "  Abra PowerShell y ejecute 6 veces seguidas:"
     echo "  telnet $DETECTED_IP 143"
     echo "  Luego escriba: a1 LOGIN usuario password_incorrecta"
-    echo "  La IP de su PC ($DETECTED_IP física) quedará bloqueada."
+    echo "  La IP de su PC $DETECTED_IP física quedará bloqueada."
     echo ""
     read -p "  Presione ENTER para continuar..."
 }
@@ -797,12 +872,12 @@ prueba_13_4() {
         return 1
     fi
 
-    echo "  -> Respaldo generado: $(basename "$ultimo_respaldo")"
-    echo "  -> Tamaño: $(du -sh "$ultimo_respaldo" | cut -f1)"
+    echo "  -> Respaldo generado: $basename "$ultimo_respaldo""
+    echo "  -> Tamaño: $du -sh "$ultimo_respaldo" | cut -f1"
     echo ""
     echo "  -> Fase 2: ACCIÓN MANUAL REQUERIDA"
     echo "     1. Vaya a Thunderbird o Roundcube"
-    echo "     2. ELIMINE permanentemente un correo existente (Shift+Supr en Thunderbird)"
+    echo "     2. ELIMINE permanentemente un correo existente Shift+Supr en Thunderbird"
     echo "     3. Confirme la eliminación"
     read -p "     Presione ENTER DESPUÉS de haber eliminado el correo..."
 
@@ -817,7 +892,7 @@ prueba_13_4() {
     tar -xzf "$ultimo_respaldo" -C "$BASE_DIR"
 
     if [[ $? -eq 0 ]]; then
-        echo "  -> [ÉXITO] Volumen restaurado desde: $(basename "$ultimo_respaldo")"
+        echo "  -> [ÉXITO] Volumen restaurado desde: $basename "$ultimo_respaldo""
     else
         echo "  -> [ERROR] Falló la restauración del volumen."
         read -p "  Presione ENTER para continuar..."
@@ -835,7 +910,7 @@ prueba_13_4() {
     echo "  1. Vaya a Thunderbird -> haga clic en 'Obtener mensajes'"
     echo "  2. El correo que eliminó debería haber reaparecido"
     echo "  3. Abra el correo y verifique que el contenido y metadatos"
-    echo "     (fecha, remitente, asunto) estén intactos"
+    echo "     fecha, remitente, asunto estén intactos"
     echo "  ================================================================"
     echo ""
     read -p "  Presione ENTER una vez confirmada la restauración..."
@@ -843,7 +918,7 @@ prueba_13_4() {
 
 prueba_13_5() {
     echo ""
-    echo "[PRUEBA 13.5: INICIO DE SESIÓN INSTITUCIONAL (WEBMAIL)]"
+    echo "[PRUEBA 13.5: INICIO DE SESIÓN INSTITUCIONAL WEBMAIL]"
     echo "----------------------------------------------------------------------"
     echo "  [VERIFICACIÓN AUTOMATIZADA DEL SERVICIO]"
 
@@ -861,14 +936,14 @@ prueba_13_5() {
     echo "  1. Abra Chrome o Firefox"
     echo "  2. Navegue a: http://$DETECTED_IP:8080"
     echo "  3. Aparecerá la pantalla de login de Roundcube"
-    echo "  4. Usuario:    gustavo  (solo el nombre, sin @$DOMAIN si el dominio está preconfigurado)"
-    echo "     O bien:    gustavo@$DOMAIN  (con dominio completo, siempre funciona)"
+    echo "  4. Usuario:    gustavo  solo el nombre, sin @$DOMAIN si el dominio está preconfigurado"
+    echo "     O bien:    gustavo@$DOMAIN  con dominio completo, siempre funciona"
     echo "  5. Contraseña: la que asignó en la Opción 4"
     echo "  6. Clic en 'Entrar'"
     echo "  7. Debe ver la bandeja de entrada con los correos existentes"
     echo ""
     echo "  Si Roundcube da error de conexión al servidor IMAP:"
-    echo "  - Espere 2 minutos más (docker-mailserver tarda en estabilizarse)"
+    echo "  - Espere 2 minutos más docker-mailserver tarda en estabilizarse"
     echo "  - Ejecute: docker logs mta_dovecot_reprobados | tail -20"
     echo ""
     read -p "  Presione ENTER una vez validado el inicio de sesión..."
@@ -876,18 +951,18 @@ prueba_13_5() {
 
 prueba_13_6() {
     echo ""
-    echo "[PRUEBA 13.6: ENVÍO DE ADJUNTOS Y SEGURIDAD (WEBMAIL)]"
+    echo "[PRUEBA 13.6: ENVÍO DE ADJUNTOS Y SEGURIDAD WEBMAIL]"
     echo "----------------------------------------------------------------------"
     echo "  [EJECUCIÓN MANUAL REQUERIDA]"
     echo ""
     echo "  PROCEDIMIENTO:"
-    echo "  1. En Roundcube (http://$DETECTED_IP:8080), inicie sesión como gustavo"
-    echo "  2. Clic en el botón 'Redactar' (ícono de lápiz o botón superior)"
+    echo "  1. En Roundcube http://$DETECTED_IP:8080, inicie sesión como gustavo"
+    echo "  2. Clic en el botón 'Redactar' ícono de lápiz o botón superior"
     echo "  3. Complete el formulario:"
     echo "     Para:    edna@$DOMAIN"
     echo "     Asunto:  Prueba 13.6 - Adjunto con integridad verificada"
     echo "     Cuerpo:  'Verificación de integridad de archivo adjunto.'"
-    echo "  4. Clic en el clip/adjunto e incluya un archivo (imagen PNG, PDF, etc.)"
+    echo "  4. Clic en el clip/adjunto e incluya un archivo imagen PNG, PDF, etc."
     echo "     Sugerencia: use una imagen de menos de 1MB para mayor velocidad"
     echo "  5. Clic en 'Enviar'"
     echo ""
@@ -898,7 +973,7 @@ prueba_13_6() {
     echo "  9. Abra el archivo descargado en su PC"
     echo "  10. Confirme que el archivo se abre sin errores y tiene el contenido correcto"
     echo ""
-    echo "  VERIFICACIÓN AVANZADA (hash MD5):"
+    echo "  VERIFICACIÓN AVANZADA hash MD5:"
     echo "  Si quiere demostrar integridad matemática:"
     echo "  - Antes de enviar, en PowerShell: Get-FileHash archivo.png -Algorithm MD5"
     echo "  - Después de descargar: Get-FileHash descargado.png -Algorithm MD5"
@@ -909,18 +984,18 @@ prueba_13_6() {
 
 prueba_13_7() {
     echo ""
-    echo "[PRUEBA 13.7: PERSISTENCIA DE PREFERENCIAS (WEBMAIL)]"
+    echo "[PRUEBA 13.7: PERSISTENCIA DE PREFERENCIAS WEBMAIL]"
     echo "----------------------------------------------------------------------"
     echo "  [EJECUCIÓN HÍBRIDA]"
     echo ""
     echo "  -> Fase 1: ACCIÓN MANUAL"
-    echo "     En Roundcube (http://$DETECTED_IP:8080):"
+    echo "     En Roundcube http://$DETECTED_IP:8080:"
     echo "     OPCIÓN A - Cambiar idioma:"
-    echo "       Configuración (ícono engranaje) -> Preferencias -> Interfaz de usuario"
-    echo "       Cambiar 'Idioma' a 'English (US)' o cualquier otro"
+    echo "       Configuración ícono engranaje -> Preferencias -> Interfaz de usuario"
+    echo "       Cambiar 'Idioma' a 'English US' o cualquier otro"
     echo "       Clic en 'Guardar'"
     echo "     OPCIÓN B - Agregar contacto:"
-    echo "       Contactos (ícono personas) -> Nueva tarjeta de contacto"
+    echo "       Contactos ícono personas -> Nueva tarjeta de contacto"
     echo "       Nombre: Prueba Persistencia"
     echo "       Email:  test@$DOMAIN"
     echo "       Guardar"
@@ -930,7 +1005,7 @@ prueba_13_7() {
     echo "  -> Fase 2: Reiniciando el contenedor de webmail..."
     docker compose -f "$BASE_DIR/docker-compose.yml" restart webmail
 
-    echo "  -> Esperando que Roundcube reinicialice (15 segundos)..."
+    echo "  -> Esperando que Roundcube reinicialice 15 segundos..."
     sleep 15
 
     echo "  -> [ÉXITO] Contenedor reiniciado."
@@ -944,7 +1019,7 @@ prueba_13_7() {
     echo ""
     echo "  Si los cambios NO persisten:"
     echo "  -> El volumen ./webmail_db no está funcionando correctamente"
-    echo "  -> Ejecute: docker inspect webmail_reprobados | grep -A5 Mounts"
+    echo "  -> Ejecute: docker inspect webmail_reprobados"
     echo "  -> Verifique que /var/roundcube/db esté mapeado a $BASE_DIR/webmail_db"
     echo ""
     read -p "  Presione ENTER una vez confirmada la persistencia..."
