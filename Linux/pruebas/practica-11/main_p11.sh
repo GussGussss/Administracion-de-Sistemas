@@ -14,7 +14,6 @@ source ./funciones_p11.sh
 
 # Bucle principal del menú interactivo
 while true; do
-    clear
     echo "=========================================================="
     echo " Administrador de Infraestructura - Práctica 11"
     echo " Orquestación de Microservicios y Túneles"
