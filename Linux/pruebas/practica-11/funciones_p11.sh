@@ -33,7 +33,7 @@ actualizar_resolucion_dns() {
 # --- Funciones de Menú Principal ---
 
 preparar_entorno() {
-    clear
+    
     echo "=== Opción 1: Preparación del Entorno ==="
     mkdir -p "$DIRECTORIO_INFRA"
     verificar_instalar_paquete "dnf-plugins-core"
@@ -50,7 +50,7 @@ preparar_entorno() {
 }
 
 generar_archivos() {
-    clear
+    
     echo "=== Opción 2: Generación de Archivos ==="
     cat <<EOF > "$DIRECTORIO_INFRA/.env"
 POSTGRES_USER=admin_db
@@ -125,7 +125,7 @@ EOF
 }
 
 desplegar_infraestructura() {
-    clear
+    
     echo "=== Opción 3: Despliegue de Infraestructura ==="
     cd "$DIRECTORIO_INFRA" || return
     docker compose up -d
@@ -139,7 +139,7 @@ desplegar_infraestructura() {
 # --- Funciones de Pruebas con Instrucciones de Usuario ---
 
 ejecutar_prueba_11_1() {
-    clear
+    
     echo "--- Prueba 11.1: Validación de Aislamiento de Red ---"
     echo "INSTRUCCIONES:"
     echo "1. Diríjase a su computadora física (Windows/Ubuntu)."
@@ -159,7 +159,7 @@ ejecutar_prueba_11_1() {
 }
 
 ejecutar_prueba_11_2() {
-    clear
+    
     echo "--- Prueba 11.2: Validación de Resolución Interna DNS ---"
     echo "INSTRUCCIONES:"
     echo "1. Esta prueba verifica que los contenedores se comunican por NOMBRE."
@@ -178,7 +178,7 @@ ejecutar_prueba_11_2() {
 }
 
 ejecutar_prueba_11_3() {
-    clear
+    
     echo "--- Prueba 11.3: Validación de Túnel Cifrado de Gestión ---"
     actualizar_resolucion_dns
     
@@ -202,7 +202,7 @@ ejecutar_prueba_11_3() {
 }
 
 ejecutar_prueba_11_4() {
-    clear
+    
     echo "--- Prueba 11.4: Validación de Persistencia y Healthcheck ---"
     echo "INSTRUCCIONES:"
     echo "1. El script detendrá todo el stack (docker-compose down)."
@@ -229,7 +229,7 @@ ejecutar_prueba_11_4() {
 
 submodo_pruebas() {
     while true; do
-        clear
+        
         echo "======================================"
         echo " Protocolo de Pruebas Dinámicas"
         echo "======================================"
